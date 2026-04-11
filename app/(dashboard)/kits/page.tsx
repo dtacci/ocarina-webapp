@@ -1,22 +1,31 @@
-import { Layers } from "lucide-react";
+import { getKits } from "@/lib/db/queries/kits";
+import { KitCard } from "@/components/kits/kit-card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Sparkles } from "lucide-react";
 
-export default function KitsPage() {
+export default async function KitsPage() {
+  const kits = await getKits();
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Kits</h1>
-        <p className="text-muted-foreground">
-          Browse 12 curated kit presets and build your own with AI assistance.
-        </p>
-      </div>
-      <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
-        <div className="text-center">
-          <Layers className="mx-auto mb-3 size-10 text-muted-foreground/50" />
-          <p className="text-sm font-medium">Kit browser coming soon</p>
-          <p className="text-xs text-muted-foreground">
-            View slot definitions, play samples, and use AI Kit Builder
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Kits</h1>
+          <p className="text-muted-foreground">
+            {kits.length} curated kit presets. Each kit maps instruments to keyboard zones.
           </p>
         </div>
+        <Button render={<Link href="/kits/builder" />} variant="outline" className="gap-1.5">
+          <Sparkles className="size-4" />
+          AI Kit Builder
+        </Button>
+      </div>
+
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        {kits.map((kit) => (
+          <KitCard key={kit.id} kit={kit} />
+        ))}
       </div>
     </div>
   );
