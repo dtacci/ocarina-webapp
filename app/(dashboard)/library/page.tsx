@@ -3,6 +3,7 @@ import { getSamples, getFamilyCounts, type SampleFilters } from "@/lib/db/querie
 import { FilterSidebar } from "@/components/samples/filter-sidebar";
 import { SampleGrid } from "@/components/samples/sample-grid";
 import { Pagination } from "@/components/samples/pagination";
+import { AISearch } from "@/components/samples/ai-search";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Props {
@@ -87,6 +88,7 @@ export default async function LibraryPage({ searchParams }: Props) {
           Browse 3,859 orchestral samples. Filter by family, vibes, and attributes.
         </p>
       </div>
+      <AISearch />
       <Suspense fallback={<LibrarySkeleton />}>
         <LibraryContent filters={filters} />
       </Suspense>
