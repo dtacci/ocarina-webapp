@@ -37,6 +37,7 @@ export const sampleFamilyEnum = pgEnum("sample_family", [
   "drums",
   "guitar",
   "other_perc",
+  "other",
   "fx",
 ]);
 export const trackStateEnum = pgEnum("track_state", [
