@@ -1349,7 +1349,7 @@ const handleAddTrack = useCallback(() => {
             title={session.metronomeEnabled ? "Metronome on — click to turn off" : "Metronome off — click to turn on"}
           >
             <Timer className="size-4" />
-            <span className="hidden sm:inline text-xs">{session.metronomeEnabled ? "Metronome: On" : "Metronome: Off"}</span>
+            <span className="hidden sm:inline text-xs">Metronome</span>
           </Button>
 
           {/* Keyboard Shortcuts */}
