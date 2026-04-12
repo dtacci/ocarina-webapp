@@ -81,6 +81,18 @@ const TRACK_BG_TINTS: Record<string, string> = {
   "bg-pink-500": "bg-pink-950/40",
 };
 
+// Solo left-border colors — matches track dot/bg color per track
+const TRACK_SOLO_BORDERS: Record<string, string> = {
+  "bg-emerald-500": "border-l-emerald-500",
+  "bg-amber-500": "border-l-amber-500",
+  "bg-rose-500": "border-l-rose-500",
+  "bg-sky-500": "border-l-sky-500",
+  "bg-violet-500": "border-l-violet-500",
+  "bg-orange-500": "border-l-orange-500",
+  "bg-teal-500": "border-l-teal-500",
+  "bg-pink-500": "border-l-pink-500",
+};
+
 // Seeded pseudo-random number generator (mulberry32) — deterministic on both
 // server and client so React hydration values always match.
 function seededRandom(seed: number) {
@@ -466,7 +478,7 @@ function TrackHeader({
         onDrop={onDrop}
         className={cn(
           "group flex h-[88px] w-48 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2 transition-opacity duration-200",
-          track.solo && "border-l-2 border-l-amber-500",
+          track.solo && `border-l-2 ${TRACK_SOLO_BORDERS[track.color] ?? "border-l-amber-500"}`,
           track.armed && !track.solo && "border-l-2 border-l-destructive/70",
           track.recording && "border-l-2 border-l-destructive",
           effectivelyMuted && !track.solo && "opacity-40",
@@ -656,7 +668,7 @@ function WaveformRow({
       className={cn(
         "relative h-[88px] border-b border-border transition-opacity duration-200",
         bgTint,
-        track.solo && "border-l-2 border-l-amber-500",
+        track.solo && `border-l-2 ${TRACK_SOLO_BORDERS[track.color] ?? "border-l-amber-500"}`,
         effectivelyMuted && !track.solo && "opacity-30",
         isDragging && "opacity-40 scale-[0.98] origin-left",
         isDragOver && "border-t-2 border-t-primary"
