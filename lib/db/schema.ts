@@ -222,6 +222,7 @@ export const recordings = pgTable("recordings", {
   sampleRate: integer("sample_rate").notNull().default(44100),
   bpm: integer("bpm"),
   kitId: text("kit_id").references(() => kits.id),
+  waveformPeaks: jsonb("waveform_peaks"), // 200-point peak array for WaveSurfer
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
