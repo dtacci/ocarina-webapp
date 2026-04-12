@@ -757,9 +757,9 @@ function TrackGrid({
             })}
           </div>
 
-          {/* Playhead — spans all rows */}
+          {/* Playhead — spans all rows, driven by RAF for butter-smooth motion */}
           <div
-            className="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-foreground/90 shadow-[0_0_6px_1px_hsl(var(--foreground)/0.3)] transition-[left] duration-75"
+            className="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-foreground/90 shadow-[0_0_6px_1px_hsl(var(--foreground)/0.3)]"
             style={{ left: `${playheadPosition}%` }}
           />
         </div>
@@ -833,7 +833,7 @@ export default function LooperDAPage() {
   const beatDuration = (60 / session.bpm) * 1000;
   const totalBeats = session.bars * 4;
 
-  // Animation loop for playback
+  // Animation loop for playback with smooth playhead
   useEffect(() => {
     if (!session.isPlaying) {
       if (animationRef.current) {
@@ -841,6 +841,8 @@ export default function LooperDAPage() {
       }
       return;
     }
+
+    const loopDurationMs = totalBeats * beatDuration;
 
     const animate = (timestamp: number) => {
       if (lastTimeRef.current === 0) {
@@ -851,13 +853,21 @@ export default function LooperDAPage() {
       lastTimeRef.current = timestamp;
       beatAccumulatorRef.current += delta;
 
-      if (beatAccumulatorRef.current >= beatDuration) {
-        beatAccumulatorRef.current -= beatDuration;
-        setSession((prev) => ({
-          ...prev,
-          currentBeat: (prev.currentBeat + 1) % totalBeats,
-        }));
+      // Keep accumulator within one full loop
+      if (beatAccumulatorRef.current >= loopDurationMs) {
+        beatAccumulatorRef.current -= loopDurationMs;
       }
+
+      // Smooth 0-100 playhead position updated every frame
+      const smoothPosition = (beatAccumulatorRef.current / loopDurationMs) * 100;
+      // Discrete beat for metronome / beat indicator
+      const currentBeat = Math.floor(beatAccumulatorRef.current / beatDuration) % totalBeats;
+
+      setSession((prev) => ({
+        ...prev,
+        currentBeat,
+        playheadPosition: smoothPosition,
+      }));
 
       animationRef.current = requestAnimationFrame(animate);
     };
