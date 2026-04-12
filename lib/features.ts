@@ -16,8 +16,8 @@ export const features = {
   /** v0.2 features — disabled until ready */
   looperDashboard: false,
   realtimeBridge: false,
-  configManager: false,
-  recordingLibrary: false,
+  configManager: true,
+  recordingLibrary: true,
   sampleEditor: false,
   mp3Transcoding: false,
   piSyncAgent: false,
