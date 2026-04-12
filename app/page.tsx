@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Waves, Music, Mic, Layers, Activity } from "lucide-react";
+import { Waves, Music, Mic, Layers, Activity, Sparkles, MonitorSmartphone, Code } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -44,17 +44,21 @@ export default function LandingPage() {
           </Button>
         </div>
 
-        <div className="mt-12 grid w-full max-w-3xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid w-full max-w-4xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: Music, title: "4,886 Samples", desc: "Orchestral library with rich metadata" },
-            { icon: Layers, title: "12 Kits", desc: "Curated presets for every mood" },
-            { icon: Mic, title: "AI Search", desc: "Find sounds by describing a vibe" },
-            { icon: Activity, title: "Activity", desc: "Track your creative sessions" },
+            { icon: Music, title: "4,886 Samples", desc: "Orchestral library with rich metadata and vibe tags" },
+            { icon: Layers, title: "12 Kit Presets", desc: "Curated instrument kits for every mood" },
+            { icon: Mic, title: "AI Search", desc: "Find sounds by describing a vibe in natural language" },
+            { icon: Sparkles, title: "AI Kit Builder", desc: "Describe a mood, watch the AI build a kit in real-time" },
+            { icon: MonitorSmartphone, title: "Device Sync", desc: "Connect your Ocarina for automatic recording sync" },
+            { icon: Activity, title: "Activity Heatmap", desc: "GitHub-style visualization of your creative sessions" },
+            { icon: Code, title: "Embeddable Player", desc: "Share recordings with a minimal embeddable player" },
+            { icon: Waves, title: "Offline-First", desc: "Built for a hardware synth that works without WiFi" },
           ].map((item) => (
             <div key={item.title} className="rounded-lg border p-4 text-left">
               <item.icon className="mb-2 size-5 text-muted-foreground" />
-              <h3 className="font-medium">{item.title}</h3>
-              <p className="text-sm text-muted-foreground">{item.desc}</p>
+              <h3 className="text-sm font-medium">{item.title}</h3>
+              <p className="text-xs text-muted-foreground">{item.desc}</p>
             </div>
           ))}
         </div>
