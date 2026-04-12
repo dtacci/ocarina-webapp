@@ -392,6 +392,7 @@ function DragPreview({
 // Track Header (left column) for a single track
 function TrackHeader({
   track,
+  effectivelyMuted,
   isDragging,
   isDragOver,
   onArm,
@@ -407,6 +408,7 @@ function TrackHeader({
   onDrop,
 }: {
   track: Track;
+  effectivelyMuted: boolean;
   isDragging: boolean;
   isDragOver: boolean;
   onArm: () => void;
@@ -463,10 +465,11 @@ function TrackHeader({
         onDragOver={onDragOver}
         onDrop={onDrop}
         className={cn(
-          "group flex h-[88px] w-48 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2",
-          track.armed && "border-l-2 border-l-destructive/70",
+          "group flex h-[88px] w-48 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2 transition-opacity duration-200",
+          track.solo && "border-l-2 border-l-amber-500",
+          track.armed && !track.solo && "border-l-2 border-l-destructive/70",
           track.recording && "border-l-2 border-l-destructive",
-          track.muted && "opacity-50",
+          effectivelyMuted && !track.solo && "opacity-40",
           isDragging && "opacity-40 scale-[0.98]",
           isDragOver && "border-t-2 border-t-primary"
         )}
@@ -630,12 +633,14 @@ function TrackHeader({
 // Single waveform row (no playhead/bar-lines — those live in the shared grid)
 function WaveformRow({
   track,
+  effectivelyMuted,
   playheadPosition,
   isPlaying,
   isDragging,
   isDragOver,
 }: {
   track: Track;
+  effectivelyMuted: boolean;
   playheadPosition: number;
   isPlaying: boolean;
   isDragging: boolean;
@@ -649,8 +654,10 @@ function WaveformRow({
       layoutId={`track-waveform-${track.id}`}
       transition={{ type: "spring", stiffness: 350, damping: 25 }}
       className={cn(
-        "relative h-[88px] border-b border-border",
+        "relative h-[88px] border-b border-border transition-opacity duration-200",
         bgTint,
+        track.solo && "border-l-2 border-l-amber-500",
+        effectivelyMuted && !track.solo && "opacity-30",
         isDragging && "opacity-40 scale-[0.98] origin-left",
         isDragOver && "border-t-2 border-t-primary"
       )}
@@ -658,7 +665,7 @@ function WaveformRow({
       {track.hasAudio ? (
         <div className={cn(
           "absolute inset-0 flex items-center gap-px px-2 transition-opacity duration-200",
-          track.muted && "opacity-30"
+          effectivelyMuted && !track.solo && "opacity-50"
         )}>
           {track.waveformData.map((height, i) => {
             const position = (i / track.waveformData.length) * 100;
@@ -731,6 +738,8 @@ function TrackGrid({
   const [draggingTrack, setDraggingTrack] = useState<Track | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
 
+  const anySolo = tracks.some((t) => t.solo);
+
   // Track mouse position during drag
   useEffect(() => {
     if (!draggingTrack) return;
@@ -756,6 +765,7 @@ function TrackGrid({
           <TrackHeader
             key={track.id}
             track={track}
+            effectivelyMuted={track.muted || (anySolo && !track.solo)}
             isDragging={dragSourceId === track.id}
             isDragOver={dragOverId === track.id}
             onArm={() => onArm(track.id)}
@@ -815,6 +825,7 @@ function TrackGrid({
             <WaveformRow
               key={track.id}
               track={track}
+              effectivelyMuted={track.muted || (anySolo && !track.solo)}
               playheadPosition={playheadPosition}
               isPlaying={isPlaying}
               isDragging={dragSourceId === track.id}
@@ -1206,9 +1217,14 @@ const handleAddTrack = useCallback(() => {
   }, []);
 
   const handleSoloTrack = useCallback((id: string) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, solo: !t.solo } : t))
-    );
+    setTracks((prev) => {
+      const isCurrentlySoloed = prev.find((t) => t.id === id)?.solo;
+      return prev.map((t) =>
+        t.id === id
+          ? { ...t, solo: !isCurrentlySoloed }
+          : { ...t, solo: false } // Clear solo on all other tracks
+      );
+    });
   }, []);
 
   const handleDeleteTrack = useCallback((id: string) => {
