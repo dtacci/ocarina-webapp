@@ -29,8 +29,8 @@ const modeWeights = [0.5, 0.2, 0.2, 0.1]; // instrument most common
 
 const kitIds = [
   "jazz-lounge", "classical-chamber", "blues-rock", "reggae-vibes",
-  "ambient-space", "orchestral-epic", "lo-fi-chill", "dark-ambient",
-  "upbeat-pop", "experimental", "cinematic-drama", "folk-acoustic",
+  "ambient-chill", "orchestral-epic", "80s-metal", "dark-ambient",
+  "upbeat-pop", "experimental", "funk-80s", "folk-acoustic",
 ];
 
 const vibePool = [
