@@ -12,18 +12,49 @@ import type { KaraokeSongRow } from "@/lib/db/queries/karaoke";
 
 interface Props {
   song: KaraokeSongRow;
+}
+
+interface LyricsState {
+  status: "loading" | "loaded" | "error";
   syncedLyrics: string | null;
   plainLyrics: string | null;
   instrumental: boolean;
 }
 
-export function KaraokeSession({ song, syncedLyrics, plainLyrics, instrumental }: Props) {
+export function KaraokeSession({ song }: Props) {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
   const currentTimeRef = useRef(0);
 
-  const lines = parseLrc(syncedLyrics);
+  const [lyrics, setLyrics] = useState<LyricsState>({
+    status: "loading",
+    syncedLyrics: null,
+    plainLyrics: null,
+    instrumental: false,
+  });
+
+  // Fetch lyrics client-side to avoid server-blocking on LRCLIB
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/karaoke/${encodeURIComponent(song.id)}/lyrics`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        if (cancelled) return;
+        setLyrics({
+          status: "loaded",
+          syncedLyrics: data.syncedLyrics ?? null,
+          plainLyrics: data.plainLyrics ?? null,
+          instrumental: data.instrumental ?? false,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setLyrics((s) => ({ ...s, status: "error" }));
+      });
+    return () => { cancelled = true; };
+  }, [song.id]);
+
+  const lines = parseLrc(lyrics.syncedLyrics);
 
   const handleTimeUpdate = useCallback((t: number) => {
     currentTimeRef.current = t;
@@ -105,21 +136,29 @@ export function KaraokeSession({ song, syncedLyrics, plainLyrics, instrumental }
       <div className="rounded-xl border bg-card/50 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/10">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Lyrics</span>
-          {syncedLyrics ? (
+          {lyrics.status === "loading" ? (
+            <span className="text-[10px] text-muted-foreground">Loading…</span>
+          ) : lyrics.syncedLyrics ? (
             <span className="text-[10px] text-emerald-500">● Synced</span>
-          ) : plainLyrics ? (
+          ) : lyrics.plainLyrics ? (
             <span className="text-[10px] text-amber-500">● Reading mode</span>
           ) : (
             <span className="text-[10px] text-muted-foreground">Not available</span>
           )}
         </div>
-        <LyricsDisplay
-          lines={lines}
-          plainLyrics={plainLyrics}
-          instrumental={instrumental}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-        />
+        {lyrics.status === "loading" ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="size-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : (
+          <LyricsDisplay
+            lines={lines}
+            plainLyrics={lyrics.plainLyrics}
+            instrumental={lyrics.instrumental}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,37 +1,1589 @@
-import { getDevices } from "@/lib/db/queries/devices";
-import { LooperDashboard } from "@/components/looper/looper-dashboard";
-import Link from "next/link";
+"use client";
 
-export default async function LooperPage() {
-  const devices = await getDevices();
-  const piDevice = devices.find(
-    (d) => d.capabilities?.looper && d.device_type !== "web_browser"
+import { useState, useRef, useCallback, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Play,
+  Pause,
+  Square,
+  Circle,
+  Volume2,
+  VolumeX,
+  Plus,
+  Trash2,
+  RotateCcw,
+  Headphones,
+  GripVertical,
+  Keyboard,
+  Radio,
+  Timer,
+  Settings2,
+  Wifi,
+  WifiOff,
+  Drum,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { useLoopState } from "@/hooks/use-loop-state";
+import { DrumMachine } from "@/components/looper/drum-machine";
+import {
+  TRACK_COLORS,
+  TRACK_BG_TINTS,
+  TRACK_SOLO_BORDERS,
+} from "@/components/looper/track-colors";
+
+// Types
+interface Track {
+  id: string;
+  name: string;
+  color: string;
+  muted: boolean;
+  solo: boolean;
+  armed: boolean;
+  volume: number;
+  pan: number; // -100 (left) to 100 (right), 0 = center
+  meterLevel: number; // 0-100 for VU meter display
+  recording: boolean;
+  hasAudio: boolean;
+  waveformData: number[];
+  audioBlob?: Blob;
+}
+
+interface Session {
+  bpm: number;
+  bars: number;
+  isPlaying: boolean;
+  isRecording: boolean;
+  isCountingIn: boolean;
+  countInBeat: number;
+  currentBeat: number;
+  playheadPosition: number;
+  loopLength: number;
+  metronomeEnabled: boolean;
+}
+
+// TRACK_COLORS, TRACK_BG_TINTS, TRACK_SOLO_BORDERS imported from
+// components/looper/track-colors so the drum machine can reuse the palette.
+
+// Seeded pseudo-random number generator (mulberry32) — deterministic on both
+// server and client so React hydration values always match.
+function seededRandom(seed: number) {
+  let s = seed;
+  return () => {
+    s |= 0;
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function generateWaveform(seed: string, length: number = 200): number[] {
+  // Derive a numeric seed from the track id string
+  const numericSeed = seed
+    .split("")
+    .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const rand = seededRandom(numericSeed);
+  return Array.from({ length }, (_, i) => {
+    const base = 0.3 + rand() * 0.4;
+    const wave1 = Math.sin(i * 0.1) * 0.15;
+    const wave2 = Math.cos(i * 0.05) * 0.1;
+    return Math.max(0.1, Math.min(1, base + wave1 + wave2));
+  });
+}
+
+// Transport Controls Component
+function TransportControls({
+  session,
+  onPlay,
+  onStop,
+  onRecord,
+}: {
+  session: Session;
+  onPlay: () => void;
+  onStop: () => void;
+  onRecord: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant={session.isPlaying ? "secondary" : "default"}
+        size="icon"
+        className="size-12 rounded-full"
+        onClick={onPlay}
+      >
+        {session.isPlaying ? (
+          <Pause className="size-5" />
+        ) : (
+          <Play className="size-5 ml-0.5" />
+        )}
+      </Button>
+
+      <Button
+        variant="outline"
+        size="icon"
+        className="size-12 rounded-full"
+        onClick={onStop}
+      >
+        <Square className="size-4" />
+      </Button>
+
+      <Button
+        variant={session.isRecording ? "destructive" : "outline"}
+        size="icon"
+        className={cn(
+          "size-12 rounded-full transition-all",
+          session.isRecording && "animate-pulse"
+        )}
+        onClick={onRecord}
+      >
+        <Circle
+          className={cn("size-5", session.isRecording && "fill-current")}
+        />
+      </Button>
+    </div>
   );
+}
+
+// BPM Display Component
+function BpmDisplay({
+  bpm,
+  onBpmChange,
+}: {
+  bpm: number;
+  onBpmChange: (bpm: number) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(bpm.toString());
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEdit = () => {
+    setEditValue(bpm.toString());
+    setIsEditing(true);
+  };
+
+  const handleFinishEdit = () => {
+    const parsed = parseInt(editValue, 10);
+    if (!isNaN(parsed) && parsed >= 40 && parsed <= 240) {
+      onBpmChange(parsed);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleFinishEdit();
+    } else if (e.key === "Escape") {
+      setIsEditing(false);
+      setEditValue(bpm.toString());
+    }
+  };
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Visual Looper</h1>
-          <p className="text-muted-foreground">
-            Real-time loop engine — track states, BPM, and mute/record controls.
-          </p>
-        </div>
-        {!piDevice && (
-          <Link
-            href="/devices"
-            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+    <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2">
+      <span className="text-xs text-muted-foreground uppercase tracking-wider">
+        BPM
+      </span>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-6"
+          onClick={() => onBpmChange(Math.max(40, bpm - 1))}
+          title="Decrease BPM"
+        >
+          -
+        </Button>
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleFinishEdit}
+            onKeyDown={handleKeyDown}
+            className="w-12 text-center font-mono text-xl font-bold tabular-nums bg-muted px-1 py-0.5 rounded border border-primary outline-none"
+          />
+        ) : (
+          <span
+            className="w-12 text-center font-mono text-xl font-bold tabular-nums cursor-text hover:text-primary transition-colors"
+            onDoubleClick={handleStartEdit}
+            title="Double-click to edit BPM"
           >
-            Connect a device for live sync →
-          </Link>
+            {bpm}
+          </span>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-6"
+          onClick={() => onBpmChange(Math.min(240, bpm + 1))}
+          title="Increase BPM"
+        >
+          +
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Time Display Component
+function TimeDisplay({
+  currentBeat,
+  bars,
+  bpm,
+}: {
+  currentBeat: number;
+  bars: number;
+  bpm: number;
+}) {
+  const beatsPerBar = 4;
+  const totalBeats = bars * beatsPerBar;
+  const currentBar = Math.floor(currentBeat / beatsPerBar) + 1;
+  const beatInBar = (currentBeat % beatsPerBar) + 1;
+
+  const elapsedSeconds = (currentBeat / bpm) * 60;
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = Math.floor(elapsedSeconds % 60);
+  const ms = Math.floor((elapsedSeconds % 1) * 100);
+
+  return (
+    <div className="flex items-center gap-4 rounded-lg border bg-card px-4 py-2">
+      <div className="flex flex-col items-center">
+        <span className="text-xs text-muted-foreground uppercase tracking-wider">
+          Bar
+        </span>
+        <span className="font-mono text-xl font-bold tabular-nums">
+          {currentBar}.{beatInBar}
+        </span>
+      </div>
+      <div className="h-8 w-px bg-border" />
+      <div className="flex flex-col items-center">
+        <span className="text-xs text-muted-foreground uppercase tracking-wider">
+          Time
+        </span>
+        <span className="font-mono text-xl font-bold tabular-nums">
+          {minutes}:{seconds.toString().padStart(2, "0")}.
+          {ms.toString().padStart(2, "0")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Count-In Overlay Component
+function CountInOverlay({
+  isCountingIn,
+  countInBeat,
+}: {
+  isCountingIn: boolean;
+  countInBeat: number;
+}) {
+  if (!isCountingIn) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4">
+        <span className="text-8xl font-bold tabular-nums text-destructive animate-pulse">
+          {countInBeat + 1}
+        </span>
+        <div className="flex gap-2">
+          {[0, 1, 2, 3].map((beat) => (
+            <div
+              key={beat}
+              className={cn(
+                "size-4 rounded-full transition-all",
+                beat <= countInBeat
+                  ? "bg-destructive scale-125"
+                  : "bg-muted-foreground/30"
+              )}
+            />
+          ))}
+        </div>
+        <span className="text-lg text-muted-foreground">Get ready...</span>
+      </div>
+    </div>
+  );
+}
+
+// Beat Indicator Component
+function BeatIndicator({
+  currentBeat,
+  bars,
+}: {
+  currentBeat: number;
+  bars: number;
+}) {
+  const beatsPerBar = 4;
+  const totalBeats = bars * beatsPerBar;
+
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: totalBeats }, (_, i) => {
+        const isCurrentBeat = i === currentBeat;
+        const isDownbeat = i % beatsPerBar === 0;
+        return (
+          <div
+            key={i}
+            className={cn(
+              "size-2 rounded-full transition-all duration-75",
+              isCurrentBeat
+                ? "bg-primary scale-150 shadow-lg shadow-primary/50"
+                : isDownbeat
+                  ? "bg-muted-foreground/40"
+                  : "bg-muted-foreground/20"
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// Floating drag preview that follows the cursor
+function DragPreview({
+  track,
+  position,
+}: {
+  track: Track | null;
+  position: { x: number; y: number };
+}) {
+  if (!track) return null;
+
+  return (
+    <div
+      className="pointer-events-none fixed z-50 flex items-center gap-2 rounded-lg border border-primary/50 bg-card/95 px-3 py-2 shadow-xl shadow-primary/20 backdrop-blur-sm transition-transform"
+      style={{
+        left: position.x + 12,
+        top: position.y - 20,
+        transform: "rotate(-2deg) scale(1.02)",
+      }}
+    >
+      <GripVertical className="size-3.5 text-muted-foreground/50" />
+      <div className={cn("size-3 rounded-full", track.color)} />
+      <span className="text-sm font-medium">{track.name}</span>
+    </div>
+  );
+}
+
+// Track Header (left column) for a single track
+function TrackHeader({
+  track,
+  effectivelyMuted,
+  isDragging,
+  isDragOver,
+  onArm,
+  onMute,
+  onSolo,
+  onDelete,
+  onRename,
+  onVolumeChange,
+  onPanChange,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
+}: {
+  track: Track;
+  effectivelyMuted: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
+  onArm: () => void;
+  onMute: () => void;
+  onSolo: () => void;
+  onDelete: () => void;
+  onRename: (name: string) => void;
+  onVolumeChange: (volume: number) => void;
+  onPanChange: (pan: number) => void;
+  onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+  onDrop: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(track.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEdit = () => {
+    setEditName(track.name);
+    setIsEditing(true);
+  };
+
+  const handleFinishEdit = () => {
+    if (editName.trim()) {
+      onRename(editName.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleFinishEdit();
+    } else if (e.key === "Escape") {
+      setIsEditing(false);
+      setEditName(track.name);
+    }
+  };
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  return (
+    <motion.div
+      layout
+      layoutId={`track-header-${track.id}`}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
+    >
+      <div
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        className={cn(
+          "group flex h-[88px] w-48 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2 transition-opacity duration-200",
+          track.solo && `border-l-2 ${TRACK_SOLO_BORDERS[track.color] ?? "border-l-amber-500"}`,
+          track.armed && !track.solo && "border-l-2 border-l-destructive/70",
+          track.recording && "border-l-2 border-l-destructive",
+          effectivelyMuted && !track.solo && "opacity-40",
+          isDragging && "opacity-40 scale-[0.98]",
+          isDragOver && "border-t-2 border-t-primary"
+        )}
+      >
+        {/* Top row - ONLY this row is draggable */}
+        <div
+          draggable={!isEditing}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          className="flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+        >
+          <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50" />
+          <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={handleFinishEdit}
+              onKeyDown={handleKeyDown}
+              className="flex-1 bg-muted px-1.5 py-0.5 text-sm font-medium rounded border border-primary outline-none"
+            />
+          ) : (
+            <span
+              className="text-sm font-medium truncate cursor-text hover:text-primary transition-colors"
+              onDoubleClick={handleStartEdit}
+              title="Double-click to rename"
+            >
+              {track.name}
+            </span>
+          )}
+        </div>
+
+        {/* Controls row */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant={track.armed ? "destructive" : "ghost"}
+            size="icon"
+            className={cn("size-7", track.armed && "bg-destructive/20")}
+            onClick={onArm}
+            title={track.armed ? "Disarm track" : "Arm track for recording"}
+          >
+            <Radio className={cn("size-3.5", track.armed && "animate-pulse")} />
+          </Button>
+          <Button
+            variant={track.muted ? "destructive" : "ghost"}
+            size="icon"
+            className="size-7"
+            onClick={onMute}
+            title={track.muted ? "Unmute track" : "Mute track"}
+          >
+            {track.muted ? (
+              <VolumeX className="size-3.5" />
+            ) : (
+              <Volume2 className="size-3.5" />
+            )}
+          </Button>
+          <Button
+            variant={track.solo ? "secondary" : "ghost"}
+            size="icon"
+            className={cn("size-7", track.solo && "bg-amber-500/20 text-amber-500")}
+            onClick={onSolo}
+            title={track.solo ? "Unsolo track" : "Solo track (mutes all others)"}
+          >
+            <Headphones className="size-3.5" />
+          </Button>
+          {/* Settings popover for pan */}
+          <Popover>
+            <PopoverTrigger
+              className="inline-flex items-center justify-center size-7 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Track settings (pan, etc.)"
+            >
+              <Settings2 className="size-3.5" />
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-3" align="start">
+              <div className="space-y-4">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Track Settings
+                </div>
+                
+                {/* Pan control */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium">Pan</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-4">L</span>
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      value={track.pan}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        onPanChange(Number(e.target.value));
+                      }}
+                      className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500"
+                    />
+                    <span className="text-xs text-muted-foreground w-4">R</span>
+                  </div>
+                  <div className="text-center text-xs text-muted-foreground tabular-nums">
+                    {track.pan > 0 ? `Right ${track.pan}` : track.pan < 0 ? `Left ${Math.abs(track.pan)}` : "Center"}
+                  </div>
+                </div>
+
+                <div className="border-t border-border" />
+
+                {/* Placeholder for future settings */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">More options coming soon</label>
+                  <div className="text-xs text-muted-foreground/60">
+                    Filters, effects, and other track settings will appear here.
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+            onClick={onDelete}
+            title="Delete track"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
+
+        {/* Volume row */}
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={track.volume}
+            onChange={(e) => onVolumeChange(Number(e.target.value))}
+            className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+          />
+          <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
+            {track.volume}%
+          </span>
+          {/* VU Meter */}
+          <div className="w-2 h-6 bg-muted rounded-sm overflow-hidden flex flex-col-reverse">
+            <div
+              className={cn(
+                "w-full transition-all duration-75",
+                track.meterLevel > 85
+                  ? "bg-destructive"
+                  : track.meterLevel > 60
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+              )}
+              style={{ height: `${track.meterLevel}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// Single waveform row (no playhead/bar-lines — those live in the shared grid)
+function WaveformRow({
+  track,
+  effectivelyMuted,
+  playheadPosition,
+  isPlaying,
+  isDragging,
+  isDragOver,
+}: {
+  track: Track;
+  effectivelyMuted: boolean;
+  playheadPosition: number;
+  isPlaying: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
+}) {
+  const bgTint = TRACK_BG_TINTS[track.color] ?? "bg-muted/30";
+
+  return (
+    <motion.div
+      layout
+      layoutId={`track-waveform-${track.id}`}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
+      className={cn(
+        "relative h-[88px] border-b border-border transition-opacity duration-200",
+        bgTint,
+        track.solo && `border-l-2 ${TRACK_SOLO_BORDERS[track.color] ?? "border-l-amber-500"}`,
+        effectivelyMuted && !track.solo && "opacity-30",
+        isDragging && "opacity-40 scale-[0.98] origin-left",
+        isDragOver && "border-t-2 border-t-primary"
+      )}
+    >
+      {track.hasAudio ? (
+        <div className={cn(
+          "absolute inset-0 flex items-center gap-px px-2 transition-opacity duration-200",
+          effectivelyMuted && !track.solo && "opacity-50"
+        )}>
+          {track.waveformData.map((height, i) => {
+            const position = (i / track.waveformData.length) * 100;
+            const isPast = position < playheadPosition;
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "flex-1 rounded-sm",
+                  isPast && isPlaying ? track.color : "bg-muted-foreground/25"
+                )}
+                style={{ height: `${Math.round(height * 7000) / 100}%` }}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-xs text-muted-foreground">
+            {track.recording ? (
+              <span className="flex items-center gap-2">
+                <Circle className="size-3 fill-destructive text-destructive animate-pulse" />
+                Recording...
+              </span>
+            ) : (
+              "Empty — press record to add audio"
+            )}
+          </span>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// Shared track grid: headers on the left, shared waveform canvas on the right
+function TrackGrid({
+  tracks,
+  currentBeat,
+  totalBeats,
+  bars,
+  isPlaying,
+  playheadPosition,
+  onArm,
+  onMute,
+  onSolo,
+  onDelete,
+  onRename,
+  onVolumeChange,
+  onPanChange,
+  onReorder,
+}: {
+  tracks: Track[];
+  currentBeat: number;
+  totalBeats: number;
+  bars: number;
+  isPlaying: boolean;
+  playheadPosition: number;
+  onArm: (id: string) => void;
+  onMute: (id: string) => void;
+  onSolo: (id: string) => void;
+  onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => void;
+  onVolumeChange: (id: string, volume: number) => void;
+  onPanChange: (id: string, pan: number) => void;
+  onReorder: (fromId: string, toId: string) => void;
+}) {
+  const dragSourceIdRef = useRef<string | null>(null);
+  const [dragSourceId, setDragSourceId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [draggingTrack, setDraggingTrack] = useState<Track | null>(null);
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+
+  const anySolo = tracks.some((t) => t.solo);
+
+  // Track mouse position during drag
+  useEffect(() => {
+    if (!draggingTrack) return;
+    const handleDrag = (e: DragEvent) => {
+      if (e.clientX === 0 && e.clientY === 0) return; // Ignore final event with 0,0
+      setDragPosition({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener("drag", handleDrag);
+    return () => window.removeEventListener("drag", handleDrag);
+  }, [draggingTrack]);
+
+  return (
+    <>
+    <DragPreview track={draggingTrack} position={dragPosition} />
+    <div className="flex overflow-hidden rounded-xl border border-border bg-card">
+      {/* Left: track headers — drag is only enabled here */}
+      <div className="flex shrink-0 flex-col border-r border-border">
+        {/* Top-left corner header cell to align with ruler */}
+        <div className="flex h-7 items-center border-b border-border px-3">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Track</span>
+        </div>
+        {tracks.map((track) => (
+          <TrackHeader
+            key={track.id}
+            track={track}
+            effectivelyMuted={track.muted || (anySolo && !track.solo)}
+            isDragging={dragSourceId === track.id}
+            isDragOver={dragOverId === track.id}
+            onArm={() => onArm(track.id)}
+            onMute={() => onMute(track.id)}
+            onSolo={() => onSolo(track.id)}
+            onDelete={() => onDelete(track.id)}
+            onRename={(name) => onRename(track.id, name)}
+            onVolumeChange={(vol) => onVolumeChange(track.id, vol)}
+            onPanChange={(pan) => onPanChange(track.id, pan)}
+            onDragStart={(e) => {
+              dragSourceIdRef.current = track.id;
+              setDragSourceId(track.id);
+              setDraggingTrack(track);
+              setDragPosition({ x: e.clientX, y: e.clientY });
+              // Hide the default drag ghost
+              const emptyImg = new Image();
+              emptyImg.src = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+              e.dataTransfer.setDragImage(emptyImg, 0, 0);
+            }}
+            onDragOver={(e) => { e.preventDefault(); setDragOverId(track.id); }}
+            onDragEnd={() => {
+              dragSourceIdRef.current = null;
+              setDragSourceId(null);
+              setDragOverId(null);
+              setDraggingTrack(null);
+            }}
+            onDrop={() => {
+              if (dragSourceIdRef.current && dragSourceIdRef.current !== track.id) {
+                onReorder(dragSourceIdRef.current, track.id);
+              }
+              dragSourceIdRef.current = null;
+              setDragSourceId(null);
+              setDragOverId(null);
+              setDraggingTrack(null);
+            }}
+          />
+        ))}
       </div>
 
-      {/* Always show the dashboard. deviceId=null = browser/demo mode. */}
-      <LooperDashboard
-        deviceId={piDevice?.id ?? null}
-        deviceName={piDevice?.name ?? "This Browser"}
+      {/* Right: shared waveform canvas */}
+      <div className="relative flex-1 flex flex-col overflow-hidden">
+        {/* Bar ruler */}
+        <div className="relative flex h-7 shrink-0 items-center border-b border-border bg-muted/20">
+          {Array.from({ length: bars }, (_, i) => (
+            <div
+              key={i}
+              className="flex-1 flex items-center border-l border-border/60 pl-1.5"
+            >
+              <span className="text-xs font-mono text-muted-foreground">{i + 1}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Waveform rows */}
+        <div className="relative flex flex-col">
+          {tracks.map((track) => (
+            <WaveformRow
+              key={track.id}
+              track={track}
+              effectivelyMuted={track.muted || (anySolo && !track.solo)}
+              playheadPosition={playheadPosition}
+              isPlaying={isPlaying}
+              isDragging={dragSourceId === track.id}
+              isDragOver={dragOverId === track.id}
+            />
+          ))}
+
+          {/* Bar lines — span every row */}
+          <div className="pointer-events-none absolute inset-0 flex">
+            {Array.from({ length: bars }, (_, i) => (
+              <div
+                key={i}
+                className="flex-1 border-l border-border/40 first:border-l-0"
+              />
+            ))}
+          </div>
+
+          {/* Beat subdivision lines (every beat within each bar) */}
+          <div className="pointer-events-none absolute inset-0 flex">
+            {Array.from({ length: bars * 4 }, (_, i) => {
+              const isBarLine = i % 4 === 0;
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex-1 border-l",
+                    isBarLine ? "border-border/0" : "border-border/20 border-dashed"
+                  )}
+                />
+              );
+            })}
+          </div>
+
+          {/* Playhead — spans all rows, driven by RAF for butter-smooth motion */}
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-foreground/90 shadow-[0_0_6px_1px_hsl(var(--foreground)/0.3)]"
+            style={{ left: `${playheadPosition}%` }}
+          />
+        </div>
+      </div>
+    </div>
+    </>
+  );
+}
+
+// Main LooperDA Component
+export default function LooperDAPage() {
+  const [tracks, setTracks] = useState<Track[]>([
+    {
+      id: "1",
+      name: "Drums",
+      color: TRACK_COLORS[0],
+      muted: false,
+      solo: false,
+      armed: false,
+      volume: 80,
+      pan: 0,
+      meterLevel: 45,
+      recording: false,
+      hasAudio: true,
+      waveformData: generateWaveform("1"),
+    },
+    {
+      id: "2",
+      name: "Bass",
+      color: TRACK_COLORS[1],
+      muted: false,
+      solo: false,
+      armed: false,
+      volume: 75,
+      pan: 0,
+      meterLevel: 60,
+      recording: false,
+      hasAudio: true,
+      waveformData: generateWaveform("2"),
+    },
+    {
+      id: "3",
+      name: "Synth Lead",
+      color: TRACK_COLORS[2],
+      muted: false,
+      solo: false,
+      armed: false,
+      volume: 65,
+      pan: 0,
+      meterLevel: 30,
+      recording: false,
+      hasAudio: false,
+      waveformData: [],
+    },
+  ]);
+
+  const [session, setSession] = useState<Session>({
+    bpm: 120,
+    bars: 4,
+    isPlaying: false,
+    isRecording: false,
+    isCountingIn: false,
+    countInBeat: 0,
+    currentBeat: 0,
+    playheadPosition: 0,
+    loopLength: 8,
+    metronomeEnabled: true,
+  });
+
+  const animationRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number>(0);
+  const beatAccumulatorRef = useRef<number>(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastClickedBeatRef = useRef<number>(-1);
+  const hasEverPlayedRef = useRef<boolean>(false);
+  const prevBpmRef = useRef<number>(session.bpm);
+
+  // ── Pi integration ──────────────────────────────────────────────────────
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [drumsOpen, setDrumsOpen] = useState(false);
+
+  // Fetch the user's first looper-capable Pi device on mount
+  useEffect(() => {
+    fetch("/api/devices")
+      .then((r) => r.json())
+      .then((data) => {
+        const pi = (data.devices ?? []).find(
+          (d: { capabilities?: { looper?: boolean }; device_type: string }) =>
+            d.capabilities?.looper && d.device_type !== "web_browser"
+        );
+        setDeviceId(pi?.id ?? null);
+      })
+      .catch(() => setDeviceId(null));
+  }, []);
+
+  const { loopState, status: piStatus } = useLoopState(deviceId);
+
+  const sendCommand = useCallback(
+    async (command: string, params: Record<string, unknown> = {}) => {
+      if (!deviceId) return;
+      await fetch("/api/sync/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, command, params }),
+      });
+    },
+    [deviceId]
+  );
+
+  // Pi → local state sync (mute, recording, BPM only — not isPlaying)
+  useEffect(() => {
+    if (piStatus !== "connected" || !loopState) return;
+
+    // Sync BPM from Pi without triggering the RAF beat accumulator reset
+    if (loopState.bpm && loopState.bpm !== session.bpm) {
+      setSession((prev) => ({ ...prev, bpm: loopState.bpm! }));
+    }
+
+    // Sync per-track state from Pi (muted, recording, hasAudio)
+    setTracks((prev) =>
+      prev.map((t, i) => {
+        const piTrack = loopState.tracks[i];
+        if (!piTrack) return t;
+        return {
+          ...t,
+          muted: piTrack.muted,
+          recording: piTrack.state === "recording",
+          // Don't clear hasAudio if we already have waveform data locally
+          hasAudio: piTrack.state !== "empty" || t.hasAudio,
+        };
+      })
+    );
+  }, [loopState, piStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── End Pi integration ──────────────────────────────────────────────────
+
+  // Play metronome click sound
+  const playClick = useCallback((isDownbeat: boolean) => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+    const ctx = audioContextRef.current;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    oscillator.frequency.value = isDownbeat ? 1000 : 800;
+    oscillator.type = "sine";
+
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.1);
+  }, []);
+
+  // Calculate beat duration in ms
+  const beatDuration = (60 / session.bpm) * 1000;
+  const totalBeats = session.bars * 4;
+
+  // Scale accumulator when BPM changes to maintain playhead position
+  useEffect(() => {
+    if (prevBpmRef.current !== session.bpm) {
+      const oldLoopDuration = totalBeats * (60 / prevBpmRef.current) * 1000;
+      const newLoopDuration = totalBeats * beatDuration;
+      // Convert old accumulator to percentage, then to new accumulator
+      const positionPercent = beatAccumulatorRef.current / oldLoopDuration;
+      beatAccumulatorRef.current = positionPercent * newLoopDuration;
+      prevBpmRef.current = session.bpm;
+    }
+  }, [session.bpm, totalBeats, beatDuration]);
+
+  // Animation loop for playback with smooth playhead
+  useEffect(() => {
+    if (!session.isPlaying) {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      // Reset lastTimeRef so next frame starts fresh (no huge delta)
+      lastTimeRef.current = 0;
+      return;
+    }
+
+    const loopDurationMs = totalBeats * beatDuration;
+
+    const animate = (timestamp: number) => {
+      if (lastTimeRef.current === 0) {
+        // First frame after play/resume - just record time, don't add delta
+        lastTimeRef.current = timestamp;
+        animationRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      const delta = timestamp - lastTimeRef.current;
+      lastTimeRef.current = timestamp;
+      beatAccumulatorRef.current += delta;
+
+      // Keep accumulator within one full loop
+      if (beatAccumulatorRef.current >= loopDurationMs) {
+        beatAccumulatorRef.current -= loopDurationMs;
+      }
+
+      // Smooth 0-100 playhead position updated every frame
+      const smoothPosition = (beatAccumulatorRef.current / loopDurationMs) * 100;
+      // Discrete beat for metronome / beat indicator
+      const currentBeat = Math.floor(beatAccumulatorRef.current / beatDuration) % totalBeats;
+
+      setSession((prev) => ({
+        ...prev,
+        currentBeat,
+        playheadPosition: smoothPosition,
+      }));
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [session.isPlaying, beatDuration, totalBeats]);
+
+  // Count-in effect
+  const countInRef = useRef<number | null>(null);
+  const countInAccumulatorRef = useRef<number>(0);
+  const countInLastTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!session.isCountingIn) {
+      if (countInRef.current) {
+        cancelAnimationFrame(countInRef.current);
+      }
+      countInAccumulatorRef.current = 0;
+      countInLastTimeRef.current = 0;
+      return;
+    }
+
+    const animateCountIn = (timestamp: number) => {
+      if (countInLastTimeRef.current === 0) {
+        countInLastTimeRef.current = timestamp;
+      }
+
+      const delta = timestamp - countInLastTimeRef.current;
+      countInLastTimeRef.current = timestamp;
+      countInAccumulatorRef.current += delta;
+
+      const currentCountInBeat = Math.floor(countInAccumulatorRef.current / beatDuration);
+
+      if (currentCountInBeat >= 4) {
+        setSession((prev) => ({
+          ...prev,
+          isCountingIn: false,
+          isRecording: true,
+          countInBeat: 0,
+          currentBeat: 0,
+          playheadPosition: 0,
+        }));
+        setTracks((prev) =>
+          prev.map((t) => ({
+            ...t,
+            recording: t.armed,
+          }))
+        );
+        lastTimeRef.current = 0;
+        beatAccumulatorRef.current = 0;
+        countInAccumulatorRef.current = 0;
+        countInLastTimeRef.current = 0;
+        return;
+      }
+
+      setSession((prev) => ({
+        ...prev,
+        countInBeat: currentCountInBeat,
+      }));
+
+      countInRef.current = requestAnimationFrame(animateCountIn);
+    };
+
+    countInRef.current = requestAnimationFrame(animateCountIn);
+
+    return () => {
+      if (countInRef.current) {
+        cancelAnimationFrame(countInRef.current);
+      }
+    };
+  }, [session.isCountingIn, beatDuration]);
+
+  // Metronome click effect
+  useEffect(() => {
+    if (!session.isPlaying || !session.metronomeEnabled) {
+      lastClickedBeatRef.current = -1;
+      return;
+    }
+
+    if (session.currentBeat !== lastClickedBeatRef.current) {
+      lastClickedBeatRef.current = session.currentBeat;
+      const isDownbeat = session.currentBeat % 4 === 0;
+      playClick(isDownbeat);
+    }
+  }, [session.isPlaying, session.metronomeEnabled, session.currentBeat, playClick]);
+
+  // Handlers
+  const handlePlay = useCallback(() => {
+    setSession((prev) => {
+      if (!prev.isPlaying && !hasEverPlayedRef.current) {
+        // Only reset on first play, not on resume from pause
+        lastTimeRef.current = 0;
+        beatAccumulatorRef.current = 0;
+        hasEverPlayedRef.current = true;
+      }
+      sendCommand(prev.isPlaying ? "pause" : "play");
+      return { ...prev, isPlaying: !prev.isPlaying };
+    });
+  }, [sendCommand]);
+
+  const handleStop = useCallback(() => {
+    sendCommand("stop_all");
+    setSession((prev) => ({
+      ...prev,
+      isPlaying: false,
+      isRecording: false,
+      isCountingIn: false,
+      countInBeat: 0,
+      currentBeat: 0,
+      playheadPosition: 0,
+    }));
+    setTracks((prev) =>
+      prev.map((t) => ({ ...t, recording: false }))
+    );
+    lastTimeRef.current = 0;
+    beatAccumulatorRef.current = 0;
+    hasEverPlayedRef.current = false; // Reset for next play session
+  }, [sendCommand]);
+
+  const handleRecord = useCallback(() => {
+    if (session.isRecording) {
+      sendCommand("stop_recording");
+      setSession((prev) => ({
+        ...prev,
+        isRecording: false,
+        isCountingIn: false,
+        countInBeat: 0,
+      }));
+      setTracks((prev) => prev.map((t) => ({ ...t, recording: false })));
+      return;
+    }
+
+    const armedTrack = tracks.find((t) => t.armed);
+    if (!armedTrack) {
+      const emptyTrack = tracks.find((t) => !t.hasAudio);
+      if (emptyTrack) {
+        setTracks((prev) =>
+          prev.map((t) => ({ ...t, armed: t.id === emptyTrack.id }))
+        );
+      }
+    }
+
+    sendCommand("record_track", { track: loopState.active_track ?? 1 });
+    setSession((prev) => ({
+      ...prev,
+      isCountingIn: true,
+      countInBeat: 0,
+      isPlaying: true,
+      currentBeat: 0,
+      playheadPosition: 0,
+    }));
+    lastTimeRef.current = 0;
+    beatAccumulatorRef.current = 0;
+  }, [session.isRecording, tracks, sendCommand, loopState.active_track]);
+
+  const handleBpmChange = useCallback((newBpm: number) => {
+    sendCommand("set_bpm", { bpm: newBpm });
+    setSession((prev) => ({ ...prev, bpm: newBpm }));
+  }, [sendCommand]);
+
+  const handleMetronomeToggle = useCallback(() => {
+    setSession((prev) => ({ ...prev, metronomeEnabled: !prev.metronomeEnabled }));
+  }, []);
+
+const handleAddTrack = useCallback(() => {
+    const id = Date.now().toString();
+    const newTrack: Track = {
+      id,
+      name: `Track ${tracks.length + 1}`,
+      color: TRACK_COLORS[tracks.length % TRACK_COLORS.length],
+      muted: false,
+      solo: false,
+      armed: false,
+      volume: 75,
+      pan: 0,
+      meterLevel: 0,
+      recording: false,
+      hasAudio: false,
+      waveformData: generateWaveform(id),
+    };
+    setTracks((prev) => [...prev, newTrack]);
+  }, [tracks.length]);
+
+  const handleArmTrack = useCallback((id: string) => {
+    setTracks((prev) =>
+      prev.map((t) => ({
+        ...t,
+        armed: t.id === id ? !t.armed : false, // Only one track can be armed at a time
+      }))
+    );
+  }, []);
+  
+  const handleMuteTrack = useCallback((id: string) => {
+    setTracks((prev) => {
+      const track = prev.find((t) => t.id === id);
+      if (track) sendCommand(track.muted ? "unmute_track" : "mute_track", { track: parseInt(id) });
+      return prev.map((t) => (t.id === id ? { ...t, muted: !t.muted } : t));
+    });
+  }, [sendCommand]);
+
+  const handleSoloTrack = useCallback((id: string) => {
+    setTracks((prev) => {
+      const isCurrentlySoloed = prev.find((t) => t.id === id)?.solo;
+      return prev.map((t) =>
+        t.id === id
+          ? { ...t, solo: !isCurrentlySoloed }
+          : { ...t, solo: false } // Clear solo on all other tracks
+      );
+    });
+  }, []);
+
+  const handleDeleteTrack = useCallback((id: string) => {
+    setTracks((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const handleRenameTrack = useCallback((id: string, name: string) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, name } : t))
+    );
+  }, []);
+
+  const handleVolumeChange = useCallback((id: string, volume: number) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, volume } : t))
+    );
+  }, []);
+
+  const handlePanChange = useCallback((id: string, pan: number) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, pan } : t))
+    );
+  }, []);
+
+  const handleReorder = useCallback((fromId: string, toId: string) => {
+    setTracks((prev) => {
+      const fromIndex = prev.findIndex((t) => t.id === fromId);
+      const toIndex = prev.findIndex((t) => t.id === toId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const handleClearAll = useCallback(() => {
+    setTracks((prev) =>
+      prev.map((t) => ({
+        ...t,
+        hasAudio: false,
+        waveformData: [],
+        recording: false,
+      }))
+    );
+    handleStop();
+  }, [handleStop]);
+
+  // Keyboard shortcuts (defined AFTER all handlers)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.code) {
+        case "Space":
+          e.preventDefault();
+          handlePlay();
+          break;
+        case "KeyR":
+          e.preventDefault();
+          handleRecord();
+          break;
+        case "KeyS":
+          e.preventDefault();
+          handleStop();
+          break;
+        case "KeyM":
+          e.preventDefault();
+          setTracks((prev) => {
+            const firstUnmuted = prev.find((t) => !t.muted);
+            if (firstUnmuted) {
+              return prev.map((t) => (t.id === firstUnmuted.id ? { ...t, muted: true } : t));
+            }
+            const firstMuted = prev.find((t) => t.muted);
+            if (firstMuted) {
+              return prev.map((t) => (t.id === firstMuted.id ? { ...t, muted: false } : t));
+            }
+            return prev;
+          });
+          break;
+        case "Digit1":
+        case "Digit2":
+        case "Digit3":
+        case "Digit4":
+        case "Digit5":
+        case "Digit6": {
+          e.preventDefault();
+          const idx = parseInt(e.code.replace("Digit", ""), 10) - 1;
+          if (tracks[idx]) handleArmTrack(tracks[idx].id);
+          break;
+        }
+        case "ArrowUp":
+          e.preventDefault();
+          handleBpmChange(Math.min(240, session.bpm + (e.shiftKey ? 5 : 1)));
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          handleBpmChange(Math.max(40, session.bpm - (e.shiftKey ? 5 : 1)));
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handlePlay, handleRecord, handleStop, handleArmTrack, handleBpmChange, tracks, session.bpm]);
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Count-In Overlay */}
+      <CountInOverlay
+        isCountingIn={session.isCountingIn}
+        countInBeat={session.countInBeat}
       />
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">LooperDA</h1>
+            <p className="text-muted-foreground">
+              Multi-track loop station inspired by GarageBand
+            </p>
+          </div>
+          <Badge variant="secondary" className="ml-2">
+            Beta
+          </Badge>
+        </div>
+      </div>
+
+      {/* Transport Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card/50 p-4 backdrop-blur">
+        <TransportControls
+          session={session}
+          onPlay={handlePlay}
+          onStop={handleStop}
+          onRecord={handleRecord}
+        />
+
+        <BeatIndicator currentBeat={session.currentBeat} bars={session.bars} />
+
+        <div className="flex items-center gap-4">
+          {/* Metronome Toggle */}
+          <Button
+            variant={session.metronomeEnabled ? "secondary" : "ghost"}
+            size="sm"
+            onClick={handleMetronomeToggle}
+            className={cn(
+              "gap-2",
+              session.metronomeEnabled && "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
+            )}
+            title={session.metronomeEnabled ? "Metronome on — click to turn off" : "Metronome off — click to turn on"}
+          >
+            <Timer className="size-4" />
+            <span className="hidden sm:inline text-xs">Metronome</span>
+          </Button>
+
+          {/* Keyboard Shortcuts */}
+          <Popover>
+            <PopoverTrigger
+              className="inline-flex items-center gap-2 h-8 px-3 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Keyboard shortcuts"
+            >
+              <Keyboard className="size-4" />
+              <span className="hidden sm:inline text-xs">Shortcuts</span>
+            </PopoverTrigger>
+            <PopoverContent className="w-60 p-3" align="end">
+              <div className="space-y-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Keyboard Shortcuts
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { key: "Space", action: "Play / Pause" },
+                    { key: "S", action: "Stop" },
+                    { key: "R", action: "Record" },
+                    { key: "M", action: "Mute / Unmute track" },
+                    { key: "1 – 6", action: "Select track" },
+                    { key: "↑ / ↓", action: "BPM ±1" },
+                    { key: "⇧ ↑ / ↓", action: "BPM ±5" },
+                  ].map(({ key, action }) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">{action}</span>
+                      <kbd className="px-1.5 py-0.5 text-xs font-mono bg-muted rounded border border-border">
+                        {key}
+                      </kbd>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border pt-2 text-[11px] text-muted-foreground/60">
+                  Shortcuts are disabled when typing in an input.
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Drums Toggle */}
+          <Button
+            variant={drumsOpen ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setDrumsOpen((v) => !v)}
+            className={cn(
+              "gap-2",
+              drumsOpen && "bg-primary/15 text-primary hover:bg-primary/25"
+            )}
+            title={drumsOpen ? "Hide drum machine" : "Show drum machine"}
+          >
+            <Drum className="size-4" />
+            <span className="hidden sm:inline text-xs">Drums</span>
+          </Button>
+
+          {/* Pi connection status */}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {piStatus === "connected" ? (
+              <Wifi className="size-3.5 text-emerald-500" />
+            ) : (
+              <WifiOff className="size-3.5 opacity-40" />
+            )}
+            <span className="hidden sm:inline">
+              {deviceId
+                ? piStatus === "connected" ? "Pi live" : "Pi offline"
+                : "Browser"}
+            </span>
+          </div>
+
+          <BpmDisplay bpm={session.bpm} onBpmChange={handleBpmChange} />
+          <TimeDisplay
+            currentBeat={session.currentBeat}
+            bars={session.bars}
+            bpm={session.bpm}
+          />
+        </div>
+      </div>
+
+      {/* Drum Machine Panel (inline) */}
+      {drumsOpen && <DrumMachine compact deviceId={deviceId} />}
+
+      {/* Loop Length Selector */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-muted-foreground">Loop Length:</span>
+        <div className="flex gap-1">
+          {[2, 4, 8, 16].map((bars) => (
+            <Button
+              key={bars}
+              variant={session.bars === bars ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setSession((prev) => ({ ...prev, bars }))}
+            >
+              {bars} bars
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Track Grid */}
+<TrackGrid
+  tracks={tracks}
+  currentBeat={session.currentBeat}
+  totalBeats={totalBeats}
+  bars={session.bars}
+  isPlaying={session.isPlaying}
+  playheadPosition={session.playheadPosition}
+  onArm={handleArmTrack}
+  onMute={handleMuteTrack}
+  onSolo={handleSoloTrack}
+  onDelete={handleDeleteTrack}
+  onRename={handleRenameTrack}
+  onVolumeChange={handleVolumeChange}
+  onPanChange={handlePanChange}
+  onReorder={handleReorder}
+  />
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={handleAddTrack}>
+          <Plus className="size-4 mr-2" />
+          Add Track
+        </Button>
+        <Button variant="ghost" onClick={handleClearAll}>
+          <RotateCcw className="size-4 mr-2" />
+          Clear All
+        </Button>
+      </div>
+
+      {/* Status Bar */}
+      <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-4">
+          <span>
+            {tracks.length} track{tracks.length !== 1 && "s"}
+          </span>
+          <span>{tracks.filter((t) => t.hasAudio).length} with audio</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {session.isRecording && (
+            <Badge variant="destructive" className="animate-pulse">
+              Recording
+            </Badge>
+          )}
+          {session.isPlaying && !session.isRecording && (
+            <Badge variant="secondary">Playing</Badge>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
