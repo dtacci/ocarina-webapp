@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
   Pause,
@@ -307,77 +308,83 @@ function TrackHeader({
   onSolo: () => void;
   onDelete: () => void;
   onVolumeChange: (volume: number) => void;
-  onDragStart: (e: React.DragEvent) => void;
-  onDragOver: (e: React.DragEvent) => void;
+  onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
   onDrop: () => void;
 }) {
   return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
-      onDrop={onDrop}
-      className={cn(
-        "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 transition-all select-none",
-        track.recording && "border-l-2 border-l-destructive",
-        track.muted && "opacity-50",
-        isDragging && "opacity-40 scale-[0.98]",
-        isDragOver && "border-t-2 border-t-primary"
-      )}
+    <motion.div
+      layout
+      layoutId={`track-header-${track.id}`}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
     >
-      <div className="flex items-center gap-2">
-        <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
-        <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
-        <span className="text-sm font-medium truncate">{track.name}</span>
-      </div>
+      <div
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDrop={onDrop}
+        className={cn(
+          "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 select-none",
+          track.recording && "border-l-2 border-l-destructive",
+          track.muted && "opacity-50",
+          isDragging && "opacity-40 scale-[0.98]",
+          isDragOver && "border-t-2 border-t-primary"
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
+          <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
+          <span className="text-sm font-medium truncate">{track.name}</span>
+        </div>
 
-      <div className="flex items-center gap-1">
-        <Button
-          variant={track.muted ? "destructive" : "ghost"}
-          size="icon"
-          className="size-7"
-          onClick={onMute}
-        >
-          {track.muted ? (
-            <VolumeX className="size-3.5" />
-          ) : (
-            <Volume2 className="size-3.5" />
-          )}
-        </Button>
-        <Button
-          variant={track.solo ? "secondary" : "ghost"}
-          size="icon"
-          className={cn("size-7", track.solo && "bg-amber-500/20 text-amber-500")}
-          onClick={onSolo}
-        >
-          <Headphones className="size-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-          onClick={onDelete}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant={track.muted ? "destructive" : "ghost"}
+            size="icon"
+            className="size-7"
+            onClick={onMute}
+          >
+            {track.muted ? (
+              <VolumeX className="size-3.5" />
+            ) : (
+              <Volume2 className="size-3.5" />
+            )}
+          </Button>
+          <Button
+            variant={track.solo ? "secondary" : "ghost"}
+            size="icon"
+            className={cn("size-7", track.solo && "bg-amber-500/20 text-amber-500")}
+            onClick={onSolo}
+          >
+            <Headphones className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={track.volume}
-          onChange={(e) => onVolumeChange(Number(e.target.value))}
-          className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
-        />
-        <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
-          {track.volume}%
-        </span>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={track.volume}
+            onChange={(e) => onVolumeChange(Number(e.target.value))}
+            className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+          />
+          <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
+            {track.volume}%
+          </span>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -401,9 +408,12 @@ function WaveformRow({
   const bgTint = TRACK_BG_TINTS[track.color] ?? "bg-muted/30";
 
   return (
-    <div
+    <motion.div
+      layout
+      layoutId={`track-waveform-${track.id}`}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
       className={cn(
-        "relative h-[88px] border-b border-border transition-all duration-150",
+        "relative h-[88px] border-b border-border",
         bgTint,
         track.muted && "opacity-50",
         isDragging && "opacity-40 scale-[0.98] origin-left",
@@ -422,7 +432,7 @@ function WaveformRow({
                   "flex-1 rounded-sm",
                   isPast && isPlaying ? track.color : "bg-muted-foreground/25"
                 )}
-                style={{ height: `${height * 70}%` }}
+                style={{ height: `${Math.round(height * 7000) / 100}%` }}
               />
             );
           })}
@@ -441,7 +451,7 @@ function WaveformRow({
           </span>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -470,7 +480,8 @@ function TrackGrid({
   onReorder: (fromId: string, toId: string) => void;
 }) {
   const playheadPosition = (currentBeat / totalBeats) * 100;
-  const dragSourceId = useRef<string | null>(null);
+  const dragSourceIdRef = useRef<string | null>(null);
+  const [dragSourceId, setDragSourceId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [draggingTrack, setDraggingTrack] = useState<Track | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
@@ -500,14 +511,15 @@ function TrackGrid({
           <TrackHeader
             key={track.id}
             track={track}
-            isDragging={dragSourceId.current === track.id}
+            isDragging={dragSourceId === track.id}
             isDragOver={dragOverId === track.id}
             onMute={() => onMute(track.id)}
             onSolo={() => onSolo(track.id)}
             onDelete={() => onDelete(track.id)}
             onVolumeChange={(vol) => onVolumeChange(track.id, vol)}
             onDragStart={(e) => {
-              dragSourceId.current = track.id;
+              dragSourceIdRef.current = track.id;
+              setDragSourceId(track.id);
               setDraggingTrack(track);
               setDragPosition({ x: e.clientX, y: e.clientY });
               // Hide the default drag ghost
@@ -517,15 +529,17 @@ function TrackGrid({
             }}
             onDragOver={(e) => { e.preventDefault(); setDragOverId(track.id); }}
             onDragEnd={() => {
-              dragSourceId.current = null;
+              dragSourceIdRef.current = null;
+              setDragSourceId(null);
               setDragOverId(null);
               setDraggingTrack(null);
             }}
             onDrop={() => {
-              if (dragSourceId.current && dragSourceId.current !== track.id) {
-                onReorder(dragSourceId.current, track.id);
+              if (dragSourceIdRef.current && dragSourceIdRef.current !== track.id) {
+                onReorder(dragSourceIdRef.current, track.id);
               }
-              dragSourceId.current = null;
+              dragSourceIdRef.current = null;
+              setDragSourceId(null);
               setDragOverId(null);
               setDraggingTrack(null);
             }}
@@ -556,7 +570,7 @@ function TrackGrid({
               currentBeat={currentBeat}
               totalBeats={totalBeats}
               isPlaying={isPlaying}
-              isDragging={dragSourceId.current === track.id}
+              isDragging={dragSourceId === track.id}
               isDragOver={dragOverId === track.id}
             />
           ))}
