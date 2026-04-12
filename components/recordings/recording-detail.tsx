@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Play, Pause, Download, Loader2, Music, Clock, Calendar,
   ArrowLeft, Trash2, Pencil, Globe, Link as LinkIcon, Share2,
-  Check, X, Volume2, VolumeX,
+  Check, X, Volume2, VolumeX, ExternalLink, Disc3,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,13 +27,93 @@ function formatDate(dateStr: string): string {
   });
 }
 
+// ── Session track row (each needs its own WaveSurfer instance) ──────────────
+
+function SessionTrackRow({
+  track,
+  index,
+}: {
+  track: RecordingRow;
+  index: number;
+}) {
+  const {
+    containerRef,
+    isReady,
+    isPlaying,
+    currentTime,
+    duration: wsDuration,
+    togglePlay,
+  } = useWaveSurfer({
+    url: track.blob_url,
+    height: 40,
+    barWidth: 2,
+    barGap: 1,
+    barRadius: 1,
+    lazy: true,
+  });
+
+  const dur = wsDuration > 0 ? wsDuration : track.duration_sec;
+
+  return (
+    <div className="flex items-center gap-3 py-2.5 border-b last:border-0">
+      <span className="text-xs text-muted-foreground w-14 shrink-0 font-medium">
+        Track {index + 1}
+      </span>
+
+      <div className="relative flex-1 h-10 rounded bg-muted overflow-hidden">
+        <div ref={containerRef} className="absolute inset-0" />
+        {!isReady && <Skeleton className="absolute inset-0 rounded" />}
+      </div>
+
+      <button
+        onClick={togglePlay}
+        disabled={!isReady}
+        className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 shrink-0"
+      >
+        {isPlaying
+          ? <Pause className="size-3" />
+          : <Play className="size-3 ml-px" />}
+      </button>
+
+      <span className="text-xs tabular-nums text-muted-foreground w-9 shrink-0">
+        {formatDuration(currentTime || dur)}
+      </span>
+
+      <a
+        href={track.blob_url}
+        download
+        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+        title="Download stem"
+      >
+        <Download className="size-3.5" />
+      </a>
+
+      <Link
+        href={`/recordings/${track.id}`}
+        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+        title="Open track"
+      >
+        <ExternalLink className="size-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+// ── Main detail component ────────────────────────────────────────────────────
+
 interface Props {
   recording: RecordingRow;
   isOwner: boolean;
   isAuthenticated: boolean;
+  sessionTracks?: RecordingRow[];
 }
 
-export function RecordingDetail({ recording, isOwner, isAuthenticated }: Props) {
+export function RecordingDetail({
+  recording,
+  isOwner,
+  isAuthenticated,
+  sessionTracks = [],
+}: Props) {
   const [title, setTitle] = useState(recording.title ?? "Untitled");
   const [isPublic, setIsPublic] = useState(recording.is_public);
   const [muted, setMutedState] = useState(false);
@@ -354,6 +434,25 @@ export function RecordingDetail({ recording, isOwner, isAuthenticated }: Props) 
             <span className="hidden sm:inline">Download</span>
           </a>
         </div>
+        {/* From this session */}
+        {sessionTracks.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Disc3 className="size-4 text-muted-foreground" />
+              <h2 className="text-sm font-medium">
+                From this session
+                <span className="ml-1.5 text-muted-foreground font-normal">
+                  · {sessionTracks.length} other {sessionTracks.length === 1 ? "track" : "tracks"}
+                </span>
+              </h2>
+            </div>
+            <div className="rounded-lg border divide-y overflow-hidden">
+              {sessionTracks.map((track, i) => (
+                <SessionTrackRow key={track.id} track={track} index={i} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Visitor branding footer */}

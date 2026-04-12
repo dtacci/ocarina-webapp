@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import {
   getRecordingById,
   getPublicRecording,
+  getRecordingsBySessionId,
+  type RecordingRow,
 } from "@/lib/db/queries/recordings";
 import { RecordingDetail } from "@/components/recordings/recording-detail";
 
@@ -54,11 +56,19 @@ export default async function RecordingDetailPage({ params }: Props) {
   // Nothing accessible → 404
   if (!recording) notFound();
 
+  // Fetch sibling tracks from the same session (owner-only, v1)
+  let sessionTracks: RecordingRow[] = [];
+  if (recording.session_id && isOwner) {
+    const siblings = await getRecordingsBySessionId(recording.session_id, user!.id);
+    sessionTracks = siblings.filter((t) => t.id !== recording.id);
+  }
+
   return (
     <RecordingDetail
       recording={recording}
       isOwner={isOwner}
       isAuthenticated={!!user}
+      sessionTracks={sessionTracks}
     />
   );
 }
