@@ -470,7 +470,8 @@ function TrackGrid({
   onReorder: (fromId: string, toId: string) => void;
 }) {
   const playheadPosition = (currentBeat / totalBeats) * 100;
-  const dragSourceId = useRef<string | null>(null);
+  const dragSourceIdRef = useRef<string | null>(null);
+  const [dragSourceId, setDragSourceId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [draggingTrack, setDraggingTrack] = useState<Track | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
@@ -500,14 +501,15 @@ function TrackGrid({
           <TrackHeader
             key={track.id}
             track={track}
-            isDragging={dragSourceId.current === track.id}
+            isDragging={dragSourceId === track.id}
             isDragOver={dragOverId === track.id}
             onMute={() => onMute(track.id)}
             onSolo={() => onSolo(track.id)}
             onDelete={() => onDelete(track.id)}
             onVolumeChange={(vol) => onVolumeChange(track.id, vol)}
             onDragStart={(e) => {
-              dragSourceId.current = track.id;
+              dragSourceIdRef.current = track.id;
+              setDragSourceId(track.id);
               setDraggingTrack(track);
               setDragPosition({ x: e.clientX, y: e.clientY });
               // Hide the default drag ghost
@@ -517,15 +519,17 @@ function TrackGrid({
             }}
             onDragOver={(e) => { e.preventDefault(); setDragOverId(track.id); }}
             onDragEnd={() => {
-              dragSourceId.current = null;
+              dragSourceIdRef.current = null;
+              setDragSourceId(null);
               setDragOverId(null);
               setDraggingTrack(null);
             }}
             onDrop={() => {
-              if (dragSourceId.current && dragSourceId.current !== track.id) {
-                onReorder(dragSourceId.current, track.id);
+              if (dragSourceIdRef.current && dragSourceIdRef.current !== track.id) {
+                onReorder(dragSourceIdRef.current, track.id);
               }
-              dragSourceId.current = null;
+              dragSourceIdRef.current = null;
+              setDragSourceId(null);
               setDragOverId(null);
               setDraggingTrack(null);
             }}
@@ -556,7 +560,7 @@ function TrackGrid({
               currentBeat={currentBeat}
               totalBeats={totalBeats}
               isPlaying={isPlaying}
-              isDragging={dragSourceId.current === track.id}
+              isDragging={dragSourceId === track.id}
               isDragOver={dragOverId === track.id}
             />
           ))}
