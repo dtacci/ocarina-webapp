@@ -21,17 +21,37 @@ export interface KaraokeFilters {
   search?: string;
   page?: number;
   perPage?: number;
+  /** Restrict to songs favorited by this user id */
+  favoritedBy?: string;
 }
 
 export async function getKaraokeSongs(
   filters: KaraokeFilters = {}
 ): Promise<{ songs: KaraokeSongRow[]; total: number }> {
   const supabase = await createClient();
-  const { decade, genre, search, page = 1, perPage = 24 } = filters;
+  const { decade, genre, search, favoritedBy, page = 1, perPage = 24 } = filters;
+
+  // Resolve favorited song ids first; empty set short-circuits to empty result.
+  let favoriteIds: string[] | null = null;
+  if (favoritedBy) {
+    const { data: favRows } = await supabase
+      .from("karaoke_user_data")
+      .select("song_id")
+      .eq("user_id", favoritedBy)
+      .eq("is_favorite", true);
+    favoriteIds = (favRows ?? []).map((r) => r.song_id);
+    if (favoriteIds.length === 0) {
+      return { songs: [], total: 0 };
+    }
+  }
 
   let query = supabase
     .from("karaoke_songs")
     .select("*", { count: "exact" });
+
+  if (favoriteIds) {
+    query = query.in("id", favoriteIds);
+  }
 
   if (decade) {
     query = query.eq("decade", decade);

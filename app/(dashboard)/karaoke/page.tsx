@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { getKaraokeSongs, type KaraokeFilters } from "@/lib/db/queries/karaoke";
+import { getUserKaraokeData } from "@/lib/db/queries/karaoke-user-data";
+import { createClient } from "@/lib/supabase/server";
 import { SongCard } from "@/components/karaoke/song-card";
 import { KaraokeFilters as Filters } from "@/components/karaoke/karaoke-filters";
 import { Pagination } from "@/components/samples/pagination";
@@ -13,16 +15,27 @@ interface Props {
 export default async function KaraokePage({ searchParams }: Props) {
   const params = await searchParams;
 
+  const supabase = await createClient();
+  const { data: userResp } = await supabase.auth.getUser();
+  const userId = userResp.user?.id;
+
+  const favOnly = params.fav === "1";
+
   const filters: KaraokeFilters = {
     decade: typeof params.decade === "string" ? params.decade : undefined,
     genre: typeof params.genre === "string" ? params.genre : undefined,
     search: typeof params.q === "string" ? params.q : undefined,
     page: typeof params.page === "string" ? parseInt(params.page) : 1,
     perPage: 24,
+    favoritedBy: favOnly && userId ? userId : undefined,
   };
 
   const { songs, total } = await getKaraokeSongs(filters);
   const totalPages = Math.ceil(total / (filters.perPage ?? 24));
+
+  const userData = userId
+    ? await getUserKaraokeData(userId, songs.map((s) => s.id))
+    : undefined;
 
   return (
     <div className="space-y-6">
@@ -39,14 +52,18 @@ export default async function KaraokePage({ searchParams }: Props) {
       </div>
 
       <Suspense>
-        <Filters />
+        <Filters signedIn={!!userId} />
       </Suspense>
 
       {songs.length > 0 ? (
         <>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {songs.map((song) => (
-              <SongCard key={song.id} song={song} />
+              <SongCard
+                key={song.id}
+                song={song}
+                initialFavorite={userData?.get(song.id)?.isFavorite ?? false}
+              />
             ))}
           </div>
           {totalPages > 1 && (

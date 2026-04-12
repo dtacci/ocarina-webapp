@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { KaraokeSongRow } from "@/lib/db/queries/karaoke";
+import { KaraokeFavoriteButton } from "./karaoke-favorite-button";
 
 const sourceColors: Record<string, string> = {
   midi: "bg-blue-500",
@@ -9,7 +10,12 @@ const sourceColors: Record<string, string> = {
   both: "bg-violet-500",
 };
 
-export function SongCard({ song }: { song: KaraokeSongRow }) {
+interface Props {
+  song: KaraokeSongRow;
+  initialFavorite?: boolean;
+}
+
+export function SongCard({ song, initialFavorite = false }: Props) {
   const isPlayable = !!(song.midi_blob_url || song.wav_blob_url);
 
   return (
@@ -40,11 +46,17 @@ export function SongCard({ song }: { song: KaraokeSongRow }) {
           <h3 className="text-sm font-medium truncate group-hover:text-primary transition-colors">
             {song.title}
           </h3>
-          {song.duration_sec && (
-            <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-              {Math.floor(song.duration_sec / 60)}:{String(song.duration_sec % 60).padStart(2, "0")}
-            </span>
-          )}
+          <div className="flex items-center gap-1 shrink-0">
+            {song.duration_sec && (
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {Math.floor(song.duration_sec / 60)}:{String(song.duration_sec % 60).padStart(2, "0")}
+              </span>
+            )}
+            <KaraokeFavoriteButton
+              songId={song.id}
+              initialFavorite={initialFavorite}
+            />
+          </div>
         </div>
         <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">

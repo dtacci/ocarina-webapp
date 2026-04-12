@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { KaraokePlayer } from "./karaoke-player";
 import { LyricsDisplay } from "./lyrics-display";
 import { BeatIndicator } from "./beat-indicator";
+import { KaraokeFavoriteButton } from "./karaoke-favorite-button";
 import { parseLrc } from "@/lib/utils/lrc";
 import type { KaraokeSongRow } from "@/lib/db/queries/karaoke";
 
 interface Props {
   song: KaraokeSongRow;
+  initialFavorite?: boolean;
 }
 
 interface LyricsState {
@@ -21,7 +23,7 @@ interface LyricsState {
   instrumental: boolean;
 }
 
-export function KaraokeSession({ song }: Props) {
+export function KaraokeSession({ song, initialFavorite = false }: Props) {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
@@ -94,7 +96,14 @@ export function KaraokeSession({ song }: Props) {
       <div>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight truncate">{song.title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold tracking-tight truncate">{song.title}</h1>
+              <KaraokeFavoriteButton
+                songId={song.id}
+                initialFavorite={initialFavorite}
+                size="md"
+              />
+            </div>
             <p className="text-lg text-muted-foreground mt-1">{song.artist}</p>
           </div>
           <div className="flex flex-wrap gap-1.5 justify-end shrink-0">

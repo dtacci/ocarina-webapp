@@ -2,15 +2,17 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Heart, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const decades = ["60s", "70s", "80s", "90s", "2000s", "2010s"];
 
-export function KaraokeFilters() {
+export function KaraokeFilters({ signedIn = false }: { signedIn?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeDecade = searchParams.get("decade") ?? "";
   const search = searchParams.get("q") ?? "";
+  const favOnly = searchParams.get("fav") === "1";
 
   function setParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -44,7 +46,7 @@ export function KaraokeFilters() {
         />
       </div>
 
-      {/* Decade filters */}
+      {/* Decade + favorites filters */}
       <div className="flex flex-wrap gap-1.5">
         <button
           onClick={() => setParam("decade", "")}
@@ -65,6 +67,26 @@ export function KaraokeFilters() {
             {d}
           </button>
         ))}
+        {signedIn && (
+          <button
+            onClick={() => setParam("fav", favOnly ? "" : "1")}
+            aria-pressed={favOnly}
+            className={cn(
+              "flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors",
+              favOnly
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Heart
+              className={cn(
+                "size-3",
+                favOnly ? "fill-primary-foreground" : ""
+              )}
+            />
+            Favorites
+          </button>
+        )}
       </div>
     </div>
   );
