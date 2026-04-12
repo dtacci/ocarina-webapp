@@ -260,6 +260,32 @@ function BeatIndicator({
   );
 }
 
+// Floating drag preview that follows the cursor
+function DragPreview({
+  track,
+  position,
+}: {
+  track: Track | null;
+  position: { x: number; y: number };
+}) {
+  if (!track) return null;
+
+  return (
+    <div
+      className="pointer-events-none fixed z-50 flex items-center gap-2 rounded-lg border border-primary/50 bg-card/95 px-3 py-2 shadow-xl shadow-primary/20 backdrop-blur-sm transition-transform"
+      style={{
+        left: position.x + 12,
+        top: position.y - 20,
+        transform: "rotate(-2deg) scale(1.02)",
+      }}
+    >
+      <GripVertical className="size-3.5 text-muted-foreground/50" />
+      <div className={cn("size-3 rounded-full", track.color)} />
+      <span className="text-sm font-medium">{track.name}</span>
+    </div>
+  );
+}
+
 // Track Header (left column) for a single track
 function TrackHeader({
   track,
@@ -434,8 +460,23 @@ function TrackGrid({
   const playheadPosition = (currentBeat / totalBeats) * 100;
   const dragSourceId = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [draggingTrack, setDraggingTrack] = useState<Track | null>(null);
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+
+  // Track mouse position during drag
+  useEffect(() => {
+    if (!draggingTrack) return;
+    const handleDrag = (e: DragEvent) => {
+      if (e.clientX === 0 && e.clientY === 0) return; // Ignore final event with 0,0
+      setDragPosition({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener("drag", handleDrag);
+    return () => window.removeEventListener("drag", handleDrag);
+  }, [draggingTrack]);
 
   return (
+    <>
+    <DragPreview track={draggingTrack} position={dragPosition} />
     <div className="flex overflow-hidden rounded-xl border border-border bg-card">
       {/* Left: track headers — drag is only enabled here */}
       <div className="flex shrink-0 flex-col border-r border-border">
@@ -453,15 +494,28 @@ function TrackGrid({
             onSolo={() => onSolo(track.id)}
             onDelete={() => onDelete(track.id)}
             onVolumeChange={(vol) => onVolumeChange(track.id, vol)}
-            onDragStart={() => { dragSourceId.current = track.id; }}
+            onDragStart={(e) => {
+              dragSourceId.current = track.id;
+              setDraggingTrack(track);
+              setDragPosition({ x: e.clientX, y: e.clientY });
+              // Hide the default drag ghost
+              const emptyImg = new Image();
+              emptyImg.src = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+              e.dataTransfer.setDragImage(emptyImg, 0, 0);
+            }}
             onDragOver={(e) => { e.preventDefault(); setDragOverId(track.id); }}
-            onDragEnd={() => { dragSourceId.current = null; setDragOverId(null); }}
+            onDragEnd={() => {
+              dragSourceId.current = null;
+              setDragOverId(null);
+              setDraggingTrack(null);
+            }}
             onDrop={() => {
               if (dragSourceId.current && dragSourceId.current !== track.id) {
                 onReorder(dragSourceId.current, track.id);
               }
               dragSourceId.current = null;
               setDragOverId(null);
+              setDraggingTrack(null);
             }}
           />
         ))}
@@ -527,6 +581,7 @@ function TrackGrid({
         </div>
       </div>
     </div>
+    </>
   );
 }
 
