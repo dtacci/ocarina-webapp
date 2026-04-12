@@ -17,20 +17,32 @@ export interface RecordingRow {
   created_at: string;
 }
 
+export type SortOption = "date-desc" | "date-asc" | "duration-desc" | "bpm-desc";
+
+const SORT_MAP: Record<SortOption, { column: string; ascending: boolean; nullsFirst?: boolean }> = {
+  "date-desc":     { column: "created_at", ascending: false },
+  "date-asc":      { column: "created_at", ascending: true },
+  "duration-desc": { column: "duration_sec", ascending: false },
+  "bpm-desc":      { column: "bpm", ascending: false, nullsFirst: false },
+};
+
 export async function getRecordings({
   limit = 12,
   page = 1,
   query = "",
-}: { limit?: number; page?: number; query?: string } = {}): Promise<RecordingRow[]> {
+  sort = "date-desc",
+}: { limit?: number; page?: number; query?: string; sort?: SortOption } = {}): Promise<RecordingRow[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
+
+  const { column, ascending, nullsFirst } = SORT_MAP[sort] ?? SORT_MAP["date-desc"];
 
   let q = supabase
     .from("recordings")
     .select("*")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
+    .order(column, { ascending, nullsFirst })
     .range((page - 1) * limit, page * limit - 1);
 
   if (query) {
