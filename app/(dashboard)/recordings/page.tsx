@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { Disc3 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getRecordings, type SortOption } from "@/lib/db/queries/recordings";
 import { UploadButton } from "@/components/recordings/upload-button";
@@ -40,28 +39,16 @@ export default async function RecordingsPage({
         <UploadButton />
       </div>
 
-      {recordings.length === 0 && !q ? (
-        <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
-          <div className="text-center">
-            <Disc3 className="mx-auto mb-3 size-10 text-muted-foreground/50" />
-            <p className="text-sm font-medium">No recordings yet</p>
-            <p className="text-xs text-muted-foreground">
-              Upload a recording above, or register a device to enable auto-sync
-            </p>
-          </div>
-        </div>
-      ) : (
-        <Suspense fallback={null}>
-          <RecordingsClient
-            initialRecordings={pageRecordings}
-            currentPage={page}
-            hasMore={hasMore}
-            query={q}
-            userId={user?.id ?? null}
-            sort={sort}
-          />
-        </Suspense>
-      )}
+      <Suspense fallback={null}>
+        <RecordingsClient
+          initialRecordings={pageRecordings}
+          currentPage={page}
+          hasMore={hasMore}
+          query={q}
+          userId={user?.id ?? null}
+          sort={sort}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Search, Loader2, Disc3, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { Search, Loader2, Disc3, ChevronDown, ChevronUp, Download, Disc } from "lucide-react";
 import { RecordingCard } from "@/components/recordings/recording-card";
 import { useRecordingsRealtime } from "@/hooks/use-recordings-realtime";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
@@ -347,10 +347,20 @@ export function RecordingsClient({
             )}
           </div>
         </>
-      ) : (
+      ) : query ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          {query ? `No recordings matching "${query}"` : "No recordings on this page."}
+          No recordings matching &ldquo;{query}&rdquo;
         </p>
+      ) : (
+        <div className="flex h-[320px] items-center justify-center rounded-lg border border-dashed">
+          <div className="text-center">
+            <Disc className="mx-auto mb-3 size-10 text-muted-foreground/50" />
+            <p className="text-sm font-medium">No recordings yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Upload one above, or register a device to enable auto-sync
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
