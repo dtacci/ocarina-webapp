@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
 
   if (fileType === "recording") {
-    const { title, duration_sec, sample_rate, bpm, kit_id, waveform_peaks } = metadata ?? {};
+    const { title, duration_sec, sample_rate, bpm, kit_id, waveform_peaks, session_id } = metadata ?? {};
     const { data, error } = await supabase
       .from("recordings")
       .insert({
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
         bpm: bpm ?? null,
         kit_id: kit_id ?? null,
         waveform_peaks: waveform_peaks ?? null,
+        session_id: session_id ?? null,
         is_public: false,
       })
       .select()

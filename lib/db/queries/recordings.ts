@@ -11,6 +11,7 @@ export interface RecordingRow {
   bpm: number | null;
   kit_id: string | null;
   waveform_peaks: number[] | null;
+  session_id: string | null;
   is_public: boolean;
   created_at: string;
 }
@@ -88,6 +89,23 @@ export async function updateRecording(
 
   if (error) return null;
   return updated;
+}
+
+export async function getRecordingsBySessionId(
+  sessionId: string,
+  userId: string
+): Promise<RecordingRow[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("recordings")
+    .select("*")
+    .eq("session_id", sessionId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+
+  if (error) return [];
+  return data ?? [];
 }
 
 export async function deleteRecording(

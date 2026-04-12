@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { DeviceRow } from "@/lib/db/queries/devices";
 
@@ -42,10 +44,21 @@ export function DeviceCard({ device }: { device: DeviceRow }) {
           <div className={`size-2.5 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/30"}`} />
           <h3 className="font-medium">{device.name}</h3>
         </div>
+        <div className="flex items-center gap-2">
+          {device.capabilities?.config && (
+            <Link
+              href={`/devices/${device.id}/config`}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Settings className="size-3.5" />
+              Configure
+            </Link>
+          )}
         <Badge variant="secondary" className="text-xs">
           <span className={`inline-block size-1.5 rounded-full mr-1.5 ${typeColors[device.device_type] ?? "bg-gray-500"}`} />
           {typeLabels[device.device_type] ?? device.device_type}
         </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">

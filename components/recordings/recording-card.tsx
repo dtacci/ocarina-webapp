@@ -155,7 +155,7 @@ export function RecordingCard({ recording, onDelete }: Props) {
   }
 
   async function copyShareLink() {
-    const url = `${window.location.origin}/embed/${recording.id}`;
+    const url = `${window.location.origin}/recordings/${recording.id}`;
     try {
       await navigator.clipboard.writeText(url);
     } catch {

@@ -36,7 +36,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/signup");
   const isApiRoute = request.nextUrl.pathname.startsWith("/api");
   const isEmbedRoute = request.nextUrl.pathname.startsWith("/embed");
-  const isPublicRoute = request.nextUrl.pathname === "/";
+  const isPublicRoute =
+    request.nextUrl.pathname === "/" ||
+    // /recordings/[id] is public (detail page); /recordings without trailing slash stays protected
+    request.nextUrl.pathname.startsWith("/recordings/");
 
   if (!user && !isAuthRoute && !isApiRoute && !isEmbedRoute && !isPublicRoute) {
     const url = request.nextUrl.clone();
