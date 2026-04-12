@@ -15,6 +15,7 @@ export const features = {
 
   /** v0.2 features — disabled until ready */
   looperDashboard: false,
+  looperDA: true,
   realtimeBridge: false,
   configManager: true,
   recordingLibrary: true,
