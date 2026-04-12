@@ -564,6 +564,20 @@ function WaveformRow({
         isDragOver && "border-t-2 border-t-primary"
       )}
     >
+      {/* Pan indicator - small stereo position display */}
+      {track.pan !== 0 && (
+        <div className="absolute top-1 right-2 flex items-center gap-1 text-[10px] text-muted-foreground/70 bg-background/50 px-1.5 py-0.5 rounded">
+          <span className={cn(track.pan < 0 && "text-amber-500 font-medium")}>L</span>
+          <div className="w-8 h-1 bg-muted rounded-full overflow-hidden relative">
+            <div 
+              className="absolute top-0 h-full w-1 bg-amber-500 rounded-full transition-all"
+              style={{ left: `${((track.pan + 100) / 200) * 100}%`, transform: 'translateX(-50%)' }}
+            />
+          </div>
+          <span className={cn(track.pan > 0 && "text-amber-500 font-medium")}>R</span>
+        </div>
+      )}
+
       {track.hasAudio ? (
         <div className="absolute inset-0 flex items-center gap-px px-2">
           {track.waveformData.map((height, i) => {
