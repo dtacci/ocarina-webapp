@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronUp,
   Waves,
+  AudioLines,
 } from "lucide-react";
 
 import {
@@ -53,6 +54,7 @@ const navMain: NavItem[] = [
 ];
 
 const navTools: NavItem[] = [
+  { title: "LooperDA", url: "/looper-da", icon: AudioLines, feature: "looperDA" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
 ];
