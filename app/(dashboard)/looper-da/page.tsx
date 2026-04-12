@@ -457,7 +457,7 @@ function TrackHeader({
             size="icon"
             className={cn("size-7", track.armed && "bg-destructive/20")}
             onClick={onArm}
-            title="Arm for recording"
+            title={track.armed ? "Disarm track" : "Arm track for recording"}
           >
             <Radio className={cn("size-3.5", track.armed && "animate-pulse")} />
           </Button>
@@ -466,6 +466,7 @@ function TrackHeader({
             size="icon"
             className="size-7"
             onClick={onMute}
+            title={track.muted ? "Unmute track" : "Mute track"}
           >
             {track.muted ? (
               <VolumeX className="size-3.5" />
@@ -478,6 +479,7 @@ function TrackHeader({
             size="icon"
             className={cn("size-7", track.solo && "bg-amber-500/20 text-amber-500")}
             onClick={onSolo}
+            title={track.solo ? "Unsolo track" : "Solo track (mutes all others)"}
           >
             <Headphones className="size-3.5" />
           </Button>
@@ -488,7 +490,7 @@ function TrackHeader({
                 variant="ghost"
                 size="icon"
                 className="size-7"
-                title="Track settings"
+                title="Track settings (pan, etc.)"
               >
                 <Settings2 className="size-3.5" />
               </Button>
@@ -539,6 +541,7 @@ function TrackHeader({
             size="icon"
             className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
             onClick={onDelete}
+            title="Delete track"
           >
             <Trash2 className="size-3.5" />
           </Button>
@@ -601,13 +604,15 @@ function WaveformRow({
       className={cn(
         "relative h-[88px] border-b border-border",
         bgTint,
-        track.muted && "opacity-50",
         isDragging && "opacity-40 scale-[0.98] origin-left",
         isDragOver && "border-t-2 border-t-primary"
       )}
     >
       {track.hasAudio ? (
-        <div className="absolute inset-0 flex items-center gap-px px-2">
+        <div className={cn(
+          "absolute inset-0 flex items-center gap-px px-2 transition-opacity duration-200",
+          track.muted && "opacity-30"
+        )}>
           {track.waveformData.map((height, i) => {
             const position = (i / track.waveformData.length) * 100;
             const isPast = position < playheadPosition;
@@ -1266,11 +1271,47 @@ const handleAddTrack = useCallback(() => {
               "gap-2",
               session.metronomeEnabled && "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
             )}
-            title="Toggle metronome (click sound)"
+            title={session.metronomeEnabled ? "Metronome on — click to turn off" : "Metronome off — click to turn on"}
           >
             <Timer className="size-4" />
-            <span className="hidden sm:inline">Click</span>
+            <span className="hidden sm:inline text-xs">{session.metronomeEnabled ? "Click: On" : "Click: Off"}</span>
           </Button>
+
+          {/* Keyboard Shortcuts */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2" title="Keyboard shortcuts">
+                <Keyboard className="size-4" />
+                <span className="hidden sm:inline text-xs">Shortcuts</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-60 p-3" align="end">
+              <div className="space-y-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Keyboard Shortcuts
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { key: "Space", action: "Play / Pause" },
+                    { key: "S", action: "Stop" },
+                    { key: "R", action: "Record (4-beat count-in)" },
+                    { key: "M", action: "Mute / Unmute track" },
+                  ].map(({ key, action }) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">{action}</span>
+                      <kbd className="px-1.5 py-0.5 text-xs font-mono bg-muted rounded border border-border">
+                        {key}
+                      </kbd>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border pt-2 text-[11px] text-muted-foreground/60">
+                  Shortcuts are disabled when typing in an input.
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <BpmDisplay bpm={session.bpm} onBpmChange={handleBpmChange} />
           <TimeDisplay
             currentBeat={session.currentBeat}
