@@ -169,6 +169,39 @@ function BpmDisplay({
   bpm: number;
   onBpmChange: (bpm: number) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(bpm.toString());
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEdit = () => {
+    setEditValue(bpm.toString());
+    setIsEditing(true);
+  };
+
+  const handleFinishEdit = () => {
+    const parsed = parseInt(editValue, 10);
+    if (!isNaN(parsed) && parsed >= 40 && parsed <= 240) {
+      onBpmChange(parsed);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleFinishEdit();
+    } else if (e.key === "Escape") {
+      setIsEditing(false);
+      setEditValue(bpm.toString());
+    }
+  };
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2">
       <span className="text-xs text-muted-foreground uppercase tracking-wider">
@@ -180,17 +213,35 @@ function BpmDisplay({
           size="icon"
           className="size-6"
           onClick={() => onBpmChange(Math.max(40, bpm - 1))}
+          title="Decrease BPM"
         >
           -
         </Button>
-        <span className="w-12 text-center font-mono text-xl font-bold tabular-nums">
-          {bpm}
-        </span>
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleFinishEdit}
+            onKeyDown={handleKeyDown}
+            className="w-12 text-center font-mono text-xl font-bold tabular-nums bg-muted px-1 py-0.5 rounded border border-primary outline-none"
+          />
+        ) : (
+          <span
+            className="w-12 text-center font-mono text-xl font-bold tabular-nums cursor-text hover:text-primary transition-colors"
+            onDoubleClick={handleStartEdit}
+            title="Double-click to edit BPM"
+          >
+            {bpm}
+          </span>
+        )}
         <Button
           variant="ghost"
           size="icon"
           className="size-6"
           onClick={() => onBpmChange(Math.min(240, bpm + 1))}
+          title="Increase BPM"
         >
           +
         </Button>
@@ -912,6 +963,8 @@ export default function LooperDAPage() {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+      // Reset lastTimeRef so next frame starts fresh (no huge delta)
+      lastTimeRef.current = 0;
       return;
     }
 
@@ -919,7 +972,10 @@ export default function LooperDAPage() {
 
     const animate = (timestamp: number) => {
       if (lastTimeRef.current === 0) {
+        // First frame after play/resume - just record time, don't add delta
         lastTimeRef.current = timestamp;
+        animationRef.current = requestAnimationFrame(animate);
+        return;
       }
 
       const delta = timestamp - lastTimeRef.current;
