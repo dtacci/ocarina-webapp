@@ -11,6 +11,8 @@ export interface KaraokeSongRow {
   key: string | null;
   source: string;
   available: boolean;
+  midi_blob_url: string | null;
+  wav_blob_url: string | null;
 }
 
 export interface KaraokeFilters {
@@ -53,6 +55,17 @@ export async function getKaraokeSongs(
   if (error) throw error;
 
   return { songs: data ?? [], total: count ?? 0 };
+}
+
+export async function getKaraokeSong(id: string): Promise<KaraokeSongRow | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("karaoke_songs")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error || !data) return null;
+  return data as KaraokeSongRow;
 }
 
 export async function getKaraokeDecades(): Promise<{ decade: string; count: number }[]> {

@@ -212,3 +212,18 @@
     background-clip: text;
   }
 }
+
+/* Karaoke theater mode — dims sidebar and header during playback */
+body.karaoke-theater [data-slot="sidebar"],
+body.karaoke-theater nav,
+body.karaoke-theater header {
+  opacity: 0.08;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+body.karaoke-theater [data-slot="sidebar"]:hover,
+body.karaoke-theater nav:hover,
+body.karaoke-theater header:hover {
+  opacity: 0.5;
+  pointer-events: auto;
+}

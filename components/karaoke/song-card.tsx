@@ -1,5 +1,6 @@
+import Link from "next/link";
+import { Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Music } from "lucide-react";
 import type { KaraokeSongRow } from "@/lib/db/queries/karaoke";
 
 const sourceColors: Record<string, string> = {
@@ -10,12 +11,26 @@ const sourceColors: Record<string, string> = {
 
 export function SongCard({ song }: { song: KaraokeSongRow }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border p-3 hover:border-foreground/20 transition-colors">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-        <Music className="size-4 text-muted-foreground" />
+    <Link
+      href={`/karaoke/${encodeURIComponent(song.id)}`}
+      className="group flex items-start gap-3 rounded-lg border p-3 hover:border-primary/40 hover:bg-muted/30 transition-all"
+    >
+      {/* Icon — shows play arrow on hover */}
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-primary/10 transition-colors">
+        <Play className="size-4 text-muted-foreground group-hover:text-primary transition-colors ml-0.5" />
       </div>
+
       <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-medium truncate">{song.title}</h3>
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+            {song.title}
+          </h3>
+          {song.duration_sec && (
+            <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+              {Math.floor(song.duration_sec / 60)}:{String(song.duration_sec % 60).padStart(2, "0")}
+            </span>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
           {song.decade && song.decade !== "unknown" && (
@@ -34,6 +49,6 @@ export function SongCard({ song }: { song: KaraokeSongRow }) {
           />
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
