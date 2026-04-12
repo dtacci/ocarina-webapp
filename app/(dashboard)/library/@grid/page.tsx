@@ -1,4 +1,6 @@
 import { getSamples, type SampleFilters } from "@/lib/db/queries/samples";
+import { getUserSampleData } from "@/lib/db/queries/sample-user-data";
+import { createClient } from "@/lib/supabase/server";
 import { SampleGrid } from "@/components/samples/sample-grid";
 import { Pagination } from "@/components/samples/pagination";
 
@@ -36,12 +38,25 @@ function parseFilters(raw: Record<string, string | string[] | undefined>): Sampl
 export default async function GridSlot({ searchParams }: Props) {
   const raw = await searchParams;
   const filters = parseFilters(raw);
-  const result = await getSamples(filters);
+
+  const supabase = await createClient();
+  const [result, userResp] = await Promise.all([
+    getSamples(filters),
+    supabase.auth.getUser(),
+  ]);
+
+  const userId = userResp.data.user?.id;
+  const userData = userId
+    ? await getUserSampleData(
+        userId,
+        result.samples.map((s) => s.id)
+      )
+    : undefined;
 
   return (
     <>
       <Pagination page={result.page} totalPages={result.totalPages} total={result.total} />
-      <SampleGrid samples={result.samples} />
+      <SampleGrid samples={result.samples} userData={userData} />
       {result.totalPages > 1 && (
         <Pagination page={result.page} totalPages={result.totalPages} total={result.total} />
       )}

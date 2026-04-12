@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
 import { getSample } from "@/lib/db/queries/samples";
+import { getUserSampleState } from "@/lib/db/queries/sample-user-data";
+import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SamplePlayer } from "@/components/audio/sample-player";
+import { FavoriteButton } from "@/components/samples/favorite-button";
+import { RatingStars } from "@/components/samples/rating-stars";
 import Link from "next/link";
 import { ArrowLeft, Mic } from "lucide-react";
 
@@ -43,8 +47,19 @@ function AttributeBar({ label, value }: { label: string; value: number | null })
 
 export default async function SampleDetailPage({ params }: Props) {
   const { sampleId } = await params;
-  const sample = await getSample(decodeURIComponent(sampleId));
+  const decodedId = decodeURIComponent(sampleId);
+
+  const supabase = await createClient();
+  const [sample, userResp] = await Promise.all([
+    getSample(decodedId),
+    supabase.auth.getUser(),
+  ]);
   if (!sample) notFound();
+
+  const userId = userResp.data.user?.id;
+  const userState = userId
+    ? await getUserSampleState(userId, sample.id)
+    : { isFavorite: false, userRating: null };
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -61,10 +76,21 @@ export default async function SampleDetailPage({ params }: Props) {
               {sample.family}
             </Badge>
           )}
+          <FavoriteButton
+            sampleId={sample.id}
+            initialFavorite={userState.isFavorite}
+            size="md"
+            className="ml-auto"
+          />
         </div>
         {sample.category && (
-          <p className="text-muted-foreground capitalize">{sample.category}</p>
+          <p className="text-muted-foreground capitalize mb-2">{sample.category}</p>
         )}
+        <RatingStars
+          sampleId={sample.id}
+          initialRating={userState.userRating}
+          size="md"
+        />
       </div>
 
       {/* Audio — preview if available, otherwise decorative waveform */}

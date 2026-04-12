@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Play, Pause } from "lucide-react";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import { Badge } from "@/components/ui/badge";
+import { FavoriteButton } from "./favorite-button";
+import { RatingStars } from "./rating-stars";
 
 const familyColors: Record<string, string> = {
   strings: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
@@ -35,7 +37,17 @@ function AttributeBar({ label, value }: { label: string; value: number | null })
   );
 }
 
-export function SampleCard({ sample }: { sample: SampleWithVibes }) {
+interface SampleCardProps {
+  sample: SampleWithVibes;
+  initialFavorite?: boolean;
+  initialRating?: number | null;
+}
+
+export function SampleCard({
+  sample,
+  initialFavorite = false,
+  initialRating = null,
+}: SampleCardProps) {
   const familyClass = familyColors[sample.family || ""] || familyColors.other;
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -107,9 +119,20 @@ export function SampleCard({ sample }: { sample: SampleWithVibes }) {
         <h3 className="text-sm font-medium truncate flex-1" title={sample.id}>
           {sample.id}
         </h3>
-        <span className="text-xs text-muted-foreground shrink-0">
-          {sample.duration_sec.toFixed(1)}s
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-xs text-muted-foreground">
+            {sample.duration_sec.toFixed(1)}s
+          </span>
+          <FavoriteButton
+            sampleId={sample.id}
+            initialFavorite={initialFavorite}
+          />
+        </div>
+      </div>
+
+      {/* Rating */}
+      <div className="mb-1.5">
+        <RatingStars sampleId={sample.id} initialRating={initialRating} />
       </div>
 
       {/* Family + root note */}

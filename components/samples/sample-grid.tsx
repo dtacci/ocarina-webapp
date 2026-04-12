@@ -1,7 +1,13 @@
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
+import type { SampleUserState } from "@/lib/db/queries/sample-user-data";
 import { SampleCard } from "./sample-card";
 
-export function SampleGrid({ samples }: { samples: SampleWithVibes[] }) {
+interface Props {
+  samples: SampleWithVibes[];
+  userData?: Map<string, SampleUserState>;
+}
+
+export function SampleGrid({ samples, userData }: Props) {
   if (samples.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center rounded-lg border border-dashed">
@@ -14,9 +20,17 @@ export function SampleGrid({ samples }: { samples: SampleWithVibes[] }) {
 
   return (
     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 stagger-fade">
-      {samples.map((sample) => (
-        <SampleCard key={sample.id} sample={sample} />
-      ))}
+      {samples.map((sample) => {
+        const state = userData?.get(sample.id);
+        return (
+          <SampleCard
+            key={sample.id}
+            sample={sample}
+            initialFavorite={state?.isFavorite ?? false}
+            initialRating={state?.userRating ?? null}
+          />
+        );
+      })}
     </div>
   );
 }
