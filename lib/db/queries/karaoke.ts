@@ -47,6 +47,10 @@ export async function getKaraokeSongs(
 
   const from = (page - 1) * perPage;
   query = query
+    // Playable songs (midi_blob_url or wav_blob_url set) surface first.
+    // Postgres NULLS LAST ordering — songs without any blob URL fall to the bottom.
+    .order("midi_blob_url", { ascending: false, nullsFirst: false })
+    .order("wav_blob_url", { ascending: false, nullsFirst: false })
     .order("artist", { ascending: true })
     .order("title", { ascending: true })
     .range(from, from + perPage - 1);

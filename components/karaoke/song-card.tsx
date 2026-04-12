@@ -10,14 +10,29 @@ const sourceColors: Record<string, string> = {
 };
 
 export function SongCard({ song }: { song: KaraokeSongRow }) {
+  const isPlayable = !!(song.midi_blob_url || song.wav_blob_url);
+
   return (
     <Link
       href={`/karaoke/${encodeURIComponent(song.id)}`}
-      className="group flex items-start gap-3 rounded-lg border p-3 hover:border-primary/40 hover:bg-muted/30 transition-all"
+      className={[
+        "group flex items-start gap-3 rounded-lg border p-3 transition-all",
+        isPlayable
+          ? "hover:border-primary/40 hover:bg-muted/30"
+          : "opacity-60 hover:opacity-100 hover:border-foreground/20",
+      ].join(" ")}
     >
-      {/* Icon — shows play arrow on hover */}
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-primary/10 transition-colors">
-        <Play className="size-4 text-muted-foreground group-hover:text-primary transition-colors ml-0.5" />
+      {/* Icon — play arrow for playable, muted state for catalog-only */}
+      <div className={[
+        "flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors",
+        isPlayable ? "bg-muted group-hover:bg-primary/10" : "bg-muted/50",
+      ].join(" ")}>
+        <Play className={[
+          "size-4 transition-colors ml-0.5",
+          isPlayable
+            ? "text-muted-foreground group-hover:text-primary"
+            : "text-muted-foreground/40",
+        ].join(" ")} />
       </div>
 
       <div className="flex-1 min-w-0">
