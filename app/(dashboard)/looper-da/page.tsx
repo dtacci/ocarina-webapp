@@ -292,10 +292,13 @@ function TrackHeader({
   track,
   isDragging,
   isDragOver,
+  onArm,
   onMute,
   onSolo,
   onDelete,
+  onRename,
   onVolumeChange,
+  onPanChange,
   onDragStart,
   onDragOver,
   onDragEnd,
@@ -304,15 +307,50 @@ function TrackHeader({
   track: Track;
   isDragging: boolean;
   isDragOver: boolean;
+  onArm: () => void;
   onMute: () => void;
   onSolo: () => void;
   onDelete: () => void;
+  onRename: (name: string) => void;
   onVolumeChange: (volume: number) => void;
+  onPanChange: (pan: number) => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
   onDrop: () => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(track.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEdit = () => {
+    setEditName(track.name);
+    setIsEditing(true);
+  };
+
+  const handleFinishEdit = () => {
+    if (editName.trim()) {
+      onRename(editName.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleFinishEdit();
+    } else if (e.key === "Escape") {
+      setIsEditing(false);
+      setEditName(track.name);
+    }
+  };
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
   return (
     <motion.div
       layout
@@ -320,13 +358,14 @@ function TrackHeader({
       transition={{ type: "spring", stiffness: 350, damping: 25 }}
     >
       <div
-        draggable
+        draggable={!isEditing}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
         onDrop={onDrop}
         className={cn(
-          "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 select-none",
+          "group flex h-[120px] w-52 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2 select-none",
+          track.armed && "border-l-2 border-l-destructive/70",
           track.recording && "border-l-2 border-l-destructive",
           track.muted && "opacity-50",
           isDragging && "opacity-40 scale-[0.98]",
@@ -336,10 +375,37 @@ function TrackHeader({
         <div className="flex items-center gap-2">
           <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
           <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
-          <span className="text-sm font-medium truncate">{track.name}</span>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={handleFinishEdit}
+              onKeyDown={handleKeyDown}
+              className="flex-1 bg-muted px-1.5 py-0.5 text-sm font-medium rounded border border-primary outline-none"
+            />
+          ) : (
+            <span
+              className="text-sm font-medium truncate cursor-text hover:text-primary transition-colors"
+              onDoubleClick={handleStartEdit}
+              title="Double-click to rename"
+            >
+              {track.name}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
+          <Button
+            variant={track.armed ? "destructive" : "ghost"}
+            size="icon"
+            className={cn("size-7", track.armed && "bg-destructive/20")}
+            onClick={onArm}
+            title="Arm for recording"
+          >
+            <Radio className={cn("size-3.5", track.armed && "animate-pulse")} />
+          </Button>
           <Button
             variant={track.muted ? "destructive" : "ghost"}
             size="icon"
@@ -370,21 +436,61 @@ function TrackHeader({
           </Button>
         </div>
 
+        {/* Volume and Pan row */}
         <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={track.volume}
-            onChange={(e) => onVolumeChange(Number(e.target.value))}
-            className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
-          />
-          <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
-            {track.volume}%
-          </span>
+          <div className="flex-1 flex flex-col gap-1">
+            {/* Volume slider */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted-foreground w-5">Vol</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={track.volume}
+                onChange={(e) => onVolumeChange(Number(e.target.value))}
+                className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+              />
+              <span className="text-[10px] text-muted-foreground w-6 text-right tabular-nums">
+                {track.volume}
+              </span>
+            </div>
+            {/* Pan slider */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted-foreground w-5">Pan</span>
+              <input
+                type="range"
+                min="-100"
+                max="100"
+                value={track.pan}
+                onChange={(e) => onPanChange(Number(e.target.value))}
+                className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500"
+              />
+              <span className="text-[10px] text-muted-foreground w-6 text-right tabular-nums">
+                {track.pan > 0 ? `R${track.pan}` : track.pan < 0 ? `L${Math.abs(track.pan)}` : "C"}
+              </span>
+            </div>
+          </div>
+          {/* VU Meter */}
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="w-2.5 h-12 bg-muted rounded-sm overflow-hidden flex flex-col-reverse">
+              <div
+                className={cn(
+                  "w-full transition-all duration-75",
+                  track.meterLevel > 85
+                    ? "bg-destructive"
+                    : track.meterLevel > 60
+                      ? "bg-amber-500"
+                      : "bg-emerald-500"
+                )}
+                style={{ height: `${track.meterLevel}%` }}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </motion.div>
+  );
+}
   );
 }
 
