@@ -84,6 +84,18 @@ const TRACK_BG_TINTS: Record<string, string> = {
   "bg-pink-500": "bg-pink-950/40",
 };
 
+// Solo left-border colors — matches track dot/bg color per track
+const TRACK_SOLO_BORDERS: Record<string, string> = {
+  "bg-emerald-500": "border-l-emerald-500",
+  "bg-amber-500": "border-l-amber-500",
+  "bg-rose-500": "border-l-rose-500",
+  "bg-sky-500": "border-l-sky-500",
+  "bg-violet-500": "border-l-violet-500",
+  "bg-orange-500": "border-l-orange-500",
+  "bg-teal-500": "border-l-teal-500",
+  "bg-pink-500": "border-l-pink-500",
+};
+
 // Seeded pseudo-random number generator (mulberry32) — deterministic on both
 // server and client so React hydration values always match.
 function seededRandom(seed: number) {
@@ -395,6 +407,7 @@ function DragPreview({
 // Track Header (left column) for a single track
 function TrackHeader({
   track,
+  effectivelyMuted,
   isDragging,
   isDragOver,
   onArm,
@@ -410,6 +423,7 @@ function TrackHeader({
   onDrop,
 }: {
   track: Track;
+  effectivelyMuted: boolean;
   isDragging: boolean;
   isDragOver: boolean;
   onArm: () => void;
@@ -466,10 +480,11 @@ function TrackHeader({
         onDragOver={onDragOver}
         onDrop={onDrop}
         className={cn(
-          "group flex h-[88px] w-48 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2",
-          track.armed && "border-l-2 border-l-destructive/70",
+          "group flex h-[88px] w-48 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2 transition-opacity duration-200",
+          track.solo && `border-l-2 ${TRACK_SOLO_BORDERS[track.color] ?? "border-l-amber-500"}`,
+          track.armed && !track.solo && "border-l-2 border-l-destructive/70",
           track.recording && "border-l-2 border-l-destructive",
-          track.muted && "opacity-50",
+          effectivelyMuted && !track.solo && "opacity-40",
           isDragging && "opacity-40 scale-[0.98]",
           isDragOver && "border-t-2 border-t-primary"
         )}
@@ -633,12 +648,14 @@ function TrackHeader({
 // Single waveform row (no playhead/bar-lines — those live in the shared grid)
 function WaveformRow({
   track,
+  effectivelyMuted,
   playheadPosition,
   isPlaying,
   isDragging,
   isDragOver,
 }: {
   track: Track;
+  effectivelyMuted: boolean;
   playheadPosition: number;
   isPlaying: boolean;
   isDragging: boolean;
@@ -652,8 +669,10 @@ function WaveformRow({
       layoutId={`track-waveform-${track.id}`}
       transition={{ type: "spring", stiffness: 350, damping: 25 }}
       className={cn(
-        "relative h-[88px] border-b border-border",
+        "relative h-[88px] border-b border-border transition-opacity duration-200",
         bgTint,
+        track.solo && `border-l-2 ${TRACK_SOLO_BORDERS[track.color] ?? "border-l-amber-500"}`,
+        effectivelyMuted && !track.solo && "opacity-30",
         isDragging && "opacity-40 scale-[0.98] origin-left",
         isDragOver && "border-t-2 border-t-primary"
       )}
@@ -661,7 +680,7 @@ function WaveformRow({
       {track.hasAudio ? (
         <div className={cn(
           "absolute inset-0 flex items-center gap-px px-2 transition-opacity duration-200",
-          track.muted && "opacity-30"
+          effectivelyMuted && !track.solo && "opacity-50"
         )}>
           {track.waveformData.map((height, i) => {
             const position = (i / track.waveformData.length) * 100;
@@ -734,6 +753,8 @@ function TrackGrid({
   const [draggingTrack, setDraggingTrack] = useState<Track | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
 
+  const anySolo = tracks.some((t) => t.solo);
+
   // Track mouse position during drag
   useEffect(() => {
     if (!draggingTrack) return;
@@ -759,6 +780,7 @@ function TrackGrid({
           <TrackHeader
             key={track.id}
             track={track}
+            effectivelyMuted={track.muted || (anySolo && !track.solo)}
             isDragging={dragSourceId === track.id}
             isDragOver={dragOverId === track.id}
             onArm={() => onArm(track.id)}
@@ -818,6 +840,7 @@ function TrackGrid({
             <WaveformRow
               key={track.id}
               track={track}
+              effectivelyMuted={track.muted || (anySolo && !track.solo)}
               playheadPosition={playheadPosition}
               isPlaying={isPlaying}
               isDragging={dragSourceId === track.id}
@@ -1274,11 +1297,14 @@ const handleAddTrack = useCallback(() => {
 
   const handleSoloTrack = useCallback((id: string) => {
     setTracks((prev) => {
-      const track = prev.find((t) => t.id === id);
-      if (track) sendCommand(track.solo ? "unsolo_track" : "solo_track", { track: parseInt(id) });
-      return prev.map((t) => (t.id === id ? { ...t, solo: !t.solo } : t));
+      const isCurrentlySoloed = prev.find((t) => t.id === id)?.solo;
+      return prev.map((t) =>
+        t.id === id
+          ? { ...t, solo: !isCurrentlySoloed }
+          : { ...t, solo: false } // Clear solo on all other tracks
+      );
     });
-  }, [sendCommand]);
+  }, []);
 
   const handleDeleteTrack = useCallback((id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
