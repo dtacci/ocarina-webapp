@@ -35,7 +35,10 @@ interface Track {
   color: string;
   muted: boolean;
   solo: boolean;
+  armed: boolean;
   volume: number;
+  pan: number; // -100 (left) to 100 (right), 0 = center
+  meterLevel: number; // 0-100 for VU meter display
   recording: boolean;
   hasAudio: boolean;
   waveformData: number[];
@@ -564,20 +567,6 @@ function WaveformRow({
         isDragOver && "border-t-2 border-t-primary"
       )}
     >
-      {/* Pan indicator - small stereo position display */}
-      {track.pan !== 0 && (
-        <div className="absolute top-1 right-2 flex items-center gap-1 text-[10px] text-muted-foreground/70 bg-background/50 px-1.5 py-0.5 rounded">
-          <span className={cn(track.pan < 0 && "text-amber-500 font-medium")}>L</span>
-          <div className="w-8 h-1 bg-muted rounded-full overflow-hidden relative">
-            <div 
-              className="absolute top-0 h-full w-1 bg-amber-500 rounded-full transition-all"
-              style={{ left: `${((track.pan + 100) / 200) * 100}%`, transform: 'translateX(-50%)' }}
-            />
-          </div>
-          <span className={cn(track.pan > 0 && "text-amber-500 font-medium")}>R</span>
-        </div>
-      )}
-
       {track.hasAudio ? (
         <div className="absolute inset-0 flex items-center gap-px px-2">
           {track.waveformData.map((height, i) => {
@@ -789,7 +778,10 @@ export default function LooperDAPage() {
       color: TRACK_COLORS[0],
       muted: false,
       solo: false,
+      armed: false,
       volume: 80,
+      pan: 0,
+      meterLevel: 45,
       recording: false,
       hasAudio: true,
       waveformData: generateWaveform("1"),
@@ -800,7 +792,10 @@ export default function LooperDAPage() {
       color: TRACK_COLORS[1],
       muted: false,
       solo: false,
+      armed: false,
       volume: 75,
+      pan: 0,
+      meterLevel: 60,
       recording: false,
       hasAudio: true,
       waveformData: generateWaveform("2"),
@@ -811,7 +806,10 @@ export default function LooperDAPage() {
       color: TRACK_COLORS[2],
       muted: false,
       solo: false,
+      armed: false,
       volume: 65,
+      pan: 0,
+      meterLevel: 30,
       recording: false,
       hasAudio: false,
       waveformData: [],
@@ -922,7 +920,7 @@ export default function LooperDAPage() {
     setSession((prev) => ({ ...prev, bpm: newBpm }));
   }, []);
 
-  const handleAddTrack = useCallback(() => {
+const handleAddTrack = useCallback(() => {
     const id = Date.now().toString();
     const newTrack: Track = {
       id,
@@ -930,7 +928,10 @@ export default function LooperDAPage() {
       color: TRACK_COLORS[tracks.length % TRACK_COLORS.length],
       muted: false,
       solo: false,
+      armed: false,
       volume: 75,
+      pan: 0,
+      meterLevel: 0,
       recording: false,
       hasAudio: false,
       waveformData: generateWaveform(id),
