@@ -276,7 +276,7 @@ function TrackHeader({
   return (
     <div
       className={cn(
-        "group flex w-44 shrink-0 flex-col gap-2 border-b border-border bg-card px-3 py-3 transition-all",
+        "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 transition-all",
         track.recording && "border-l-2 border-l-destructive",
         track.muted && "opacity-50"
       )}
@@ -350,7 +350,7 @@ function WaveformRow({
   const bgTint = TRACK_BG_TINTS[track.color] ?? "bg-muted/30";
 
   return (
-    <div className={cn("relative h-16 border-b border-border", bgTint, track.muted && "opacity-50")}>
+    <div className={cn("relative h-[88px] border-b border-border", bgTint, track.muted && "opacity-50")}>
       {track.hasAudio ? (
         <div className="absolute inset-0 flex items-center gap-px px-2">
           {track.waveformData.map((height, i) => {
