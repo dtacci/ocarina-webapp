@@ -30,7 +30,7 @@ export const features = {
   looperWaveforms: false,
   quantizationControls: false,
   sampleDragDrop: false,
-  drumPatternEditor: false,
+  drumPatternEditor: true,
   karaokeDisplay: false,
   lyricsEditor: false,
   shareLinks: false,

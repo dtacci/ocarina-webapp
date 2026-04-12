@@ -20,6 +20,7 @@ import {
   Settings2,
   Wifi,
   WifiOff,
+  Drum,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,12 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useLoopState } from "@/hooks/use-loop-state";
+import { DrumMachine } from "@/components/looper/drum-machine";
+import {
+  TRACK_COLORS,
+  TRACK_BG_TINTS,
+  TRACK_SOLO_BORDERS,
+} from "@/components/looper/track-colors";
 
 // Types
 interface Track {
@@ -61,40 +68,8 @@ interface Session {
   metronomeEnabled: boolean;
 }
 
-const TRACK_COLORS = [
-  "bg-emerald-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-sky-500",
-  "bg-violet-500",
-  "bg-orange-500",
-  "bg-teal-500",
-  "bg-pink-500",
-];
-
-// Subtle background tints for each track lane — matches TRACK_COLORS order
-const TRACK_BG_TINTS: Record<string, string> = {
-  "bg-emerald-500": "bg-emerald-950/40",
-  "bg-amber-500": "bg-amber-950/40",
-  "bg-rose-500": "bg-rose-950/40",
-  "bg-sky-500": "bg-sky-950/40",
-  "bg-violet-500": "bg-violet-950/40",
-  "bg-orange-500": "bg-orange-950/40",
-  "bg-teal-500": "bg-teal-950/40",
-  "bg-pink-500": "bg-pink-950/40",
-};
-
-// Solo left-border colors — matches track dot/bg color per track
-const TRACK_SOLO_BORDERS: Record<string, string> = {
-  "bg-emerald-500": "border-l-emerald-500",
-  "bg-amber-500": "border-l-amber-500",
-  "bg-rose-500": "border-l-rose-500",
-  "bg-sky-500": "border-l-sky-500",
-  "bg-violet-500": "border-l-violet-500",
-  "bg-orange-500": "border-l-orange-500",
-  "bg-teal-500": "border-l-teal-500",
-  "bg-pink-500": "border-l-pink-500",
-};
+// TRACK_COLORS, TRACK_BG_TINTS, TRACK_SOLO_BORDERS imported from
+// components/looper/track-colors so the drum machine can reuse the palette.
 
 // Seeded pseudo-random number generator (mulberry32) — deterministic on both
 // server and client so React hydration values always match.
@@ -956,6 +931,7 @@ export default function LooperDAPage() {
 
   // ── Pi integration ──────────────────────────────────────────────────────
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [drumsOpen, setDrumsOpen] = useState(false);
 
   // Fetch the user's first looper-capable Pi device on mount
   useEffect(() => {
@@ -1501,6 +1477,21 @@ const handleAddTrack = useCallback(() => {
             </PopoverContent>
           </Popover>
 
+          {/* Drums Toggle */}
+          <Button
+            variant={drumsOpen ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setDrumsOpen((v) => !v)}
+            className={cn(
+              "gap-2",
+              drumsOpen && "bg-primary/15 text-primary hover:bg-primary/25"
+            )}
+            title={drumsOpen ? "Hide drum machine" : "Show drum machine"}
+          >
+            <Drum className="size-4" />
+            <span className="hidden sm:inline text-xs">Drums</span>
+          </Button>
+
           {/* Pi connection status */}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             {piStatus === "connected" ? (
@@ -1523,6 +1514,9 @@ const handleAddTrack = useCallback(() => {
           />
         </div>
       </div>
+
+      {/* Drum Machine Panel (inline) */}
+      {drumsOpen && <DrumMachine compact deviceId={deviceId} />}
 
       {/* Loop Length Selector */}
       <div className="flex items-center gap-3">

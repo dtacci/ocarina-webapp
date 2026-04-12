@@ -1,0 +1,16 @@
+{
+  "id": "sample-808",
+  "name": "TR-808 (samples)",
+  "kind": "sample",
+  "license": "drop your own CC0 / CC-BY samples here, see README.md",
+  "voices": [
+    { "name": "kick", "file": "/kits/808/kick.wav" },
+    { "name": "snare", "file": "/kits/808/snare.wav" },
+    { "name": "clap", "file": "/kits/808/clap.wav" },
+    { "name": "c-hat", "file": "/kits/808/c-hat.wav" },
+    { "name": "o-hat", "file": "/kits/808/o-hat.wav" },
+    { "name": "low-tom", "file": "/kits/808/low-tom.wav" },
+    { "name": "mid-tom", "file": "/kits/808/mid-tom.wav" },
+    { "name": "hi-tom", "file": "/kits/808/hi-tom.wav" }
+  ]
+}

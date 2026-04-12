@@ -15,6 +15,7 @@ import {
   Waves,
   AudioLines,
   BarChart2,
+  Drum,
 } from "lucide-react";
 
 import {
@@ -55,6 +56,7 @@ const navMain: NavItem[] = [
 
 const navTools: NavItem[] = [
   { title: "Looper", url: "/looper-da", icon: AudioLines, feature: "looperDA" as const },
+  { title: "Drums", url: "/looper/drums", icon: Drum, feature: "drumPatternEditor" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
   { title: "Metrics", url: "/metrics", icon: BarChart2, feature: "deviceMetrics" as const },
