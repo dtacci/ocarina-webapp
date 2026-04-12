@@ -1,4 +1,4 @@
-import { getRecentSessions, getActivityHeatmap, getSessionStats } from "@/lib/db/queries/sessions";
+import { getRecentSessionsWithRecordings, getActivityHeatmap, getSessionStats } from "@/lib/db/queries/sessions";
 import { ActivityHeatmap } from "@/components/activity/activity-heatmap";
 import { SessionCard } from "@/components/activity/session-card";
 import { StatsCards } from "@/components/activity/stats-cards";
@@ -6,7 +6,7 @@ import { Activity } from "lucide-react";
 
 export default async function ActivityPage() {
   const [sessions, heatmapData, stats] = await Promise.all([
-    getRecentSessions(20),
+    getRecentSessionsWithRecordings(20),
     getActivityHeatmap(),
     getSessionStats(),
   ]);
@@ -37,7 +37,7 @@ export default async function ActivityPage() {
           <h2 className="text-sm font-medium uppercase text-muted-foreground tracking-wider mb-3">
             Recent Sessions
           </h2>
-          <div className="space-y-2">
+          <div className="space-y-4">
             {sessions.map((session) => (
               <SessionCard key={session.id} session={session} />
             ))}

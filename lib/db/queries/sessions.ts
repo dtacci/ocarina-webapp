@@ -1,5 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 
+export interface SessionRecording {
+  id: string;
+  blob_url: string;
+  waveform_peaks: number[] | null;
+  title: string | null;
+  duration_sec: number;
+  recording_type: "upload" | "stem" | "master";
+}
+
+export interface SessionWithRecordings extends SessionRow {
+  recordings: SessionRecording[];
+}
+
 export interface SessionRow {
   id: string;
   user_id: string;
@@ -35,6 +48,36 @@ export async function getRecentSessions(limit = 20): Promise<SessionRow[]> {
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function getRecentSessionsWithRecordings(
+  limit = 20
+): Promise<SessionWithRecordings[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(`
+      *,
+      recordings(id, blob_url, waveform_peaks, title, duration_sec, recording_type)
+    `)
+    .eq("user_id", user.id)
+    .order("started_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    ...row,
+    recordings: (row.recordings ?? []).sort((a: SessionRecording, b: SessionRecording) => {
+      // Master first, then stems/uploads
+      if (a.recording_type === "master") return -1;
+      if (b.recording_type === "master") return 1;
+      return 0;
+    }),
+  }));
 }
 
 export async function getActivityHeatmap(): Promise<DayActivity[]> {
