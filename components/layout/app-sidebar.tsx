@@ -9,7 +9,6 @@ import {
   Activity,
   MonitorSmartphone,
   Settings,
-  CircleDot,
   Mic,
   LogOut,
   ChevronUp,
@@ -54,13 +53,12 @@ const navMain: NavItem[] = [
 ];
 
 const navTools: NavItem[] = [
-  { title: "LooperDA", url: "/looper-da", icon: AudioLines, feature: "looperDA" as const },
+  { title: "Looper", url: "/looper-da", icon: AudioLines, feature: "looperDA" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
 ];
 
 const navComingSoon: NavItem[] = [
-  { title: "Looper", url: "/looper", icon: CircleDot, feature: "looperDashboard" as const },
   { title: "Karaoke", url: "/karaoke", icon: Mic, feature: "karaokeBrowser" as const },
 ];
 
