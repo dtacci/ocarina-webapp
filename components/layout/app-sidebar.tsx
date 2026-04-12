@@ -71,6 +71,7 @@ const navTools: NavItem[] = [
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
   { title: "Metrics", url: "/metrics", icon: BarChart2, feature: "deviceMetrics" as const },
+  { title: "Analytics", url: "/analytics", icon: BarChart2, feature: "analyticsDashboard" as const },
 ];
 
 const navComingSoon: NavItem[] = [
