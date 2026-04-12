@@ -536,15 +536,11 @@ function TrackHeader({
           </Button>
           {/* Settings popover for pan */}
           <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                title="Track settings (pan, etc.)"
-              >
-                <Settings2 className="size-3.5" />
-              </Button>
+            <PopoverTrigger
+              className="inline-flex items-center justify-center size-7 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Track settings (pan, etc.)"
+            >
+              <Settings2 className="size-3.5" />
             </PopoverTrigger>
             <PopoverContent className="w-56 p-3" align="start">
               <div className="space-y-4">
@@ -1354,11 +1350,12 @@ const handleAddTrack = useCallback(() => {
 
           {/* Keyboard Shortcuts */}
           <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2" title="Keyboard shortcuts">
-                <Keyboard className="size-4" />
-                <span className="hidden sm:inline text-xs">Shortcuts</span>
-              </Button>
+            <PopoverTrigger
+              className="inline-flex items-center gap-2 h-8 px-3 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Keyboard shortcuts"
+            >
+              <Keyboard className="size-4" />
+              <span className="hidden sm:inline text-xs">Shortcuts</span>
             </PopoverTrigger>
             <PopoverContent className="w-60 p-3" align="end">
               <div className="space-y-3">
