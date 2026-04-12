@@ -315,6 +315,47 @@
   }
 }
 
+/* Honor prefers-reduced-motion — silence decorative motion, keep final state */
+@media (prefers-reduced-motion: reduce) {
+  /* Kill decorative animations wholesale */
+  .auth-rise,
+  .auth-sine path,
+  .auth-pulse,
+  .auth-caret,
+  .stagger-fade > *,
+  .shimmer {
+    animation: none !important;
+  }
+
+  /* Snap the auth entrance items to their final state */
+  .auth-rise {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .auth-sine path {
+    stroke-dashoffset: 0 !important;
+  }
+  .stagger-fade > * {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Disable hover-lift translation (transitions short enough to keep, motion isn't) */
+  .hover-lift {
+    transition: none !important;
+  }
+  .hover-lift:hover {
+    transform: none !important;
+  }
+
+  /* Landing page + dashboard use inline `animation: stagger-in …` — reveal now */
+  [style*="stagger-in"] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 /* Karaoke theater mode — dims sidebar and header during playback */
 body.karaoke-theater [data-slot="sidebar"],
 body.karaoke-theater nav,
