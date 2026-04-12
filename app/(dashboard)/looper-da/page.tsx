@@ -422,7 +422,7 @@ function WaveformRow({
                   "flex-1 rounded-sm",
                   isPast && isPlaying ? track.color : "bg-muted-foreground/25"
                 )}
-                style={{ height: `${height * 70}%` }}
+                style={{ height: `${Math.round(height * 7000) / 100}%` }}
               />
             );
           })}
