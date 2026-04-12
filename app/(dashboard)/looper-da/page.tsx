@@ -498,20 +498,17 @@ function TrackHeader({
 // Single waveform row (no playhead/bar-lines — those live in the shared grid)
 function WaveformRow({
   track,
-  currentBeat,
-  totalBeats,
+  playheadPosition,
   isPlaying,
   isDragging,
   isDragOver,
 }: {
   track: Track;
-  currentBeat: number;
-  totalBeats: number;
+  playheadPosition: number;
   isPlaying: boolean;
   isDragging: boolean;
   isDragOver: boolean;
 }) {
-  const playheadPosition = (currentBeat / totalBeats) * 100;
   const bgTint = TRACK_BG_TINTS[track.color] ?? "bg-muted/30";
 
   return (
@@ -520,7 +517,7 @@ function WaveformRow({
       layoutId={`track-waveform-${track.id}`}
       transition={{ type: "spring", stiffness: 350, damping: 25 }}
       className={cn(
-        "relative h-[88px] border-b border-border",
+        "relative h-[120px] border-b border-border",
         bgTint,
         track.muted && "opacity-50",
         isDragging && "opacity-40 scale-[0.98] origin-left",
@@ -569,10 +566,14 @@ function TrackGrid({
   totalBeats,
   bars,
   isPlaying,
+  playheadPosition,
+  onArm,
   onMute,
   onSolo,
   onDelete,
+  onRename,
   onVolumeChange,
+  onPanChange,
   onReorder,
 }: {
   tracks: Track[];
@@ -580,13 +581,16 @@ function TrackGrid({
   totalBeats: number;
   bars: number;
   isPlaying: boolean;
+  playheadPosition: number;
+  onArm: (id: string) => void;
   onMute: (id: string) => void;
   onSolo: (id: string) => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
+  onPanChange: (id: string, pan: number) => void;
   onReorder: (fromId: string, toId: string) => void;
 }) {
-  const playheadPosition = (currentBeat / totalBeats) * 100;
   const dragSourceIdRef = useRef<string | null>(null);
   const [dragSourceId, setDragSourceId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -620,10 +624,13 @@ function TrackGrid({
             track={track}
             isDragging={dragSourceId === track.id}
             isDragOver={dragOverId === track.id}
+            onArm={() => onArm(track.id)}
             onMute={() => onMute(track.id)}
             onSolo={() => onSolo(track.id)}
             onDelete={() => onDelete(track.id)}
+            onRename={(name) => onRename(track.id, name)}
             onVolumeChange={(vol) => onVolumeChange(track.id, vol)}
+            onPanChange={(pan) => onPanChange(track.id, pan)}
             onDragStart={(e) => {
               dragSourceIdRef.current = track.id;
               setDragSourceId(track.id);
@@ -674,8 +681,7 @@ function TrackGrid({
             <WaveformRow
               key={track.id}
               track={track}
-              currentBeat={currentBeat}
-              totalBeats={totalBeats}
+              playheadPosition={playheadPosition}
               isPlaying={isPlaying}
               isDragging={dragSourceId === track.id}
               isDragOver={dragOverId === track.id}
@@ -878,6 +884,15 @@ export default function LooperDAPage() {
     setTracks((prev) => [...prev, newTrack]);
   }, [tracks.length]);
 
+  const handleArmTrack = useCallback((id: string) => {
+    setTracks((prev) =>
+      prev.map((t) => ({
+        ...t,
+        armed: t.id === id ? !t.armed : false, // Only one track can be armed at a time
+      }))
+    );
+  }, []);
+  
   const handleMuteTrack = useCallback((id: string) => {
     setTracks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, muted: !t.muted } : t))
@@ -980,18 +995,22 @@ export default function LooperDAPage() {
       </div>
 
       {/* Track Grid */}
-      <TrackGrid
-        tracks={tracks}
-        currentBeat={session.currentBeat}
-        totalBeats={totalBeats}
-        bars={session.bars}
-        isPlaying={session.isPlaying}
-        onMute={handleMuteTrack}
-        onSolo={handleSoloTrack}
-        onDelete={handleDeleteTrack}
-        onVolumeChange={handleVolumeChange}
-        onReorder={handleReorder}
-      />
+<TrackGrid
+  tracks={tracks}
+  currentBeat={session.currentBeat}
+  totalBeats={totalBeats}
+  bars={session.bars}
+  isPlaying={session.isPlaying}
+  playheadPosition={session.playheadPosition}
+  onArm={handleArmTrack}
+  onMute={handleMuteTrack}
+  onSolo={handleSoloTrack}
+  onDelete={handleDeleteTrack}
+  onRename={handleRenameTrack}
+  onVolumeChange={handleVolumeChange}
+  onPanChange={handlePanChange}
+  onReorder={handleReorder}
+  />
 
       {/* Actions */}
       <div className="flex items-center gap-2">
