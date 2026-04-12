@@ -213,6 +213,108 @@
   }
 }
 
+@layer utilities {
+  /* Auth shell visuals ------------------------------------------------ */
+
+  /* Rising fade — used for staggered entry on the auth pages.
+     Relies on --auth-delay being set inline for stagger. */
+  .auth-rise {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: auth-rise 700ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--auth-delay, 0ms);
+  }
+  @keyframes auth-rise {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Slowly stroke an SVG path — used by the brand-panel sine wave. */
+  .auth-sine path {
+    stroke-dasharray: 1400;
+    stroke-dashoffset: 1400;
+    animation: auth-sine-draw 3.2s cubic-bezier(0.65, 0, 0.35, 1) forwards,
+               auth-sine-breathe 7s ease-in-out 3.2s infinite;
+  }
+  @keyframes auth-sine-draw {
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes auth-sine-breathe {
+    0%, 100% { opacity: 0.9; transform: translateY(0); }
+    50%      { opacity: 0.55; transform: translateY(-4px); }
+  }
+
+  /* A distant amber "desk lamp" glow that sits behind the card. */
+  .auth-lamp {
+    background:
+      radial-gradient(
+        60% 60% at 60% 40%,
+        oklch(0.75 0.18 65 / 0.18) 0%,
+        oklch(0.75 0.18 65 / 0.05) 40%,
+        transparent 75%
+      ),
+      radial-gradient(
+        80% 80% at 20% 90%,
+        oklch(0.55 0.15 300 / 0.08) 0%,
+        transparent 60%
+      );
+  }
+
+  /* Soft console "scanline" texture — very low contrast horizontal bands. */
+  .auth-scanlines {
+    background-image: repeating-linear-gradient(
+      0deg,
+      oklch(1 0 0 / 0.015) 0px,
+      oklch(1 0 0 / 0.015) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+
+  /* Glass card for the auth form — translucent, sits over the lamp glow. */
+  .auth-glass {
+    background: linear-gradient(
+      180deg,
+      oklch(0.19 0.015 260 / 0.85) 0%,
+      oklch(0.15 0.015 260 / 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid oklch(1 0 0 / 0.08);
+    box-shadow:
+      0 40px 80px -30px oklch(0 0 0 / 0.6),
+      0 0 0 1px oklch(0.75 0.18 65 / 0.04) inset;
+  }
+
+  /* Input focus halo — a warmer, larger ring than the default shadcn one. */
+  .auth-field:focus-within {
+    border-color: oklch(0.75 0.18 65 / 0.6);
+    box-shadow:
+      0 0 0 3px oklch(0.75 0.18 65 / 0.18),
+      0 0 24px oklch(0.75 0.18 65 / 0.12);
+  }
+
+  /* Pulse for the loading state on the submit button. */
+  .auth-pulse {
+    animation: auth-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes auth-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 oklch(0.75 0.18 65 / 0.45); }
+    50%      { box-shadow: 0 0 0 10px oklch(0.75 0.18 65 / 0); }
+  }
+
+  /* Tiny blinking amber dot — used on the mono eyebrow tag. */
+  .auth-caret {
+    animation: auth-caret 1.6s ease-in-out infinite;
+  }
+  @keyframes auth-caret {
+    0%, 55% { opacity: 1; }
+    60%, 100% { opacity: 0.15; }
+  }
+}
+
 /* Karaoke theater mode — dims sidebar and header during playback */
 body.karaoke-theater [data-slot="sidebar"],
 body.karaoke-theater nav,
