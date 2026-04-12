@@ -1,7 +1,7 @@
-import { type NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request) {
   // Device API key auth for /api/v1/* routes
   if (request.nextUrl.pathname.startsWith("/api/v1/")) {
     const apiKey = request.headers.get("x-api-key");
