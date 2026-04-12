@@ -878,6 +878,7 @@ export default function LooperDAPage() {
   const beatAccumulatorRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastClickedBeatRef = useRef<number>(-1);
+  const hasEverPlayedRef = useRef<boolean>(false);
 
   // Play metronome click sound
   const playClick = useCallback((isDownbeat: boolean) => {
@@ -1035,9 +1036,11 @@ export default function LooperDAPage() {
   // Handlers
   const handlePlay = useCallback(() => {
     setSession((prev) => {
-      if (!prev.isPlaying) {
+      if (!prev.isPlaying && !hasEverPlayedRef.current) {
+        // Only reset on first play, not on resume from pause
         lastTimeRef.current = 0;
         beatAccumulatorRef.current = 0;
+        hasEverPlayedRef.current = true;
       }
       return { ...prev, isPlaying: !prev.isPlaying };
     });
@@ -1058,6 +1061,7 @@ export default function LooperDAPage() {
     );
     lastTimeRef.current = 0;
     beatAccumulatorRef.current = 0;
+    hasEverPlayedRef.current = false; // Reset for next play session
   }, []);
 
   const handleRecord = useCallback(() => {
