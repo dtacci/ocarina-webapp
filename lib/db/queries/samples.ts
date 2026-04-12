@@ -15,6 +15,12 @@ export interface SampleFilters {
   search?: string;
   page?: number;
   perPage?: number;
+  /** Restrict to samples favorited by this user id (ignored if undefined) */
+  favoritedBy?: string;
+  /** Restrict to samples rated >= this value by `ratedBy` */
+  minRating?: number;
+  /** User whose ratings are used for `minRating` (required with minRating) */
+  ratedBy?: string;
 }
 
 export interface SampleRow {
@@ -79,6 +85,40 @@ export async function getSamples(filters: SampleFilters): Promise<{
     }
   }
 
+  // If filtering by favorite or user-rating, resolve to a sample-id set
+  let userDataIds: string[] | null = null;
+  const wantsFavorite = Boolean(filters.favoritedBy);
+  const wantsRating =
+    filters.ratedBy !== undefined &&
+    filters.minRating !== undefined &&
+    filters.minRating > 0;
+  if (wantsFavorite || wantsRating) {
+    const userId = filters.favoritedBy ?? filters.ratedBy;
+    let udQuery = supabase
+      .from("sample_user_data")
+      .select("sample_id, is_favorite, user_rating")
+      .eq("user_id", userId!);
+    if (wantsFavorite) udQuery = udQuery.eq("is_favorite", true);
+    if (wantsRating) udQuery = udQuery.gte("user_rating", filters.minRating!);
+    const { data: udRows } = await udQuery;
+    userDataIds = (udRows ?? []).map((r) => r.sample_id);
+    if (userDataIds.length === 0) {
+      return { samples: [], total: 0, page, totalPages: 0 };
+    }
+  }
+
+  // Intersect vibe and user-data ID sets when both are present
+  let combinedIds: string[] | null = null;
+  if (vibeFilterIds && userDataIds) {
+    const udSet = new Set(userDataIds);
+    combinedIds = vibeFilterIds.filter((id) => udSet.has(id));
+    if (combinedIds.length === 0) {
+      return { samples: [], total: 0, page, totalPages: 0 };
+    }
+  } else {
+    combinedIds = vibeFilterIds ?? userDataIds;
+  }
+
   // Build the main query
   let query = supabase
     .from("samples")
@@ -96,7 +136,7 @@ export async function getSamples(filters: SampleFilters): Promise<{
   if (filters.sustainMin) query = query.gte("sustain", filters.sustainMin);
   if (filters.sustainMax) query = query.lte("sustain", filters.sustainMax);
   if (filters.search) query = query.ilike("id", `%${filters.search}%`);
-  if (vibeFilterIds) query = query.in("id", vibeFilterIds);
+  if (combinedIds) query = query.in("id", combinedIds);
 
   query = query
     .order("family", { ascending: true })
@@ -111,7 +151,7 @@ export async function getSamples(filters: SampleFilters): Promise<{
 
   // Fetch vibes for the returned samples
   const sampleIds = sampleRows.map((s) => s.id);
-  let vibesMap: Record<string, string[]> = {};
+  const vibesMap: Record<string, string[]> = {};
 
   if (sampleIds.length > 0) {
     const { data: vibesData } = await supabase

@@ -5,7 +5,8 @@ import { useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { X } from "lucide-react";
+import { Heart, Star, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const FAMILIES = [
   "strings",
@@ -30,14 +31,22 @@ const TOP_VIBES = [
 
 export function FilterSidebar({
   familyCounts,
+  signedIn = false,
 }: {
   familyCounts: Record<string, number>;
+  signedIn?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const activeFamily = searchParams.get("family");
   const activeVibes = searchParams.get("vibes")?.split(",").filter(Boolean) || [];
+  const favOnly = searchParams.get("fav") === "1";
+  const minRatingRaw = searchParams.get("minRating");
+  const minRating =
+    minRatingRaw && /^\d+$/.test(minRatingRaw)
+      ? Math.max(0, Math.min(5, parseInt(minRatingRaw, 10)))
+      : 0;
 
   const setParam = useCallback(
     (key: string, value: string | null) => {
@@ -71,7 +80,8 @@ export function FilterSidebar({
     router.push("/library");
   }, [router]);
 
-  const hasFilters = activeFamily || activeVibes.length > 0;
+  const hasFilters =
+    activeFamily || activeVibes.length > 0 || favOnly || minRating > 0;
 
   return (
     <div className="w-56 shrink-0 space-y-4">
@@ -81,6 +91,70 @@ export function FilterSidebar({
           Clear filters
         </Button>
       )}
+
+      {/* My library (user-specific filters) */}
+      {signedIn && (
+        <div>
+          <h3 className="mb-2 text-xs font-medium uppercase text-muted-foreground tracking-wider">
+            My Library
+          </h3>
+          <button
+            onClick={() => setParam("fav", favOnly ? null : "1")}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors",
+              favOnly ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            )}
+            aria-pressed={favOnly}
+          >
+            <Heart
+              className={cn(
+                "size-3.5",
+                favOnly ? "fill-primary-foreground" : ""
+              )}
+            />
+            Favorites only
+          </button>
+          <div className="mt-2 px-2">
+            <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Min rating</span>
+              {minRating > 0 && (
+                <button
+                  onClick={() => setParam("minRating", null)}
+                  className="text-foreground/70 hover:text-foreground"
+                >
+                  clear
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3, 4, 5].map((n) => {
+                const filled = n <= minRating;
+                return (
+                  <button
+                    key={n}
+                    onClick={() =>
+                      setParam("minRating", minRating === n ? null : String(n))
+                    }
+                    aria-label={`${n}+ stars`}
+                    className="rounded p-0.5 transition-colors hover:bg-muted/60"
+                  >
+                    <Star
+                      className={cn(
+                        "size-3.5 transition-colors",
+                        filled
+                          ? "fill-amber-400 text-amber-400"
+                          : "text-muted-foreground"
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {signedIn && <Separator />}
 
       {/* Family filter */}
       <div>

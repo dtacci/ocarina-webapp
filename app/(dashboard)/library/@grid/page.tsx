@@ -8,7 +8,10 @@ interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-function parseFilters(raw: Record<string, string | string[] | undefined>): SampleFilters {
+function parseFilters(
+  raw: Record<string, string | string[] | undefined>,
+  userId: string | undefined
+): SampleFilters {
   const str = (key: string) => {
     const v = raw[key];
     return typeof v === "string" ? v : undefined;
@@ -17,6 +20,13 @@ function parseFilters(raw: Record<string, string | string[] | undefined>): Sampl
     const v = str(key);
     return v ? parseInt(v, 10) : undefined;
   };
+
+  const favParam = str("fav");
+  const minRatingRaw = num("minRating");
+  const minRating =
+    minRatingRaw && minRatingRaw >= 1 && minRatingRaw <= 5
+      ? minRatingRaw
+      : undefined;
 
   return {
     family: str("family"),
@@ -32,20 +42,22 @@ function parseFilters(raw: Record<string, string | string[] | undefined>): Sampl
     sustainMax: num("sMax"),
     search: str("q"),
     page: num("page"),
+    favoritedBy: favParam === "1" && userId ? userId : undefined,
+    minRating,
+    ratedBy: minRating && userId ? userId : undefined,
   };
 }
 
 export default async function GridSlot({ searchParams }: Props) {
   const raw = await searchParams;
-  const filters = parseFilters(raw);
 
   const supabase = await createClient();
-  const [result, userResp] = await Promise.all([
-    getSamples(filters),
-    supabase.auth.getUser(),
-  ]);
+  const { data: userResp } = await supabase.auth.getUser();
+  const userId = userResp.user?.id;
 
-  const userId = userResp.data.user?.id;
+  const filters = parseFilters(raw, userId);
+  const result = await getSamples(filters);
+
   const userData = userId
     ? await getUserSampleData(
         userId,
