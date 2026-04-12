@@ -50,8 +50,12 @@ interface Session {
   bars: number;
   isPlaying: boolean;
   isRecording: boolean;
+  isCountingIn: boolean;
+  countInBeat: number;
   currentBeat: number;
-  loopLength: number; // in seconds
+  playheadPosition: number;
+  loopLength: number;
+  metronomeEnabled: boolean;
 }
 
 const TRACK_COLORS = [
@@ -234,6 +238,41 @@ function TimeDisplay({
           {minutes}:{seconds.toString().padStart(2, "0")}.
           {ms.toString().padStart(2, "0")}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// Count-In Overlay Component
+function CountInOverlay({
+  isCountingIn,
+  countInBeat,
+}: {
+  isCountingIn: boolean;
+  countInBeat: number;
+}) {
+  if (!isCountingIn) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4">
+        <span className="text-8xl font-bold tabular-nums text-destructive animate-pulse">
+          {countInBeat + 1}
+        </span>
+        <div className="flex gap-2">
+          {[0, 1, 2, 3].map((beat) => (
+            <div
+              key={beat}
+              className={cn(
+                "size-4 rounded-full transition-all",
+                beat <= countInBeat
+                  ? "bg-destructive scale-125"
+                  : "bg-muted-foreground/30"
+              )}
+            />
+          ))}
+        </div>
+        <span className="text-lg text-muted-foreground">Get ready...</span>
       </div>
     </div>
   );
@@ -821,13 +860,41 @@ export default function LooperDAPage() {
     bars: 4,
     isPlaying: false,
     isRecording: false,
+    isCountingIn: false,
+    countInBeat: 0,
     currentBeat: 0,
+    playheadPosition: 0,
     loopLength: 8,
+    metronomeEnabled: true,
   });
 
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const beatAccumulatorRef = useRef<number>(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastClickedBeatRef = useRef<number>(-1);
+
+  // Play metronome click sound
+  const playClick = useCallback((isDownbeat: boolean) => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+    const ctx = audioContextRef.current;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    oscillator.frequency.value = isDownbeat ? 1000 : 800;
+    oscillator.type = "sine";
+
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.1);
+  }, []);
 
   // Calculate beat duration in ms
   const beatDuration = (60 / session.bpm) * 1000;
@@ -881,6 +948,85 @@ export default function LooperDAPage() {
     };
   }, [session.isPlaying, beatDuration, totalBeats]);
 
+  // Count-in effect
+  const countInRef = useRef<number | null>(null);
+  const countInAccumulatorRef = useRef<number>(0);
+  const countInLastTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!session.isCountingIn) {
+      if (countInRef.current) {
+        cancelAnimationFrame(countInRef.current);
+      }
+      countInAccumulatorRef.current = 0;
+      countInLastTimeRef.current = 0;
+      return;
+    }
+
+    const animateCountIn = (timestamp: number) => {
+      if (countInLastTimeRef.current === 0) {
+        countInLastTimeRef.current = timestamp;
+      }
+
+      const delta = timestamp - countInLastTimeRef.current;
+      countInLastTimeRef.current = timestamp;
+      countInAccumulatorRef.current += delta;
+
+      const currentCountInBeat = Math.floor(countInAccumulatorRef.current / beatDuration);
+
+      if (currentCountInBeat >= 4) {
+        setSession((prev) => ({
+          ...prev,
+          isCountingIn: false,
+          isRecording: true,
+          countInBeat: 0,
+          currentBeat: 0,
+          playheadPosition: 0,
+        }));
+        setTracks((prev) =>
+          prev.map((t) => ({
+            ...t,
+            recording: t.armed,
+          }))
+        );
+        lastTimeRef.current = 0;
+        beatAccumulatorRef.current = 0;
+        countInAccumulatorRef.current = 0;
+        countInLastTimeRef.current = 0;
+        return;
+      }
+
+      setSession((prev) => ({
+        ...prev,
+        countInBeat: currentCountInBeat,
+      }));
+
+      countInRef.current = requestAnimationFrame(animateCountIn);
+    };
+
+    countInRef.current = requestAnimationFrame(animateCountIn);
+
+    return () => {
+      if (countInRef.current) {
+        cancelAnimationFrame(countInRef.current);
+      }
+    };
+  }, [session.isCountingIn, beatDuration]);
+
+  // Metronome click effect
+  useEffect(() => {
+    if (!session.isPlaying || !session.metronomeEnabled) {
+      lastClickedBeatRef.current = -1;
+      return;
+    }
+
+    if (session.currentBeat !== lastClickedBeatRef.current) {
+      lastClickedBeatRef.current = session.currentBeat;
+      const isDownbeat = session.currentBeat % 4 === 0;
+      playClick(isDownbeat);
+    }
+  }, [session.isPlaying, session.metronomeEnabled, session.currentBeat, playClick]);
+
   // Handlers
   const handlePlay = useCallback(() => {
     if (!session.isPlaying) {
@@ -895,7 +1041,10 @@ export default function LooperDAPage() {
       ...prev,
       isPlaying: false,
       isRecording: false,
+      isCountingIn: false,
+      countInBeat: 0,
       currentBeat: 0,
+      playheadPosition: 0,
     }));
     setTracks((prev) =>
       prev.map((t) => ({ ...t, recording: false }))
@@ -905,29 +1054,45 @@ export default function LooperDAPage() {
   }, []);
 
   const handleRecord = useCallback(() => {
-    setSession((prev) => {
-      const newRecording = !prev.isRecording;
-      return {
+    if (session.isRecording) {
+      setSession((prev) => ({
         ...prev,
-        isRecording: newRecording,
-        isPlaying: newRecording ? true : prev.isPlaying,
-      };
-    });
-
-    // Find first empty track and start recording on it
-    setTracks((prev) => {
-      const emptyTrackIndex = prev.findIndex((t) => !t.hasAudio);
-      if (emptyTrackIndex === -1) return prev;
-
-      return prev.map((t, i) => ({
-        ...t,
-        recording: i === emptyTrackIndex && !session.isRecording,
+        isRecording: false,
+        isCountingIn: false,
+        countInBeat: 0,
       }));
-    });
-  }, [session.isRecording]);
+      setTracks((prev) => prev.map((t) => ({ ...t, recording: false })));
+      return;
+    }
+
+    const armedTrack = tracks.find((t) => t.armed);
+    if (!armedTrack) {
+      const emptyTrack = tracks.find((t) => !t.hasAudio);
+      if (emptyTrack) {
+        setTracks((prev) =>
+          prev.map((t) => ({ ...t, armed: t.id === emptyTrack.id }))
+        );
+      }
+    }
+
+    setSession((prev) => ({
+      ...prev,
+      isCountingIn: true,
+      countInBeat: 0,
+      isPlaying: true,
+      currentBeat: 0,
+      playheadPosition: 0,
+    }));
+    lastTimeRef.current = 0;
+    beatAccumulatorRef.current = 0;
+  }, [session.isRecording, tracks]);
 
   const handleBpmChange = useCallback((newBpm: number) => {
     setSession((prev) => ({ ...prev, bpm: newBpm }));
+  }, []);
+
+  const handleMetronomeToggle = useCallback(() => {
+    setSession((prev) => ({ ...prev, metronomeEnabled: !prev.metronomeEnabled }));
   }, []);
 
 const handleAddTrack = useCallback(() => {
@@ -1016,8 +1181,55 @@ const handleAddTrack = useCallback(() => {
     handleStop();
   }, [handleStop]);
 
+  // Keyboard shortcuts (defined AFTER all handlers)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.code) {
+        case "Space":
+          e.preventDefault();
+          handlePlay();
+          break;
+        case "KeyR":
+          e.preventDefault();
+          handleRecord();
+          break;
+        case "KeyS":
+          e.preventDefault();
+          handleStop();
+          break;
+        case "KeyM":
+          e.preventDefault();
+          setTracks((prev) => {
+            const firstUnmuted = prev.find((t) => !t.muted);
+            if (firstUnmuted) {
+              return prev.map((t) => (t.id === firstUnmuted.id ? { ...t, muted: true } : t));
+            }
+            const firstMuted = prev.find((t) => t.muted);
+            if (firstMuted) {
+              return prev.map((t) => (t.id === firstMuted.id ? { ...t, muted: false } : t));
+            }
+            return prev;
+          });
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handlePlay, handleRecord, handleStop]);
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Count-In Overlay */}
+      <CountInOverlay
+        isCountingIn={session.isCountingIn}
+        countInBeat={session.countInBeat}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1045,6 +1257,20 @@ const handleAddTrack = useCallback(() => {
         <BeatIndicator currentBeat={session.currentBeat} bars={session.bars} />
 
         <div className="flex items-center gap-4">
+          {/* Metronome Toggle */}
+          <Button
+            variant={session.metronomeEnabled ? "secondary" : "ghost"}
+            size="sm"
+            onClick={handleMetronomeToggle}
+            className={cn(
+              "gap-2",
+              session.metronomeEnabled && "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
+            )}
+            title="Toggle metronome (click sound)"
+          >
+            <Timer className="size-4" />
+            <span className="hidden sm:inline">Click</span>
+          </Button>
           <BpmDisplay bpm={session.bpm} onBpmChange={handleBpmChange} />
           <TimeDisplay
             currentBeat={session.currentBeat}
