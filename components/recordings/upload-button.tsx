@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { UploadModal } from "./upload-modal";
 
 export function UploadButton() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   function handleUploaded() {
-    // Trigger a full page refresh so the new recording appears in the grid
-    window.location.reload();
+    router.refresh();
   }
 
   return (

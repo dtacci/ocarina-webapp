@@ -13,6 +13,9 @@ interface UseWaveSurferOptions {
   barWidth?: number;
   barGap?: number;
   barRadius?: number;
+  /** When true, defers WaveSurfer creation until the container scrolls into view.
+   *  Use in list/grid contexts to avoid initializing dozens of instances at once. */
+  lazy?: boolean;
 }
 
 export function useWaveSurfer({
@@ -25,6 +28,7 @@ export function useWaveSurfer({
   barWidth = 3,
   barGap = 1,
   barRadius = 2,
+  lazy = false,
 }: UseWaveSurferOptions) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
@@ -33,20 +37,28 @@ export function useWaveSurfer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  // Stable options ref so IntersectionObserver callback doesn't capture stale closures
+  const optsRef = useRef({
+    url, height, waveColor, progressColor, cursorColor, cursorWidth, barWidth, barGap, barRadius,
+  });
   useEffect(() => {
-    if (!containerRef.current) return;
+    optsRef.current = { url, height, waveColor, progressColor, cursorColor, cursorWidth, barWidth, barGap, barRadius };
+  });
 
+  function createWaveSurfer() {
+    if (!containerRef.current || wsRef.current) return;
+    const opts = optsRef.current;
     const ws = WaveSurfer.create({
       container: containerRef.current,
-      height,
-      waveColor,
-      progressColor,
-      cursorColor,
-      cursorWidth,
-      barWidth,
-      barGap,
-      barRadius,
-      url,
+      height: opts.height,
+      waveColor: opts.waveColor,
+      progressColor: opts.progressColor,
+      cursorColor: opts.cursorColor,
+      cursorWidth: opts.cursorWidth,
+      barWidth: opts.barWidth,
+      barGap: opts.barGap,
+      barRadius: opts.barRadius,
+      url: opts.url,
       normalize: true,
       backend: "WebAudio",
     });
@@ -64,15 +76,41 @@ export function useWaveSurfer({
     });
 
     wsRef.current = ws;
+  }
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    let observer: IntersectionObserver | null = null;
+
+    if (lazy) {
+      // Create only when the container is visible
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            createWaveSurfer();
+            // Once created, no need to keep observing
+            observer?.disconnect();
+          }
+        },
+        { threshold: 0.1 }
+      );
+      observer.observe(containerRef.current);
+    } else {
+      createWaveSurfer();
+    }
 
     return () => {
-      ws.destroy();
+      observer?.disconnect();
+      wsRef.current?.destroy();
       wsRef.current = null;
       setIsReady(false);
       setIsPlaying(false);
       setCurrentTime(0);
     };
-  }, [url, height, waveColor, progressColor, cursorColor, cursorWidth, barWidth, barGap, barRadius]);
+    // Re-initialize when url changes (lazy or not)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, lazy]);
 
   const togglePlay = useCallback(() => {
     wsRef.current?.playPause();

@@ -1,10 +1,23 @@
-import { getRecordings } from "@/lib/db/queries/recordings";
-import { RecordingCard } from "@/components/recordings/recording-card";
-import { UploadButton } from "@/components/recordings/upload-button";
+import { Suspense } from "react";
 import { Disc3 } from "lucide-react";
+import { getRecordings } from "@/lib/db/queries/recordings";
+import { UploadButton } from "@/components/recordings/upload-button";
+import { RecordingsClient } from "./page-client";
 
-export default async function RecordingsPage() {
-  const recordings = await getRecordings();
+const PAGE_SIZE = 12;
+
+export default async function RecordingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
+  const { q = "", page: pageStr = "1" } = await searchParams;
+  const page = Math.max(1, parseInt(pageStr, 10) || 1);
+
+  // Fetch one extra to determine if there's a next page
+  const recordings = await getRecordings({ limit: PAGE_SIZE + 1, page, query: q });
+  const hasMore = recordings.length > PAGE_SIZE;
+  const pageRecordings = recordings.slice(0, PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -18,13 +31,7 @@ export default async function RecordingsPage() {
         <UploadButton />
       </div>
 
-      {recordings.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {recordings.map((rec) => (
-            <RecordingCard key={rec.id} recording={rec} />
-          ))}
-        </div>
-      ) : (
+      {recordings.length === 0 && !q ? (
         <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
           <div className="text-center">
             <Disc3 className="mx-auto mb-3 size-10 text-muted-foreground/50" />
@@ -34,6 +41,15 @@ export default async function RecordingsPage() {
             </p>
           </div>
         </div>
+      ) : (
+        <Suspense fallback={null}>
+          <RecordingsClient
+            initialRecordings={pageRecordings}
+            currentPage={page}
+            hasMore={hasMore}
+            query={q}
+          />
+        </Suspense>
       )}
     </div>
   );
