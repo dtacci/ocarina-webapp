@@ -139,6 +139,28 @@ export async function getSamples(filters: SampleFilters): Promise<{
   };
 }
 
+export async function getSample(id: string): Promise<SampleWithVibes | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("samples")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) return null;
+
+  const { data: vibesData } = await supabase
+    .from("sample_vibes")
+    .select("vibe")
+    .eq("sample_id", id);
+
+  return {
+    ...data as SampleRow,
+    vibes: vibesData?.map((v) => v.vibe) ?? [],
+  };
+}
+
 export async function getFamilyCounts(): Promise<Record<string, number>> {
   const supabase = await createClient();
   const { data } = await supabase

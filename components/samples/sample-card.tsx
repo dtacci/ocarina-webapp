@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import { Badge } from "@/components/ui/badge";
 
@@ -34,7 +35,7 @@ export function SampleCard({ sample }: { sample: SampleWithVibes }) {
   const familyClass = familyColors[sample.family || ""] || familyColors.other;
 
   return (
-    <div className="group rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50">
+    <Link href={`/library/${encodeURIComponent(sample.id)}`} className="group block rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50">
       {/* Waveform placeholder */}
       <div className="mb-2 h-12 rounded bg-muted/50 flex items-center justify-center">
         <div className="flex items-end gap-px h-8">
@@ -98,6 +99,6 @@ export function SampleCard({ sample }: { sample: SampleWithVibes }) {
           )}
         </div>
       )}
-    </div>
+    </Link>
   );
 }

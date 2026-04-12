@@ -1,18 +1,26 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
+import { cookies } from "next/headers";
 
 /**
  * AI provider abstraction — defaults to Anthropic, switchable to OpenAI.
- * Set AI_PROVIDER=openai in .env.local to switch.
+ * User can toggle via cookie (set by /api/ai/provider), or fallback to env var.
  */
 export type AIProvider = "anthropic" | "openai";
 
-export function getProvider(): AIProvider {
+export async function getProvider(): Promise<AIProvider> {
+  try {
+    const cookieStore = await cookies();
+    const cookieVal = cookieStore.get("ai_provider")?.value;
+    if (cookieVal === "anthropic" || cookieVal === "openai") return cookieVal;
+  } catch {
+    // Called outside request context
+  }
   return (process.env.AI_PROVIDER as AIProvider) || "anthropic";
 }
 
-export function getModel(task: "search" | "kit-builder" | "config-assist") {
-  const provider = getProvider();
+export async function getModel(task: "search" | "kit-builder" | "config-assist") {
+  const provider = await getProvider();
 
   // Model selection per task — tuned for cost/quality balance
   const models = {

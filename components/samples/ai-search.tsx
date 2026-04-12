@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Loader2 } from "lucide-react";
+import { ProviderToggle } from "@/components/ai/provider-toggle";
 import type { SampleSearchResult } from "@/lib/ai/schemas";
 
 export function AISearch() {
@@ -64,6 +65,13 @@ export function AISearch() {
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium flex items-center gap-1.5">
+          <Sparkles className="size-3.5" />
+          AI Search
+        </span>
+        <ProviderToggle />
+      </div>
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
           <Sparkles className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />

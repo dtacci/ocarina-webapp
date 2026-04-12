@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const result = streamObject({
-    model: getModel("kit-builder"),
+    model: await getModel("kit-builder"),
     schema: kitBuilderSchema,
     system: SYSTEM,
     prompt: `Build a kit for: "${description}"`,

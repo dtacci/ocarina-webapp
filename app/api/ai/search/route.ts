@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   }
 
   const result = await generateObject({
-    model: getModel("search"),
+    model: await getModel("search"),
     schema: sampleSearchSchema,
     system: SAMPLE_SEARCH_SYSTEM,
     prompt: query,
