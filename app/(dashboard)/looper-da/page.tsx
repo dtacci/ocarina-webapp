@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
   Pause,
@@ -313,14 +314,17 @@ function TrackHeader({
   onDrop: () => void;
 }) {
   return (
-    <div
+    <motion.div
+      layout
+      layoutId={`track-header-${track.id}`}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDrop={onDrop}
       className={cn(
-        "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 transition-all select-none",
+        "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 select-none",
         track.recording && "border-l-2 border-l-destructive",
         track.muted && "opacity-50",
         isDragging && "opacity-40 scale-[0.98]",
@@ -377,7 +381,7 @@ function TrackHeader({
           {track.volume}%
         </span>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -401,9 +405,12 @@ function WaveformRow({
   const bgTint = TRACK_BG_TINTS[track.color] ?? "bg-muted/30";
 
   return (
-    <div
+    <motion.div
+      layout
+      layoutId={`track-waveform-${track.id}`}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
       className={cn(
-        "relative h-[88px] border-b border-border transition-all duration-150",
+        "relative h-[88px] border-b border-border",
         bgTint,
         track.muted && "opacity-50",
         isDragging && "opacity-40 scale-[0.98] origin-left",
@@ -441,7 +448,7 @@ function WaveformRow({
           </span>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
