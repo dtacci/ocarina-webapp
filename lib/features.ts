@@ -19,7 +19,7 @@ export const features = {
   realtimeBridge: false,
   configManager: true,
   recordingLibrary: true,
-  sampleEditor: false,
+  sampleEditor: true,
   mp3Transcoding: false,
   piSyncAgent: false,
   analyticsDashboard: true,
