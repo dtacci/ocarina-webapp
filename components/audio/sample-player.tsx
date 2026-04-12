@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Play, Pause, Volume2, VolumeX } from "lucide-react";
+import { useState } from "react";
+import { Play, Pause, Volume2, VolumeX, Loader2 } from "lucide-react";
+import { useWaveSurfer } from "./use-wavesurfer";
 
 function formatTime(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -15,93 +16,64 @@ interface Props {
 }
 
 export function SamplePlayer({ blobUrl, duration }: Props) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
   const [muted, setMuted] = useState(false);
 
-  function togglePlay() {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) {
-      audio.pause();
-    } else {
-      audio.play();
-    }
-    setPlaying(!playing);
+  const {
+    containerRef,
+    isReady,
+    isPlaying,
+    currentTime,
+    duration: wsDuration,
+    togglePlay,
+    setMuted: wsSetMuted,
+  } = useWaveSurfer({
+    url: blobUrl,
+    height: 64,
+    waveColor: "oklch(0.55 0.02 65)",
+    progressColor: "oklch(0.75 0.15 65)",
+    cursorColor: "oklch(0.75 0.15 65 / 0.5)",
+    barWidth: 3,
+    barGap: 1,
+    barRadius: 2,
+  });
+
+  function handleMuteToggle() {
+    const next = !muted;
+    setMuted(next);
+    wsSetMuted(next);
   }
 
-  function handleTimeUpdate() {
-    const audio = audioRef.current;
-    if (!audio || !audio.duration) return;
-    setProgress((audio.currentTime / audio.duration) * 100);
-    setCurrentTime(audio.currentTime);
-  }
-
-  function handleSeek(e: React.MouseEvent<HTMLDivElement>) {
-    const audio = audioRef.current;
-    if (!audio || !audio.duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
-    audio.currentTime = pct * audio.duration;
-  }
-
-  function handleEnded() {
-    setPlaying(false);
-    setProgress(0);
-    setCurrentTime(0);
-  }
+  const displayDuration = wsDuration > 0 ? wsDuration : duration;
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
-      <audio
-        ref={audioRef}
-        src={blobUrl}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleEnded}
-        muted={muted}
-        preload="metadata"
-      />
-
-      {/* Waveform / progress */}
-      <div
-        className="relative h-16 rounded-lg bg-muted cursor-pointer overflow-hidden"
-        onClick={handleSeek}
-      >
-        <div className="absolute inset-0 flex items-end gap-px px-1 py-1">
-          {Array.from({ length: 80 }, (_, i) => {
-            const height = 20 + Math.sin(i * 0.5) * 25 + Math.cos(i * 1.1) * 20 + Math.sin(i * 2.3) * 10;
-            const filled = (i / 80) * 100 <= progress;
-            return (
-              <div
-                key={i}
-                className={`flex-1 rounded-t-sm transition-colors ${
-                  filled ? "bg-primary" : "bg-muted-foreground/20"
-                }`}
-                style={{ height: `${Math.max(8, Math.min(100, height))}%` }}
-              />
-            );
-          })}
-        </div>
+      {/* Waveform */}
+      <div className="relative h-16 rounded-lg bg-muted overflow-hidden">
+        <div ref={containerRef} className="absolute inset-0" />
+        {!isReady && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="size-5 text-muted-foreground animate-spin" />
+          </div>
+        )}
       </div>
 
       {/* Controls */}
       <div className="flex items-center gap-3">
         <button
           onClick={togglePlay}
-          className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          disabled={!isReady}
+          className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {playing ? <Pause className="size-4" /> : <Play className="size-4 ml-0.5" />}
+          {isPlaying ? <Pause className="size-4" /> : <Play className="size-4 ml-0.5" />}
         </button>
 
         <div className="flex-1 flex items-center justify-between text-sm tabular-nums text-muted-foreground">
           <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
+          <span>{formatTime(displayDuration)}</span>
         </div>
 
         <button
-          onClick={() => setMuted(!muted)}
+          onClick={handleMuteToggle}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
