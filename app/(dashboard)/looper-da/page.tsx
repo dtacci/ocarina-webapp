@@ -51,6 +51,18 @@ const TRACK_COLORS = [
   "bg-pink-500",
 ];
 
+// Subtle background tints for each track lane — matches TRACK_COLORS order
+const TRACK_BG_TINTS: Record<string, string> = {
+  "bg-emerald-500": "bg-emerald-950/40",
+  "bg-amber-500": "bg-amber-950/40",
+  "bg-rose-500": "bg-rose-950/40",
+  "bg-sky-500": "bg-sky-950/40",
+  "bg-violet-500": "bg-violet-950/40",
+  "bg-orange-500": "bg-orange-950/40",
+  "bg-teal-500": "bg-teal-950/40",
+  "bg-pink-500": "bg-pink-950/40",
+};
+
 // Seeded pseudo-random number generator (mulberry32) — deterministic on both
 // server and client so React hydration values always match.
 function seededRandom(seed: number) {
@@ -335,9 +347,10 @@ function WaveformRow({
   isPlaying: boolean;
 }) {
   const playheadPosition = (currentBeat / totalBeats) * 100;
+  const bgTint = TRACK_BG_TINTS[track.color] ?? "bg-muted/30";
 
   return (
-    <div className={cn("relative h-16 border-b border-border bg-muted/30", track.muted && "opacity-50")}>
+    <div className={cn("relative h-16 border-b border-border", bgTint, track.muted && "opacity-50")}>
       {track.hasAudio ? (
         <div className="absolute inset-0 flex items-center gap-px px-2">
           {track.waveformData.map((height, i) => {
