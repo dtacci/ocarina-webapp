@@ -387,17 +387,29 @@ function WaveformRow({
   currentBeat,
   totalBeats,
   isPlaying,
+  isDragging,
+  isDragOver,
 }: {
   track: Track;
   currentBeat: number;
   totalBeats: number;
   isPlaying: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
 }) {
   const playheadPosition = (currentBeat / totalBeats) * 100;
   const bgTint = TRACK_BG_TINTS[track.color] ?? "bg-muted/30";
 
   return (
-    <div className={cn("relative h-[88px] border-b border-border", bgTint, track.muted && "opacity-50")}>
+    <div
+      className={cn(
+        "relative h-[88px] border-b border-border transition-all duration-150",
+        bgTint,
+        track.muted && "opacity-50",
+        isDragging && "opacity-40 scale-[0.98] origin-left",
+        isDragOver && "border-t-2 border-t-primary"
+      )}
+    >
       {track.hasAudio ? (
         <div className="absolute inset-0 flex items-center gap-px px-2">
           {track.waveformData.map((height, i) => {
@@ -544,6 +556,8 @@ function TrackGrid({
               currentBeat={currentBeat}
               totalBeats={totalBeats}
               isPlaying={isPlaying}
+              isDragging={dragSourceId.current === track.id}
+              isDragOver={dragOverId === track.id}
             />
           ))}
 
