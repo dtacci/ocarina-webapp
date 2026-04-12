@@ -318,68 +318,71 @@ function TrackHeader({
       layout
       layoutId={`track-header-${track.id}`}
       transition={{ type: "spring", stiffness: 350, damping: 25 }}
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
-      onDrop={onDrop}
-      className={cn(
-        "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 select-none",
-        track.recording && "border-l-2 border-l-destructive",
-        track.muted && "opacity-50",
-        isDragging && "opacity-40 scale-[0.98]",
-        isDragOver && "border-t-2 border-t-primary"
-      )}
     >
-      <div className="flex items-center gap-2">
-        <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
-        <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
-        <span className="text-sm font-medium truncate">{track.name}</span>
-      </div>
+      <div
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDrop={onDrop}
+        className={cn(
+          "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 select-none",
+          track.recording && "border-l-2 border-l-destructive",
+          track.muted && "opacity-50",
+          isDragging && "opacity-40 scale-[0.98]",
+          isDragOver && "border-t-2 border-t-primary"
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
+          <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
+          <span className="text-sm font-medium truncate">{track.name}</span>
+        </div>
 
-      <div className="flex items-center gap-1">
-        <Button
-          variant={track.muted ? "destructive" : "ghost"}
-          size="icon"
-          className="size-7"
-          onClick={onMute}
-        >
-          {track.muted ? (
-            <VolumeX className="size-3.5" />
-          ) : (
-            <Volume2 className="size-3.5" />
-          )}
-        </Button>
-        <Button
-          variant={track.solo ? "secondary" : "ghost"}
-          size="icon"
-          className={cn("size-7", track.solo && "bg-amber-500/20 text-amber-500")}
-          onClick={onSolo}
-        >
-          <Headphones className="size-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-          onClick={onDelete}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant={track.muted ? "destructive" : "ghost"}
+            size="icon"
+            className="size-7"
+            onClick={onMute}
+          >
+            {track.muted ? (
+              <VolumeX className="size-3.5" />
+            ) : (
+              <Volume2 className="size-3.5" />
+            )}
+          </Button>
+          <Button
+            variant={track.solo ? "secondary" : "ghost"}
+            size="icon"
+            className={cn("size-7", track.solo && "bg-amber-500/20 text-amber-500")}
+            onClick={onSolo}
+          >
+            <Headphones className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={track.volume}
-          onChange={(e) => onVolumeChange(Number(e.target.value))}
-          className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
-        />
-        <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
-          {track.volume}%
-        </span>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={track.volume}
+            onChange={(e) => onVolumeChange(Number(e.target.value))}
+            className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+          />
+          <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
+            {track.volume}%
+          </span>
+        </div>
       </div>
     </motion.div>
   );
