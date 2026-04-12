@@ -1,7 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Music,
   Layers,
@@ -16,6 +17,7 @@ import {
   AudioLines,
   BarChart2,
   Drum,
+  Heart,
 } from "lucide-react";
 
 import {
@@ -45,17 +47,26 @@ type NavItem = {
   url: string;
   icon: React.ComponentType<{ className?: string }>;
   feature: FeatureFlag;
+  /** If set, item is active only when this query param matches on the library path */
+  matchQuery?: { key: string; value: string };
 };
 
 const navMain: NavItem[] = [
   { title: "Library", url: "/library", icon: Music, feature: "sampleBrowser" as const },
+  {
+    title: "Favorites",
+    url: "/library?fav=1",
+    icon: Heart,
+    feature: "sampleBrowser" as const,
+    matchQuery: { key: "fav", value: "1" },
+  },
   { title: "Kits", url: "/kits", icon: Layers, feature: "kitBrowser" as const },
   { title: "Recordings", url: "/recordings", icon: Disc3, feature: "syncApi" as const },
   { title: "Activity", url: "/activity", icon: Activity, feature: "activityTimeline" as const },
 ];
 
 const navTools: NavItem[] = [
-  { title: "Looper", url: "/looper-da", icon: AudioLines, feature: "looperDA" as const },
+  { title: "Looper", url: "/looper", icon: AudioLines, feature: "looperDA" as const },
   { title: "Drums", url: "/looper/drums", icon: Drum, feature: "drumPatternEditor" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
@@ -66,14 +77,40 @@ const navComingSoon: NavItem[] = [
   { title: "Karaoke", url: "/karaoke", icon: Mic, feature: "karaokeBrowser" as const },
 ];
 
+function isItemActive(
+  item: NavItem,
+  pathname: string,
+  searchParams: URLSearchParams,
+  siblings: NavItem[]
+): boolean {
+  const basePath = item.url.split("?")[0];
+  if (!pathname.startsWith(basePath)) return false;
+
+  if (item.matchQuery) {
+    return searchParams.get(item.matchQuery.key) === item.matchQuery.value;
+  }
+  // A base-path item (no matchQuery) is active only when no sibling's
+  // matchQuery currently matches — so Favorites "wins" over Library when ?fav=1.
+  const overriddenBySibling = siblings.some(
+    (s) =>
+      s !== item &&
+      s.matchQuery &&
+      s.url.split("?")[0] === basePath &&
+      searchParams.get(s.matchQuery.key) === s.matchQuery.value
+  );
+  return !overriddenBySibling;
+}
+
 function NavSection({
   items,
   label,
   pathname,
+  searchParams,
 }: {
   items: NavItem[];
   label: string;
   pathname: string;
+  searchParams: URLSearchParams;
 }) {
   return (
     <SidebarGroup>
@@ -87,7 +124,7 @@ function NavSection({
                 {enabled ? (
                   <SidebarMenuButton
                     render={<Link href={item.url} />}
-                    isActive={pathname.startsWith(item.url)}
+                    isActive={isItemActive(item, pathname, searchParams, items)}
                   >
                     <item.icon className="size-4" />
                     <span>{item.title}</span>
@@ -109,6 +146,28 @@ function NavSection({
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
+  );
+}
+
+function DynamicNavContent({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  return (
+    <>
+      <NavSection items={navMain} label="Browse" pathname={pathname} searchParams={searchParams} />
+      <NavSection items={navTools} label="Tools" pathname={pathname} searchParams={searchParams} />
+      <NavSection items={navComingSoon} label="Coming Soon" pathname={pathname} searchParams={searchParams} />
+    </>
+  );
+}
+
+function FallbackNavContent({ pathname }: { pathname: string }) {
+  const empty = new URLSearchParams();
+  return (
+    <>
+      <NavSection items={navMain} label="Browse" pathname={pathname} searchParams={empty} />
+      <NavSection items={navTools} label="Tools" pathname={pathname} searchParams={empty} />
+      <NavSection items={navComingSoon} label="Coming Soon" pathname={pathname} searchParams={empty} />
+    </>
   );
 }
 
@@ -134,9 +193,9 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavSection items={navMain} label="Browse" pathname={pathname} />
-        <NavSection items={navTools} label="Tools" pathname={pathname} />
-        <NavSection items={navComingSoon} label="Coming Soon" pathname={pathname} />
+        <Suspense fallback={<FallbackNavContent pathname={pathname} />}>
+          <DynamicNavContent pathname={pathname} />
+        </Suspense>
       </SidebarContent>
 
       <SidebarFooter>
