@@ -23,6 +23,7 @@ export const features = {
   mp3Transcoding: false,
   piSyncAgent: false,
   analyticsDashboard: false,
+  deviceMetrics: true,
   karaokeBrowser: true,
 
   /** v0.3 features — disabled */

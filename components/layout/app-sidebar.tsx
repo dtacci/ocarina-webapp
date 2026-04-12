@@ -14,6 +14,7 @@ import {
   ChevronUp,
   Waves,
   AudioLines,
+  BarChart2,
 } from "lucide-react";
 
 import {
@@ -56,6 +57,7 @@ const navTools: NavItem[] = [
   { title: "Looper", url: "/looper-da", icon: AudioLines, feature: "looperDA" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
+  { title: "Metrics", url: "/metrics", icon: BarChart2, feature: "deviceMetrics" as const },
 ];
 
 const navComingSoon: NavItem[] = [
