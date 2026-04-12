@@ -17,9 +17,15 @@ import {
   Keyboard,
   Radio,
   Timer,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 // Types
@@ -361,13 +367,10 @@ function TrackHeader({
       transition={{ type: "spring", stiffness: 350, damping: 25 }}
     >
       <div
-        draggable={!isEditing}
-        onDragStart={onDragStart}
         onDragOver={onDragOver}
-        onDragEnd={onDragEnd}
         onDrop={onDrop}
         className={cn(
-          "group flex h-[120px] w-52 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2 select-none",
+          "group flex h-[88px] w-48 shrink-0 flex-col justify-center gap-1.5 border-b border-border bg-card px-3 py-2",
           track.armed && "border-l-2 border-l-destructive/70",
           track.recording && "border-l-2 border-l-destructive",
           track.muted && "opacity-50",
@@ -375,8 +378,14 @@ function TrackHeader({
           isDragOver && "border-t-2 border-t-primary"
         )}
       >
-        <div className="flex items-center gap-2">
-          <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
+        {/* Top row - ONLY this row is draggable */}
+        <div
+          draggable={!isEditing}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          className="flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+        >
+          <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50" />
           <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
           {isEditing ? (
             <input
@@ -399,6 +408,7 @@ function TrackHeader({
           )}
         </div>
 
+        {/* Controls row */}
         <div className="flex items-center gap-1">
           <Button
             variant={track.armed ? "destructive" : "ghost"}
@@ -429,6 +439,44 @@ function TrackHeader({
           >
             <Headphones className="size-3.5" />
           </Button>
+          {/* Settings popover for pan */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                title="Track settings"
+              >
+                <Settings2 className="size-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-3" align="start">
+              <div className="space-y-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Track Settings
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Pan</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs w-4">L</span>
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      value={track.pan}
+                      onChange={(e) => onPanChange(Number(e.target.value))}
+                      className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500"
+                    />
+                    <span className="text-xs w-4">R</span>
+                  </div>
+                  <div className="text-center text-xs text-muted-foreground tabular-nums">
+                    {track.pan > 0 ? `Right ${track.pan}` : track.pan < 0 ? `Left ${Math.abs(track.pan)}` : "Center"}
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
           <Button
             variant="ghost"
             size="icon"
@@ -439,55 +487,32 @@ function TrackHeader({
           </Button>
         </div>
 
-        {/* Volume and Pan row */}
+        {/* Volume row */}
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex flex-col gap-1">
-            {/* Volume slider */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-muted-foreground w-5">Vol</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={track.volume}
-                onChange={(e) => onVolumeChange(Number(e.target.value))}
-                className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
-              />
-              <span className="text-[10px] text-muted-foreground w-6 text-right tabular-nums">
-                {track.volume}
-              </span>
-            </div>
-            {/* Pan slider */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-muted-foreground w-5">Pan</span>
-              <input
-                type="range"
-                min="-100"
-                max="100"
-                value={track.pan}
-                onChange={(e) => onPanChange(Number(e.target.value))}
-                className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500"
-              />
-              <span className="text-[10px] text-muted-foreground w-6 text-right tabular-nums">
-                {track.pan > 0 ? `R${track.pan}` : track.pan < 0 ? `L${Math.abs(track.pan)}` : "C"}
-              </span>
-            </div>
-          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={track.volume}
+            onChange={(e) => onVolumeChange(Number(e.target.value))}
+            className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+          />
+          <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
+            {track.volume}%
+          </span>
           {/* VU Meter */}
-          <div className="flex flex-col items-center gap-0.5">
-            <div className="w-2.5 h-12 bg-muted rounded-sm overflow-hidden flex flex-col-reverse">
-              <div
-                className={cn(
-                  "w-full transition-all duration-75",
-                  track.meterLevel > 85
-                    ? "bg-destructive"
-                    : track.meterLevel > 60
-                      ? "bg-amber-500"
-                      : "bg-emerald-500"
-                )}
-                style={{ height: `${track.meterLevel}%` }}
-              />
-            </div>
+          <div className="w-2 h-6 bg-muted rounded-sm overflow-hidden flex flex-col-reverse">
+            <div
+              className={cn(
+                "w-full transition-all duration-75",
+                track.meterLevel > 85
+                  ? "bg-destructive"
+                  : track.meterLevel > 60
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+              )}
+              style={{ height: `${track.meterLevel}%` }}
+            />
           </div>
         </div>
       </div>
@@ -517,7 +542,7 @@ function WaveformRow({
       layoutId={`track-waveform-${track.id}`}
       transition={{ type: "spring", stiffness: 350, damping: 25 }}
       className={cn(
-        "relative h-[120px] border-b border-border",
+        "relative h-[88px] border-b border-border",
         bgTint,
         track.muted && "opacity-50",
         isDragging && "opacity-40 scale-[0.98] origin-left",
@@ -909,9 +934,21 @@ export default function LooperDAPage() {
     setTracks((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const handleRenameTrack = useCallback((id: string, name: string) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, name } : t))
+    );
+  }, []);
+
   const handleVolumeChange = useCallback((id: string, volume: number) => {
     setTracks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, volume } : t))
+    );
+  }, []);
+
+  const handlePanChange = useCallback((id: string, pan: number) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, pan } : t))
     );
   }, []);
 
