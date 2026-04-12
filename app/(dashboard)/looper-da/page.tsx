@@ -307,7 +307,7 @@ function TrackHeader({
   onSolo: () => void;
   onDelete: () => void;
   onVolumeChange: (volume: number) => void;
-  onDragStart: () => void;
+  onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onDrop: () => void;
