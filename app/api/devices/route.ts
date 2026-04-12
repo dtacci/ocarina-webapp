@@ -5,7 +5,7 @@ export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    return Response.json({ devices: [] });
+    return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   const { data } = await supabase

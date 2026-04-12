@@ -1,5 +1,5 @@
 import { authenticateDevice } from "@/lib/api/auth-device";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // Pi calls this when loop engine state changes.
 // Updates devices.loop_state, which triggers Supabase Postgres Changes → browser.
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing tracks array" }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { error } = await supabase
     .from("devices")

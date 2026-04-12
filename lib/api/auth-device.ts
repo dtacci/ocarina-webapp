@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface AuthenticatedDevice {
   id: string;
@@ -11,6 +11,8 @@ export interface AuthenticatedDevice {
 
 /**
  * Validates a device API key from request headers.
+ * Uses the service-role client so RLS doesn't block Pi requests
+ * (Pi calls have no user session / cookies).
  * Returns the device if valid, null otherwise.
  */
 export async function authenticateDevice(
@@ -20,7 +22,7 @@ export async function authenticateDevice(
   if (!apiKey) return null;
 
   const keyHash = createHash("sha256").update(apiKey).digest("hex");
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("devices")

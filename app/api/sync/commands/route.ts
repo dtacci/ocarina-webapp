@@ -1,5 +1,6 @@
 import { authenticateDevice } from "@/lib/api/auth-device";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // POST — web app queues a command for the Pi
 // Body: { deviceId, command, params }
@@ -41,13 +42,14 @@ export async function POST(request: Request) {
 }
 
 // GET — Pi polls for pending commands (API key auth)
+// Uses admin client so RLS doesn't block Pi requests (no user session).
 export async function GET(request: Request) {
   const device = await authenticateDevice(request);
   if (!device) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("device_commands")

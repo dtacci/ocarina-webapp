@@ -60,16 +60,31 @@ export function useLoopState(deviceId: string | null) {
         },
         (payload) => {
           const raw = (payload.new as Record<string, unknown>).loop_state;
-          if (raw && typeof raw === "object") {
-            const state = raw as LoopStateData;
-            // Normalize track states from Teensy uppercase to our lowercase enum
-            const normalizedTracks = (state.tracks ?? []).map((t) => ({
-              ...t,
-              state: normalizeTrackState(t.state),
-            }));
-            setLoopState({ ...state, tracks: normalizedTracks });
-            setLastUpdated(new Date());
-          }
+          if (!raw || typeof raw !== "object") return;
+
+          const candidate = raw as Record<string, unknown>;
+          if (!Array.isArray(candidate.tracks)) return;
+
+          const normalizedTracks = candidate.tracks
+            .map((t: unknown): LoopTrack | null => {
+              if (!t || typeof t !== "object") return null;
+              const track = t as Record<string, unknown>;
+              return {
+                id: Number(track.id ?? 0),
+                state: normalizeTrackState(track.state),
+                length_ms: Number(track.length_ms ?? 0),
+                muted: Boolean(track.muted),
+              };
+            })
+            .filter((t): t is LoopTrack => t !== null);
+
+          setLoopState({
+            tracks: normalizedTracks,
+            bpm: typeof candidate.bpm === "number" ? candidate.bpm : null,
+            master_length_ms: Number(candidate.master_length_ms ?? 0),
+            active_track: Number(candidate.active_track ?? 1),
+          });
+          setLastUpdated(new Date());
         }
       )
       .subscribe((s) => {
