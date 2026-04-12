@@ -28,11 +28,11 @@ export default function LandingPage() {
           <span className="font-semibold tracking-tight">Digital Ocarina</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Sign in</Link>
+          <Button nativeButton={false} render={<Link href="/login" />} variant="ghost" size="sm">
+            Sign in
           </Button>
-          <Button asChild size="sm">
-            <Link href="/signup">Get started</Link>
+          <Button nativeButton={false} render={<Link href="/signup" />} size="sm">
+            Get started
           </Button>
         </div>
       </header>
@@ -68,14 +68,12 @@ export default function LandingPage() {
 
         {/* CTAs */}
         <div className="flex gap-3" style={{ animation: "stagger-in 0.6s ease-out 0.2s forwards", opacity: 0 }}>
-          <Button asChild size="lg" className="gap-2 glow-amber">
-            <Link href="/signup">
-              Create account
-              <ArrowRight className="size-4" />
-            </Link>
+          <Button nativeButton={false} render={<Link href="/signup" />} size="lg" className="gap-2 glow-amber">
+            Create account
+            <ArrowRight className="size-4" />
           </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link href="/login">Sign in</Link>
+          <Button nativeButton={false} render={<Link href="/login" />} size="lg" variant="outline">
+            Sign in
           </Button>
         </div>
 
