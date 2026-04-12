@@ -4,6 +4,7 @@ import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Search, Loader2, Disc3, ChevronDown, ChevronUp } from "lucide-react";
 import { RecordingCard } from "@/components/recordings/recording-card";
+import { useRecordingsRealtime } from "@/hooks/use-recordings-realtime";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
 
 interface Props {
@@ -11,9 +12,11 @@ interface Props {
   currentPage: number;
   hasMore: boolean;
   query: string;
+  userId: string | null;
 }
 
 // Group recordings by session_id. Ungrouped (null) recordings each get their own entry.
+// Within each session: master first, then stems sorted by created_at asc.
 function groupRecordings(
   recordings: RecordingRow[]
 ): Array<{ sessionId: string | null; tracks: RecordingRow[] }> {
@@ -31,15 +34,21 @@ function groupRecordings(
 
   const groups: Array<{ sessionId: string | null; tracks: RecordingRow[] }> = [];
 
-  // Sessions first (sorted by earliest track), then ungrouped
   for (const [sessionId, tracks] of sessionMap) {
-    groups.push({ sessionId, tracks: tracks.sort((a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )});
+    // Master first, then stems by created_at asc
+    const sorted = tracks.sort((a, b) => {
+      if (a.recording_type === "master") return -1;
+      if (b.recording_type === "master") return 1;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+    groups.push({ sessionId, tracks: sorted });
   }
+
+  // Sessions sorted by most recent track (using the master or first stem)
   groups.sort((a, b) =>
     new Date(b.tracks[0].created_at).getTime() - new Date(a.tracks[0].created_at).getTime()
   );
+
   for (const rec of ungrouped) {
     groups.push({ sessionId: null, tracks: [rec] });
   }
@@ -54,7 +63,6 @@ function formatDate(dateStr: string): string {
 }
 
 function SessionGroup({
-  sessionId,
   tracks,
   onDelete,
 }: {
@@ -62,41 +70,64 @@ function SessionGroup({
   tracks: RecordingRow[];
   onDelete: (id: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
-  const totalDuration = tracks.reduce((s, t) => s + t.duration_sec, 0);
-  const date = formatDate(tracks[0].created_at);
+  const [stemsExpanded, setStemsExpanded] = useState(true);
+
+  const master = tracks.find((t) => t.recording_type === "master");
+  const stems = tracks.filter((t) => t.recording_type !== "master");
+
+  // Derive header metadata from stems (master duration covers the full mix, stems show individual)
+  const stemDuration = stems.reduce((s, t) => s + t.duration_sec, 0);
+  const bpm = (master ?? stems[0])?.bpm;
+  const date = formatDate((master ?? stems[0]).created_at);
 
   return (
-    <div className="col-span-full rounded-lg border bg-card/50">
+    <div className="col-span-full rounded-lg border bg-card/50 overflow-hidden">
       {/* Session header */}
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors rounded-t-lg"
-      >
-        <div className="flex items-center gap-3">
-          <Disc3 className="size-4 text-muted-foreground" />
-          <div className="text-left">
-            <p className="text-sm font-medium">Session · {date}</p>
-            <p className="text-xs text-muted-foreground">
-              {tracks.length} {tracks.length === 1 ? "track" : "tracks"} ·{" "}
-              {Math.floor(totalDuration / 60)}m {Math.floor(totalDuration % 60)}s total
-              {tracks[0].bpm ? ` · ${tracks[0].bpm} BPM` : ""}
-            </p>
-          </div>
+      <div className="flex items-center gap-3 px-4 py-3 border-b bg-muted/20">
+        <Disc3 className="size-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium">Session · {date}</p>
+          <p className="text-xs text-muted-foreground">
+            {stems.length} {stems.length === 1 ? "stem" : "stems"}
+            {stemDuration > 0 && ` · ${Math.floor(stemDuration / 60)}m ${Math.floor(stemDuration % 60)}s`}
+            {bpm ? ` · ${bpm} BPM` : ""}
+            {master ? " · mix ready" : ""}
+          </p>
         </div>
-        {expanded
-          ? <ChevronUp className="size-4 text-muted-foreground" />
-          : <ChevronDown className="size-4 text-muted-foreground" />
-        }
-      </button>
+      </div>
 
-      {expanded && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 p-4 pt-2 border-t">
-          {tracks.map((rec) => (
-            <RecordingCard key={rec.id} recording={rec} onDelete={onDelete} />
-          ))}
-        </div>
-      )}
+      <div className="p-4 space-y-4">
+        {/* Master card — hero, full width */}
+        {master && (
+          <RecordingCard recording={master} onDelete={onDelete} />
+        )}
+
+        {/* Stems — collapsible */}
+        {stems.length > 0 && (
+          <div>
+            {master && (
+              <button
+                onClick={() => setStemsExpanded((v) => !v)}
+                className="flex w-full items-center gap-2 mb-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {stemsExpanded
+                  ? <ChevronUp className="size-3.5" />
+                  : <ChevronDown className="size-3.5" />
+                }
+                Stems ({stems.length})
+              </button>
+            )}
+
+            {stemsExpanded && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {stems.map((rec) => (
+                  <RecordingCard key={rec.id} recording={rec} onDelete={onDelete} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -106,6 +137,7 @@ export function RecordingsClient({
   currentPage,
   hasMore,
   query,
+  userId,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -114,11 +146,21 @@ export function RecordingsClient({
 
   const [recordings, setRecordings] = useState<RecordingRow[]>(initialRecordings);
 
+  // Sync when server refetches (search/page navigation)
   const prevInitial = useRef(initialRecordings);
   if (prevInitial.current !== initialRecordings) {
     prevInitial.current = initialRecordings;
     setRecordings(initialRecordings);
   }
+
+  // Realtime: new recordings from Pi or browser uploads appear without a refresh
+  useRecordingsRealtime(userId, (newRecording) => {
+    setRecordings((prev) => {
+      // Deduplicate — Pi may retry and send the same recording twice
+      if (prev.some((r) => r.id === newRecording.id)) return prev;
+      return [newRecording, ...prev];
+    });
+  });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

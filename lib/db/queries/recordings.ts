@@ -12,6 +12,7 @@ export interface RecordingRow {
   kit_id: string | null;
   waveform_peaks: number[] | null;
   session_id: string | null;
+  recording_type: "upload" | "stem" | "master";
   is_public: boolean;
   created_at: string;
 }

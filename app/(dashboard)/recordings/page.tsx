@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { Disc3 } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 import { getRecordings } from "@/lib/db/queries/recordings";
 import { UploadButton } from "@/components/recordings/upload-button";
 import { RecordingsClient } from "./page-client";
@@ -13,6 +14,10 @@ export default async function RecordingsPage({
 }) {
   const { q = "", page: pageStr = "1" } = await searchParams;
   const page = Math.max(1, parseInt(pageStr, 10) || 1);
+
+  // Get userId so the client can subscribe to Realtime recording inserts
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   // Fetch one extra to determine if there's a next page
   const recordings = await getRecordings({ limit: PAGE_SIZE + 1, page, query: q });
@@ -48,6 +53,7 @@ export default async function RecordingsPage({
             currentPage={page}
             hasMore={hasMore}
             query={q}
+            userId={user?.id ?? null}
           />
         </Suspense>
       )}

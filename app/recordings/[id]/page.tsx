@@ -60,7 +60,14 @@ export default async function RecordingDetailPage({ params }: Props) {
   let sessionTracks: RecordingRow[] = [];
   if (recording.session_id && isOwner) {
     const siblings = await getRecordingsBySessionId(recording.session_id, user!.id);
-    sessionTracks = siblings.filter((t) => t.id !== recording.id);
+    sessionTracks = siblings
+      .filter((t) => t.id !== recording.id)
+      // Master first, then stems by created_at
+      .sort((a, b) => {
+        if (a.recording_type === "master") return -1;
+        if (b.recording_type === "master") return 1;
+        return 0;
+      });
   }
 
   return (

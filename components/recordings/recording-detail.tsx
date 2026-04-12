@@ -32,9 +32,11 @@ function formatDate(dateStr: string): string {
 function SessionTrackRow({
   track,
   index,
+  stemIndex,
 }: {
   track: RecordingRow;
   index: number;
+  stemIndex: number; // position among stems only (used for label)
 }) {
   const {
     containerRef,
@@ -56,8 +58,8 @@ function SessionTrackRow({
 
   return (
     <div className="flex items-center gap-3 py-2.5 border-b last:border-0">
-      <span className="text-xs text-muted-foreground w-14 shrink-0 font-medium">
-        Track {index + 1}
+      <span className="text-xs text-muted-foreground w-20 shrink-0 font-medium">
+        {track.recording_type === "master" ? "Session Mix" : `Track ${stemIndex + 1}`}
       </span>
 
       <div className="relative flex-1 h-10 rounded bg-muted overflow-hidden">
@@ -447,9 +449,15 @@ export function RecordingDetail({
               </h2>
             </div>
             <div className="rounded-lg border divide-y overflow-hidden">
-              {sessionTracks.map((track, i) => (
-                <SessionTrackRow key={track.id} track={track} index={i} />
-              ))}
+              {sessionTracks.map((track, i) => {
+                // stemIndex counts only non-master tracks for "Track N" labels
+                const stemIndex = sessionTracks
+                  .slice(0, i)
+                  .filter((t) => t.recording_type !== "master").length;
+                return (
+                  <SessionTrackRow key={track.id} track={track} index={i} stemIndex={stemIndex} />
+                );
+              })}
             </div>
           </div>
         )}

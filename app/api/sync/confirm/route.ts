@@ -17,7 +17,11 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
 
   if (fileType === "recording") {
-    const { title, duration_sec, sample_rate, bpm, kit_id, waveform_peaks, session_id } = metadata ?? {};
+    const { title, duration_sec, sample_rate, bpm, kit_id, waveform_peaks, session_id, recording_type } = metadata ?? {};
+
+    // Infer type if not provided: sessions produce stems, browser uploads stay 'upload'
+    const resolvedType: string = recording_type ?? (session_id ? "stem" : "upload");
+
     const { data, error } = await supabase
       .from("recordings")
       .insert({
@@ -31,6 +35,7 @@ export async function POST(request: Request) {
         kit_id: kit_id ?? null,
         waveform_peaks: waveform_peaks ?? null,
         session_id: session_id ?? null,
+        recording_type: resolvedType,
         is_public: false,
       })
       .select()

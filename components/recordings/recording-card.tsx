@@ -237,6 +237,12 @@ export function RecordingCard({ recording, onDelete }: Props) {
 
         {/* Badges */}
         <div className="flex flex-1 flex-wrap gap-1">
+          {recording.recording_type === "master" && (
+            <Badge variant="default" className="text-[10px] px-1.5 py-0">mix</Badge>
+          )}
+          {recording.recording_type === "stem" && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">stem</Badge>
+          )}
           {recording.kit_id && (
             <Badge variant="secondary" className="text-xs capitalize">
               {recording.kit_id.replace(/-/g, " ")}
