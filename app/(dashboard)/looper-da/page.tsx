@@ -1034,12 +1034,14 @@ export default function LooperDAPage() {
 
   // Handlers
   const handlePlay = useCallback(() => {
-    if (!session.isPlaying) {
-      lastTimeRef.current = 0;
-      beatAccumulatorRef.current = 0;
-    }
-    setSession((prev) => ({ ...prev, isPlaying: !prev.isPlaying }));
-  }, [session.isPlaying]);
+    setSession((prev) => {
+      if (!prev.isPlaying) {
+        lastTimeRef.current = 0;
+        beatAccumulatorRef.current = 0;
+      }
+      return { ...prev, isPlaying: !prev.isPlaying };
+    });
+  }, []);
 
   const handleStop = useCallback(() => {
     setSession((prev) => ({
