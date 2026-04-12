@@ -129,6 +129,7 @@ export const devices = pgTable("devices", {
   firmwareVersion: text("firmware_version"),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  loopState: jsonb("loop_state"), // live loop engine state published by Pi
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -354,4 +355,21 @@ export const deviceConfigs = pgTable("device_configs", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+// ============================================================================
+// DEVICE COMMANDS (web → Pi, Pi polls)
+// ============================================================================
+export const deviceCommands = pgTable("device_commands", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  deviceId: uuid("device_id")
+    .notNull()
+    .references(() => devices.id),
+  command: text("command").notNull(),  // e.g. "mute_track", "unmute_track", "stop_all"
+  params: jsonb("params").default({}), // e.g. { track: 2 }
+  status: text("status").notNull().default("pending"), // pending | consumed
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
 });
