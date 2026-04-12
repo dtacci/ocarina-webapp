@@ -7,11 +7,12 @@ import { TrackBlock } from "./track-block";
 import { BpmDisplay } from "./bpm-display";
 
 interface Props {
-  deviceId: string;
+  deviceId: string | null;
   deviceName: string;
 }
 
-async function sendCommand(deviceId: string, command: string, params: Record<string, unknown> = {}) {
+async function sendCommand(deviceId: string | null, command: string, params: Record<string, unknown> = {}) {
+  if (!deviceId) return;
   await fetch("/api/sync/commands", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -51,12 +52,14 @@ export function LooperDashboard({ deviceId, deviceName }: Props) {
           {status === "connected" && (
             <Wifi className="size-4 text-emerald-500" />
           )}
-          {status === "disconnected" && (
+          {(status === "disconnected" || !deviceId) && (
             <WifiOff className="size-4 text-muted-foreground/50" />
           )}
           <span className="text-sm font-medium">{deviceName}</span>
           <span className="text-xs text-muted-foreground">
-            {status === "connected" && lastUpdated
+            {!deviceId
+              ? "Browser mode — no device linked"
+              : status === "connected" && lastUpdated
               ? `Updated ${new Date(lastUpdated).toLocaleTimeString()}`
               : status === "connecting"
               ? "Connecting…"
@@ -95,9 +98,11 @@ export function LooperDashboard({ deviceId, deviceName }: Props) {
         ))}
       </div>
 
-      {status === "disconnected" && (
+      {(status === "disconnected" || !deviceId) && (
         <p className="text-center text-xs text-muted-foreground pt-2">
-          Start your Ocarina and ensure the sync agent is running to see live track state.
+          {deviceId
+            ? "Start your Ocarina and ensure the sync agent is running to see live track state."
+            : "Connect a Pi to enable real-time sync. Browser mode shows layout only."}
         </p>
       )}
     </div>
