@@ -12,6 +12,7 @@ import {
   Trash2,
   RotateCcw,
   Headphones,
+  GripVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -262,26 +263,46 @@ function BeatIndicator({
 // Track Header (left column) for a single track
 function TrackHeader({
   track,
+  isDragging,
+  isDragOver,
   onMute,
   onSolo,
   onDelete,
   onVolumeChange,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
 }: {
   track: Track;
+  isDragging: boolean;
+  isDragOver: boolean;
   onMute: () => void;
   onSolo: () => void;
   onDelete: () => void;
   onVolumeChange: (volume: number) => void;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  onDrop: () => void;
 }) {
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDrop={onDrop}
       className={cn(
-        "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 transition-all",
+        "group flex h-[88px] w-44 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-3 transition-all select-none",
         track.recording && "border-l-2 border-l-destructive",
-        track.muted && "opacity-50"
+        track.muted && "opacity-50",
+        isDragging && "opacity-40 scale-[0.98]",
+        isDragOver && "border-t-2 border-t-primary"
       )}
     >
       <div className="flex items-center gap-2">
+        <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50 cursor-grab active:cursor-grabbing" />
         <div className={cn("size-3 shrink-0 rounded-full", track.color)} />
         <span className="text-sm font-medium truncate">{track.name}</span>
       </div>
@@ -397,6 +418,7 @@ function TrackGrid({
   onSolo,
   onDelete,
   onVolumeChange,
+  onReorder,
 }: {
   tracks: Track[];
   currentBeat: number;
@@ -407,12 +429,15 @@ function TrackGrid({
   onSolo: (id: string) => void;
   onDelete: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
+  onReorder: (fromId: string, toId: string) => void;
 }) {
   const playheadPosition = (currentBeat / totalBeats) * 100;
+  const dragSourceId = useRef<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   return (
     <div className="flex overflow-hidden rounded-xl border border-border bg-card">
-      {/* Left: track headers */}
+      {/* Left: track headers — drag is only enabled here */}
       <div className="flex shrink-0 flex-col border-r border-border">
         {/* Top-left corner header cell to align with ruler */}
         <div className="flex h-7 items-center border-b border-border px-3">
@@ -422,10 +447,22 @@ function TrackGrid({
           <TrackHeader
             key={track.id}
             track={track}
+            isDragging={dragSourceId.current === track.id}
+            isDragOver={dragOverId === track.id}
             onMute={() => onMute(track.id)}
             onSolo={() => onSolo(track.id)}
             onDelete={() => onDelete(track.id)}
             onVolumeChange={(vol) => onVolumeChange(track.id, vol)}
+            onDragStart={() => { dragSourceId.current = track.id; }}
+            onDragOver={(e) => { e.preventDefault(); setDragOverId(track.id); }}
+            onDragEnd={() => { dragSourceId.current = null; setDragOverId(null); }}
+            onDrop={() => {
+              if (dragSourceId.current && dragSourceId.current !== track.id) {
+                onReorder(dragSourceId.current, track.id);
+              }
+              dragSourceId.current = null;
+              setDragOverId(null);
+            }}
           />
         ))}
       </div>
@@ -673,6 +710,18 @@ export default function LooperDAPage() {
     );
   }, []);
 
+  const handleReorder = useCallback((fromId: string, toId: string) => {
+    setTracks((prev) => {
+      const fromIndex = prev.findIndex((t) => t.id === fromId);
+      const toIndex = prev.findIndex((t) => t.id === toId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }, []);
+
   const handleClearAll = useCallback(() => {
     setTracks((prev) =>
       prev.map((t) => ({
@@ -751,6 +800,7 @@ export default function LooperDAPage() {
         onSolo={handleSoloTrack}
         onDelete={handleDeleteTrack}
         onVolumeChange={handleVolumeChange}
+        onReorder={handleReorder}
       />
 
       {/* Actions */}
