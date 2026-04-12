@@ -18,6 +18,8 @@ import {
   Radio,
   Timer,
   Settings2,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +29,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useLoopState } from "@/hooks/use-loop-state";
 
 // Types
 interface Track {
@@ -928,6 +931,63 @@ export default function LooperDAPage() {
   const hasEverPlayedRef = useRef<boolean>(false);
   const prevBpmRef = useRef<number>(session.bpm);
 
+  // ── Pi integration ──────────────────────────────────────────────────────
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  // Fetch the user's first looper-capable Pi device on mount
+  useEffect(() => {
+    fetch("/api/devices")
+      .then((r) => r.json())
+      .then((data) => {
+        const pi = (data.devices ?? []).find(
+          (d: { capabilities?: { looper?: boolean }; device_type: string }) =>
+            d.capabilities?.looper && d.device_type !== "web_browser"
+        );
+        setDeviceId(pi?.id ?? null);
+      })
+      .catch(() => setDeviceId(null));
+  }, []);
+
+  const { loopState, status: piStatus } = useLoopState(deviceId);
+
+  const sendCommand = useCallback(
+    async (command: string, params: Record<string, unknown> = {}) => {
+      if (!deviceId) return;
+      await fetch("/api/sync/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, command, params }),
+      });
+    },
+    [deviceId]
+  );
+
+  // Pi → local state sync (mute, recording, BPM only — not isPlaying)
+  useEffect(() => {
+    if (piStatus !== "connected" || !loopState) return;
+
+    // Sync BPM from Pi without triggering the RAF beat accumulator reset
+    if (loopState.bpm && loopState.bpm !== session.bpm) {
+      setSession((prev) => ({ ...prev, bpm: loopState.bpm! }));
+    }
+
+    // Sync per-track state from Pi (muted, recording, hasAudio)
+    setTracks((prev) =>
+      prev.map((t, i) => {
+        const piTrack = loopState.tracks[i];
+        if (!piTrack) return t;
+        return {
+          ...t,
+          muted: piTrack.muted,
+          recording: piTrack.state === "recording",
+          // Don't clear hasAudio if we already have waveform data locally
+          hasAudio: piTrack.state !== "empty" || t.hasAudio,
+        };
+      })
+    );
+  }, [loopState, piStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── End Pi integration ──────────────────────────────────────────────────
+
   // Play metronome click sound
   const playClick = useCallback((isDownbeat: boolean) => {
     if (!audioContextRef.current) {
@@ -1107,11 +1167,13 @@ export default function LooperDAPage() {
         beatAccumulatorRef.current = 0;
         hasEverPlayedRef.current = true;
       }
+      sendCommand(prev.isPlaying ? "pause" : "play");
       return { ...prev, isPlaying: !prev.isPlaying };
     });
-  }, []);
+  }, [sendCommand]);
 
   const handleStop = useCallback(() => {
+    sendCommand("stop_all");
     setSession((prev) => ({
       ...prev,
       isPlaying: false,
@@ -1127,10 +1189,11 @@ export default function LooperDAPage() {
     lastTimeRef.current = 0;
     beatAccumulatorRef.current = 0;
     hasEverPlayedRef.current = false; // Reset for next play session
-  }, []);
+  }, [sendCommand]);
 
   const handleRecord = useCallback(() => {
     if (session.isRecording) {
+      sendCommand("stop_recording");
       setSession((prev) => ({
         ...prev,
         isRecording: false,
@@ -1151,6 +1214,7 @@ export default function LooperDAPage() {
       }
     }
 
+    sendCommand("record_track", { track: loopState.active_track ?? 1 });
     setSession((prev) => ({
       ...prev,
       isCountingIn: true,
@@ -1161,11 +1225,12 @@ export default function LooperDAPage() {
     }));
     lastTimeRef.current = 0;
     beatAccumulatorRef.current = 0;
-  }, [session.isRecording, tracks]);
+  }, [session.isRecording, tracks, sendCommand, loopState.active_track]);
 
   const handleBpmChange = useCallback((newBpm: number) => {
+    sendCommand("set_bpm", { bpm: newBpm });
     setSession((prev) => ({ ...prev, bpm: newBpm }));
-  }, []);
+  }, [sendCommand]);
 
   const handleMetronomeToggle = useCallback(() => {
     setSession((prev) => ({ ...prev, metronomeEnabled: !prev.metronomeEnabled }));
@@ -1200,16 +1265,20 @@ const handleAddTrack = useCallback(() => {
   }, []);
   
   const handleMuteTrack = useCallback((id: string) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, muted: !t.muted } : t))
-    );
-  }, []);
+    setTracks((prev) => {
+      const track = prev.find((t) => t.id === id);
+      if (track) sendCommand(track.muted ? "unmute_track" : "mute_track", { track: parseInt(id) });
+      return prev.map((t) => (t.id === id ? { ...t, muted: !t.muted } : t));
+    });
+  }, [sendCommand]);
 
   const handleSoloTrack = useCallback((id: string) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, solo: !t.solo } : t))
-    );
-  }, []);
+    setTracks((prev) => {
+      const track = prev.find((t) => t.id === id);
+      if (track) sendCommand(track.solo ? "unsolo_track" : "solo_track", { track: parseInt(id) });
+      return prev.map((t) => (t.id === id ? { ...t, solo: !t.solo } : t));
+    });
+  }, [sendCommand]);
 
   const handleDeleteTrack = useCallback((id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
@@ -1383,6 +1452,20 @@ const handleAddTrack = useCallback(() => {
               </div>
             </PopoverContent>
           </Popover>
+
+          {/* Pi connection status */}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {piStatus === "connected" ? (
+              <Wifi className="size-3.5 text-emerald-500" />
+            ) : (
+              <WifiOff className="size-3.5 opacity-40" />
+            )}
+            <span className="hidden sm:inline">
+              {deviceId
+                ? piStatus === "connected" ? "Pi live" : "Pi offline"
+                : "Browser"}
+            </span>
+          </div>
 
           <BpmDisplay bpm={session.bpm} onBpmChange={handleBpmChange} />
           <TimeDisplay
