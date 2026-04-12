@@ -1,5 +1,5 @@
 import { authenticateDevice } from "@/lib/api/auth-device";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // POST — upload session data from device
 export async function POST(request: Request) {
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Max 100 sessions per batch" }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const rows = sessions.map((s: Record<string, unknown>) => ({
     user_id: device.userId,

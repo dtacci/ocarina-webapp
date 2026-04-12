@@ -1,5 +1,5 @@
 import { authenticateDevice } from "@/lib/api/auth-device";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
   const device = await authenticateDevice(request);
@@ -14,10 +14,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing fileType or blobUrl" }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   if (fileType === "recording") {
-    const { title, duration_sec, sample_rate, bpm, kit_id } = metadata ?? {};
+    const { title, duration_sec, sample_rate, bpm, kit_id, waveform_peaks } = metadata ?? {};
     const { data, error } = await supabase
       .from("recordings")
       .insert({
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
         sample_rate: sample_rate ?? 44100,
         bpm: bpm ?? null,
         kit_id: kit_id ?? null,
+        waveform_peaks: waveform_peaks ?? null,
         is_public: false,
       })
       .select()

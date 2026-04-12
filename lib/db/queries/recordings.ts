@@ -10,6 +10,7 @@ export interface RecordingRow {
   sample_rate: number;
   bpm: number | null;
   kit_id: string | null;
+  waveform_peaks: number[] | null;
   is_public: boolean;
   created_at: string;
 }

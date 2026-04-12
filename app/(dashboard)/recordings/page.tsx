@@ -1,5 +1,6 @@
 import { getRecordings } from "@/lib/db/queries/recordings";
 import { RecordingCard } from "@/components/recordings/recording-card";
+import { UploadButton } from "@/components/recordings/upload-button";
 import { Disc3 } from "lucide-react";
 
 export default async function RecordingsPage() {
@@ -7,11 +8,14 @@ export default async function RecordingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Recordings</h1>
-        <p className="text-muted-foreground">
-          Your recording library. Auto-synced from your Ocarina.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Recordings</h1>
+          <p className="text-muted-foreground">
+            Your recording library. Auto-synced from your Ocarina.
+          </p>
+        </div>
+        <UploadButton />
       </div>
 
       {recordings.length > 0 ? (
@@ -26,7 +30,7 @@ export default async function RecordingsPage() {
             <Disc3 className="mx-auto mb-3 size-10 text-muted-foreground/50" />
             <p className="text-sm font-medium">No recordings yet</p>
             <p className="text-xs text-muted-foreground">
-              Register a device to start syncing recordings
+              Upload a recording above, or register a device to enable auto-sync
             </p>
           </div>
         </div>

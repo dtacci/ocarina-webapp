@@ -1,5 +1,5 @@
 import { authenticateDevice } from "@/lib/api/auth-device";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // GET — pull latest config for this device
 export async function GET(request: Request) {
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Device does not support config" }, { status: 403 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("device_configs")
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing configJson" }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Check if server has a newer version from web
   const { data: latest } = await supabase
