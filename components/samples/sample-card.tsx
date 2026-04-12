@@ -35,7 +35,7 @@ export function SampleCard({ sample }: { sample: SampleWithVibes }) {
   const familyClass = familyColors[sample.family || ""] || familyColors.other;
 
   return (
-    <Link href={`/library/${encodeURIComponent(sample.id)}`} className="group block rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50">
+    <Link href={`/library/${encodeURIComponent(sample.id)}`} className="group block rounded-xl border border-border/50 bg-card/80 p-3 transition-all hover:border-primary/30 hover:bg-card hover-lift">
       {/* Waveform placeholder */}
       <div className="mb-2 h-12 rounded bg-muted/50 flex items-center justify-center">
         <div className="flex items-end gap-px h-8">

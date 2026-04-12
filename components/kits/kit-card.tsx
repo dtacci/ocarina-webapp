@@ -14,7 +14,7 @@ export function KitCard({ kit }: { kit: KitRow }) {
   return (
     <Link
       href={`/kits/${kit.id}`}
-      className="group block rounded-lg border bg-card p-4 transition-colors hover:bg-accent/50"
+      className="group block rounded-xl border border-border/50 bg-card/80 p-4 transition-all hover:border-primary/30 hover:bg-card hover-lift"
     >
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">

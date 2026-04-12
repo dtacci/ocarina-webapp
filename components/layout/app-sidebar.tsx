@@ -117,7 +117,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton render={<Link href="/library" />} size="lg">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground glow-amber">
                 <Waves className="size-4" />
               </div>
               <div className="flex flex-col gap-0.5 leading-none">
