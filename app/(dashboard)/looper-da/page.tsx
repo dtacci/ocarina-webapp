@@ -930,6 +930,7 @@ export default function LooperDAPage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastClickedBeatRef = useRef<number>(-1);
   const hasEverPlayedRef = useRef<boolean>(false);
+  const prevBpmRef = useRef<number>(session.bpm);
 
   // Play metronome click sound
   const playClick = useCallback((isDownbeat: boolean) => {
@@ -956,6 +957,18 @@ export default function LooperDAPage() {
   // Calculate beat duration in ms
   const beatDuration = (60 / session.bpm) * 1000;
   const totalBeats = session.bars * 4;
+
+  // Scale accumulator when BPM changes to maintain playhead position
+  useEffect(() => {
+    if (prevBpmRef.current !== session.bpm) {
+      const oldLoopDuration = totalBeats * (60 / prevBpmRef.current) * 1000;
+      const newLoopDuration = totalBeats * beatDuration;
+      // Convert old accumulator to percentage, then to new accumulator
+      const positionPercent = beatAccumulatorRef.current / oldLoopDuration;
+      beatAccumulatorRef.current = positionPercent * newLoopDuration;
+      prevBpmRef.current = session.bpm;
+    }
+  }, [session.bpm, totalBeats, beatDuration]);
 
   // Animation loop for playback with smooth playhead
   useEffect(() => {
