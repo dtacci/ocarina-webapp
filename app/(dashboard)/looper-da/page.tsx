@@ -452,26 +452,41 @@ function TrackHeader({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-56 p-3" align="start">
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Track Settings
                 </div>
+                
+                {/* Pan control */}
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Pan</label>
+                  <label className="text-xs font-medium">Pan</label>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs w-4">L</span>
+                    <span className="text-xs text-muted-foreground w-4">L</span>
                     <input
                       type="range"
                       min="-100"
                       max="100"
                       value={track.pan}
-                      onChange={(e) => onPanChange(Number(e.target.value))}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        onPanChange(Number(e.target.value));
+                      }}
                       className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500"
                     />
-                    <span className="text-xs w-4">R</span>
+                    <span className="text-xs text-muted-foreground w-4">R</span>
                   </div>
                   <div className="text-center text-xs text-muted-foreground tabular-nums">
                     {track.pan > 0 ? `Right ${track.pan}` : track.pan < 0 ? `Left ${Math.abs(track.pan)}` : "Center"}
+                  </div>
+                </div>
+
+                <div className="border-t border-border" />
+
+                {/* Placeholder for future settings */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">More options coming soon</label>
+                  <div className="text-xs text-muted-foreground/60">
+                    Filters, effects, and other track settings will appear here.
                   </div>
                 </div>
               </div>
