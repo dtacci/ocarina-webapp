@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getSample } from "@/lib/db/queries/samples";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SamplePlayer } from "@/components/audio/sample-player";
 import Link from "next/link";
 import { ArrowLeft, Mic } from "lucide-react";
 
@@ -66,32 +67,31 @@ export default async function SampleDetailPage({ params }: Props) {
         )}
       </div>
 
-      {/* Decorative waveform — samples live on the Pi, not the web */}
-      <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-        {/* Static bars — deterministic heights from sample id */}
-        <div className="flex items-end gap-px h-16">
-          {Array.from({ length: 60 }, (_, i) => {
-            const h = Math.max(8, Math.abs(Math.sin(i * 0.4 + sample.id.charCodeAt(i % sample.id.length) * 0.1)) * 100);
-            return (
-              <div
-                key={i}
-                className="flex-1 rounded-sm bg-foreground/20"
-                style={{ height: `${h}%` }}
-              />
-            );
-          })}
+      {/* Audio — preview if available, otherwise decorative waveform */}
+      {sample.mp3_blob_url ? (
+        <div className="space-y-2">
+          <SamplePlayer blobUrl={sample.mp3_blob_url} duration={sample.duration_sec} />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Mic className="size-3.5 shrink-0" />
+            <span>6-second preview. Say <span className="font-medium text-foreground">&ldquo;load {sample.family ?? "sample"}&rdquo;</span> to hear the full sample on your Pi.</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Mic className="size-3.5 shrink-0" />
-          <span>
-            Audio lives on your Pi. Say{" "}
-            <span className="font-medium text-foreground">
-              &ldquo;load {sample.family ?? "sample"}&rdquo;
-            </span>{" "}
-            or use the voice search to hear it.
-          </span>
+      ) : (
+        <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+          <div className="flex items-end gap-px h-16">
+            {Array.from({ length: 60 }, (_, i) => {
+              const h = Math.max(8, Math.abs(Math.sin(i * 0.4 + sample.id.charCodeAt(i % sample.id.length) * 0.1)) * 100);
+              return (
+                <div key={i} className="flex-1 rounded-sm bg-foreground/20" style={{ height: `${h}%` }} />
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Mic className="size-3.5 shrink-0" />
+            <span>Audio lives on your Pi. Say <span className="font-medium text-foreground">&ldquo;load {sample.family ?? "sample"}&rdquo;</span> or use voice search to hear it.</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Metadata grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

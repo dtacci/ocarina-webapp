@@ -20,6 +20,7 @@ export interface SampleFilters {
 export interface SampleRow {
   id: string;
   blob_url: string;
+  mp3_blob_url: string | null;  // Vercel Blob URL for 6s preview — null until batch script runs
   duration_sec: number;
   sample_rate: number;
   root_note: string | null;

@@ -1386,12 +1386,31 @@ const handleAddTrack = useCallback(() => {
             return prev;
           });
           break;
+        case "Digit1":
+        case "Digit2":
+        case "Digit3":
+        case "Digit4":
+        case "Digit5":
+        case "Digit6": {
+          e.preventDefault();
+          const idx = parseInt(e.code.replace("Digit", ""), 10) - 1;
+          if (tracks[idx]) handleArmTrack(tracks[idx].id);
+          break;
+        }
+        case "ArrowUp":
+          e.preventDefault();
+          handleBpmChange(Math.min(240, session.bpm + (e.shiftKey ? 5 : 1)));
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          handleBpmChange(Math.max(40, session.bpm - (e.shiftKey ? 5 : 1)));
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handlePlay, handleRecord, handleStop]);
+  }, [handlePlay, handleRecord, handleStop, handleArmTrack, handleBpmChange, tracks, session.bpm]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -1461,8 +1480,11 @@ const handleAddTrack = useCallback(() => {
                   {[
                     { key: "Space", action: "Play / Pause" },
                     { key: "S", action: "Stop" },
-                    { key: "R", action: "Record (4-beat count-in)" },
+                    { key: "R", action: "Record" },
                     { key: "M", action: "Mute / Unmute track" },
+                    { key: "1 – 6", action: "Select track" },
+                    { key: "↑ / ↓", action: "BPM ±1" },
+                    { key: "⇧ ↑ / ↓", action: "BPM ±5" },
                   ].map(({ key, action }) => (
                     <div key={key} className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">{action}</span>

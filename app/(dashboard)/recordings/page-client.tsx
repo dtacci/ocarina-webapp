@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Search, Loader2, Disc3, ChevronDown, ChevronUp, Download, Disc } from "lucide-react";
+import { Search, Loader2, Disc3, ChevronDown, ChevronUp, Download, Disc, X } from "lucide-react";
 import { RecordingCard } from "@/components/recordings/recording-card";
 import { useRecordingsRealtime } from "@/hooks/use-recordings-realtime";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
@@ -14,6 +14,7 @@ interface Props {
   query: string;
   userId: string | null;
   sort: string;
+  sessionId: string | null;
 }
 
 // ── Sort helpers ─────────────────────────────────────────────────────────────
@@ -210,6 +211,7 @@ export function RecordingsClient({
   query,
   userId,
   sort,
+  sessionId,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -282,6 +284,26 @@ export function RecordingsClient({
   return (
     <div className="space-y-4">
       {/* Toolbar: search + sort */}
+      {/* Session filter banner */}
+      {sessionId && (
+        <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <Disc3 className="size-3.5 text-primary shrink-0" />
+          <span className="text-muted-foreground flex-1">Showing recordings from one session</span>
+          <button
+            onClick={() => {
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete("session_id");
+              params.delete("page");
+              router.push(`${pathname}?${params.toString()}`, { scroll: false });
+            }}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Clear session filter"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />

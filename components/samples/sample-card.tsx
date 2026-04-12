@@ -1,4 +1,8 @@
+"use client";
+
+import { useState, useRef } from "react";
 import Link from "next/link";
+import { Play, Pause } from "lucide-react";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import { Badge } from "@/components/ui/badge";
 
@@ -33,12 +37,41 @@ function AttributeBar({ label, value }: { label: string; value: number | null })
 
 export function SampleCard({ sample }: { sample: SampleWithVibes }) {
   const familyClass = familyColors[sample.family || ""] || familyColors.other;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const hasPreview = !!sample.mp3_blob_url;
+
+  function handlePlay(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!hasPreview) return;
+
+    // Lazy-create the audio element on first click
+    if (!audioRef.current) {
+      const a = new Audio(sample.mp3_blob_url!);
+      a.addEventListener("ended", () => setIsPlaying(false));
+      a.addEventListener("pause", () => setIsPlaying(false));
+      a.addEventListener("play", () => setIsPlaying(true));
+      audioRef.current = a;
+    }
+
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {/* browser autoplay policy */});
+    }
+  }
 
   return (
-    <Link href={`/library/${encodeURIComponent(sample.id)}`} className="group block rounded-xl border border-border/50 bg-card/80 p-3 transition-all hover:border-primary/30 hover:bg-card hover-lift">
-      {/* Waveform placeholder */}
-      <div className="mb-2 h-12 rounded bg-muted/50 flex items-center justify-center">
-        <div className="flex items-end gap-px h-8">
+    <Link
+      href={`/library/${encodeURIComponent(sample.id)}`}
+      className="group block rounded-xl border border-border/50 bg-card/80 p-3 transition-all hover:border-primary/30 hover:bg-card hover-lift"
+    >
+      {/* Waveform / play area */}
+      <div className="mb-2 h-12 rounded bg-muted/50 relative flex items-center justify-center overflow-hidden">
+        {/* Decorative waveform bars */}
+        <div className="flex items-end gap-px h-8 w-full px-1">
           {Array.from({ length: 32 }, (_, i) => {
             const h = sample.waveform_peaks
               ? Math.max(2, (sample.waveform_peaks[i * 6] || 0) * 32)
@@ -46,12 +79,27 @@ export function SampleCard({ sample }: { sample: SampleWithVibes }) {
             return (
               <div
                 key={i}
-                className="w-1 rounded-sm bg-foreground/20 group-hover:bg-foreground/40 transition-colors"
+                className="flex-1 rounded-sm bg-foreground/20 group-hover:bg-foreground/30 transition-colors"
                 style={{ height: `${h}px` }}
               />
             );
           })}
         </div>
+
+        {/* Play button — only shown when preview is available */}
+        {hasPreview && (
+          <button
+            onClick={handlePlay}
+            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-background/40 backdrop-blur-[1px]"
+            title={isPlaying ? "Pause preview" : "Play 6s preview"}
+          >
+            <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-colors">
+              {isPlaying
+                ? <Pause className="size-3.5" />
+                : <Play className="size-3.5 ml-px" />}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Header */}

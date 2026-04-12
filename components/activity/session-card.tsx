@@ -156,13 +156,13 @@ export function SessionCard({ session }: { session: SessionWithRecordings }) {
           </button>
         )}
 
-        {/* Link to recordings page */}
+        {/* Link to filtered recordings for this session */}
         {hasRecordings && (
           <Link
-            href="/recordings"
+            href={`/recordings?session_id=${session.id}`}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            View all →
+            View recordings →
           </Link>
         )}
       </div>

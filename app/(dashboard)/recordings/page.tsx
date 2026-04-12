@@ -9,9 +9,9 @@ const PAGE_SIZE = 12;
 export default async function RecordingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; sort?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; sort?: string; session_id?: string }>;
 }) {
-  const { q = "", page: pageStr = "1", sort: sortParam = "date-desc" } = await searchParams;
+  const { q = "", page: pageStr = "1", sort: sortParam = "date-desc", session_id } = await searchParams;
   const page = Math.max(1, parseInt(pageStr, 10) || 1);
   const VALID_SORTS: SortOption[] = ["date-desc", "date-asc", "duration-desc", "bpm-desc"];
   const sort: SortOption = VALID_SORTS.includes(sortParam as SortOption)
@@ -23,7 +23,7 @@ export default async function RecordingsPage({
   const { data: { user } } = await supabase.auth.getUser();
 
   // Fetch one extra to determine if there's a next page
-  const recordings = await getRecordings({ limit: PAGE_SIZE + 1, page, query: q, sort });
+  const recordings = await getRecordings({ limit: PAGE_SIZE + 1, page, query: q, sort, sessionId: session_id });
   const hasMore = recordings.length > PAGE_SIZE;
   const pageRecordings = recordings.slice(0, PAGE_SIZE);
 
@@ -47,6 +47,7 @@ export default async function RecordingsPage({
           query={q}
           userId={user?.id ?? null}
           sort={sort}
+          sessionId={session_id ?? null}
         />
       </Suspense>
     </div>

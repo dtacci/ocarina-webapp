@@ -31,7 +31,8 @@ export async function getRecordings({
   page = 1,
   query = "",
   sort = "date-desc",
-}: { limit?: number; page?: number; query?: string; sort?: SortOption } = {}): Promise<RecordingRow[]> {
+  sessionId,
+}: { limit?: number; page?: number; query?: string; sort?: SortOption; sessionId?: string } = {}): Promise<RecordingRow[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -47,6 +48,10 @@ export async function getRecordings({
 
   if (query) {
     q = q.ilike("title", `%${query}%`);
+  }
+
+  if (sessionId) {
+    q = q.eq("session_id", sessionId);
   }
 
   const { data, error } = await q;
