@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { MetricsResponse } from "@/app/api/metrics/route";
+import type { MetricsResponse } from "@/app/api/diagnostics/route";
 
 // Animate a number from 0 to target on mount
 function useCountUp(target: number, duration = 900) {

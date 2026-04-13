@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { MetricsResponse } from "@/app/api/metrics/route";
+import type { MetricsResponse } from "@/app/api/diagnostics/route";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { MetricsResponse } from "@/app/api/metrics/route";
+import type { MetricsResponse } from "@/app/api/diagnostics/route";
 
 const BUCKET_COLORS = [
   "bg-emerald-400",   // < 1s

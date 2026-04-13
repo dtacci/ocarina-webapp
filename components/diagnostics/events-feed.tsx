@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Disc3, Terminal, Activity, Pause, Play } from "lucide-react";
-import type { MetricsResponse } from "@/app/api/metrics/route";
+import type { MetricsResponse } from "@/app/api/diagnostics/route";
 
 type FeedEvent = MetricsResponse["recentEvents"][number] & { isNew?: boolean };
 
