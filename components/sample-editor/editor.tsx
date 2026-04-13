@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { WaveformCanvas } from "./waveform-canvas";
+import * as Tone from "tone";
+import { WaveformCanvas, type WaveformCanvasHandle } from "./waveform-canvas";
 import { EffectChain } from "./effect-chain";
+import { TransportBar } from "./transport-bar";
 import { defaultChain, type EffectNode } from "@/lib/audio/editor-types";
+import { playRealtime, type RealtimeController } from "@/lib/audio/tone-chain";
 import { formatDuration, formatSampleId, formatTimecode } from "@/lib/sample-editor/format";
 import { findNearestZeroCrossing } from "@/lib/audio/zero-crossing";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
@@ -14,6 +17,8 @@ interface Props {
   sample: SampleWithVibes;
   currentUserId: string;
 }
+
+// ─── reducer ──────────────────────────────────────────────────────────────
 
 interface EditorState {
   chain: EffectNode[];
@@ -84,6 +89,21 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
   }
 }
 
+// ─── helpers ──────────────────────────────────────────────────────────────
+
+function getTrimBounds(
+  chain: EffectNode[],
+  fallbackDuration: number,
+): { start: number; end: number } {
+  const trim = chain.find((n) => n.kind === "trim");
+  if (trim?.kind === "trim" && trim.enabled) {
+    return { start: trim.startSec, end: trim.endSec };
+  }
+  return { start: 0, end: fallbackDuration };
+}
+
+// ─── component ────────────────────────────────────────────────────────────
+
 export function Editor({ sample, currentUserId }: Props) {
   const duration = sample.duration_sec;
   const [state, dispatch] = useReducer(reducer, undefined, () => ({
@@ -97,7 +117,26 @@ export function Editor({ sample, currentUserId }: Props) {
   const [shiftHeld, setShiftHeld] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  // Fetch + decode the WAV once on mount.
+  // ─── transport state ────────────────────────────────────────────────────
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [loop, setLoop] = useState(false);
+  const [bypass, setBypass] = useState(false);
+  const [reverbBusy, setReverbBusy] = useState(false);
+  const [analyser, setAnalyser] = useState<Tone.Analyser | null>(null);
+
+  const controllerRef = useRef<RealtimeController | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const audioStartTimeRef = useRef<number>(0);
+  const playheadStartRef = useRef<number>(0);
+  const abortTokenRef = useRef<object>({});
+  const timecodeRef = useRef<HTMLSpanElement>(null);
+  const waveformRef = useRef<WaveformCanvasHandle>(null);
+  const reverbDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── decode WAV once ────────────────────────────────────────────────────
+
   useEffect(() => {
     let cancelled = false;
 
@@ -107,7 +146,9 @@ export function Editor({ sample, currentUserId }: Props) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
 
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         const ctx = new AudioCtx();
         audioContextRef.current = ctx;
 
@@ -129,7 +170,8 @@ export function Editor({ sample, currentUserId }: Props) {
     };
   }, [sample.blob_url]);
 
-  // Track Shift key for zero-crossing snap on region drag.
+  // ─── shift-held tracking (zero-crossing snap) ───────────────────────────
+
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
       if (e.key === "Shift") setShiftHeld(true);
@@ -145,9 +187,17 @@ export function Editor({ sample, currentUserId }: Props) {
     };
   }, []);
 
-  // Derive trim node for the waveform region.
+  // ─── chain derivations ──────────────────────────────────────────────────
+
   const trimIndex = state.chain.findIndex((n) => n.kind === "trim");
-  const trimNode = trimIndex >= 0 ? (state.chain[trimIndex] as Extract<EffectNode, { kind: "trim" }>) : null;
+  const trimNode =
+    trimIndex >= 0 ? (state.chain[trimIndex] as Extract<EffectNode, { kind: "trim" }>) : null;
+
+  const { start: trimStart, end: trimEnd } = useMemo(
+    () => getTrimBounds(state.chain, duration),
+    [state.chain, duration],
+  );
+  const trimmedDuration = Math.max(0, trimEnd - trimStart);
 
   const handleTrimChange = useCallback(
     (start: number, end: number) => {
@@ -169,13 +219,246 @@ export function Editor({ sample, currentUserId }: Props) {
     [trimIndex, trimNode, duration, shiftHeld, audioBuffer],
   );
 
-  const peaks = Array.isArray(sample.waveform_peaks) ? (sample.waveform_peaks as number[]) : [];
-  const isOwner = false; // placeholder; Phase 6 will look up sample owner for overwrite gating
-  void currentUserId; // used in Phase 6
+  // ─── effect-chain node updates (with reverb debounce) ───────────────────
 
-  const trimStart = trimNode?.startSec ?? 0;
-  const trimEnd = trimNode?.endSec ?? duration;
-  const trimmedDuration = Math.max(0, trimEnd - trimStart);
+  const handleNodeChange = useCallback(
+    (index: number, node: EffectNode) => {
+      dispatch({ type: "SET_EFFECT", index, node });
+      if (node.kind === "reverb") {
+        setReverbBusy(true);
+        if (reverbDebounceRef.current) clearTimeout(reverbDebounceRef.current);
+        reverbDebounceRef.current = setTimeout(() => setReverbBusy(false), 300);
+      }
+    },
+    [],
+  );
+
+  // ─── rAF playhead loop ──────────────────────────────────────────────────
+
+  const stopRaf = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
+  const startRaf = useCallback(
+    (playheadStart: number, regionStart: number, regionEnd: number, looping: boolean) => {
+      audioStartTimeRef.current = Tone.getContext().currentTime;
+      playheadStartRef.current = playheadStart;
+      const regionDuration = Math.max(0.001, regionEnd - regionStart);
+
+      function tick() {
+        const elapsed = Tone.getContext().currentTime - audioStartTimeRef.current;
+        const raw = playheadStart + elapsed;
+        const clamped = looping
+          ? regionStart + ((raw - regionStart) % regionDuration)
+          : Math.min(raw, regionEnd);
+
+        waveformRef.current?.setPlayhead(clamped);
+        if (timecodeRef.current) {
+          timecodeRef.current.textContent = formatTimecode(clamped);
+        }
+
+        rafRef.current = requestAnimationFrame(tick);
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    },
+    [],
+  );
+
+  // ─── play / stop handlers ───────────────────────────────────────────────
+
+  const resetTimecodeDisplay = useCallback((sec: number) => {
+    waveformRef.current?.setPlayhead(sec);
+    if (timecodeRef.current) timecodeRef.current.textContent = formatTimecode(sec);
+  }, []);
+
+  const handleStop = useCallback(() => {
+    abortTokenRef.current = {}; // invalidate any in-flight play
+    controllerRef.current?.stop();
+    controllerRef.current = null;
+    stopRaf();
+    setIsPlaying(false);
+    setIsStarting(false);
+    setAnalyser(null);
+    resetTimecodeDisplay(trimStart);
+  }, [stopRaf, resetTimecodeDisplay, trimStart]);
+
+  const handlePlay = useCallback(
+    async (startAt?: number) => {
+      if (!audioBuffer) return;
+      if (isStarting) return;
+
+      const token = {};
+      abortTokenRef.current = token;
+
+      controllerRef.current?.stop();
+      controllerRef.current = null;
+      stopRaf();
+
+      const offset = startAt ?? trimStart;
+      setIsStarting(true);
+
+      let ctrl: RealtimeController;
+      try {
+        ctrl = await playRealtime(audioBuffer, state.chain, {
+          bypass,
+          loop,
+          startAt: offset,
+        });
+      } catch (err) {
+        console.error("playRealtime failed", err);
+        if (abortTokenRef.current === token) setIsStarting(false);
+        return;
+      }
+
+      // Stale check — user may have stopped while awaiting reverb.ready
+      if (abortTokenRef.current !== token) {
+        ctrl.stop();
+        return;
+      }
+
+      controllerRef.current = ctrl;
+      setAnalyser(ctrl.analyser);
+
+      // Override onended to sync React state when playback finishes naturally
+      ctrl.source.onended = () => {
+        if (abortTokenRef.current !== token) return;
+        ctrl.stop();
+        stopRaf();
+        setIsPlaying(false);
+        setIsStarting(false);
+        setAnalyser(null);
+        controllerRef.current = null;
+        resetTimecodeDisplay(loop ? trimStart : trimEnd);
+      };
+
+      setIsStarting(false);
+      setIsPlaying(true);
+      startRaf(offset, trimStart, trimEnd, loop);
+    },
+    [audioBuffer, isStarting, stopRaf, trimStart, trimEnd, bypass, loop, state.chain, startRaf, resetTimecodeDisplay],
+  );
+
+  const handlePlayToggle = useCallback(() => {
+    if (isPlaying) handleStop();
+    else void handlePlay();
+  }, [isPlaying, handlePlay, handleStop]);
+
+  const handleBypassToggle = useCallback(() => {
+    const wasPlaying = isPlaying;
+    let currentHead = trimStart;
+    if (wasPlaying) {
+      currentHead =
+        playheadStartRef.current +
+        (Tone.getContext().currentTime - audioStartTimeRef.current);
+    }
+    setBypass((v) => !v);
+    if (wasPlaying) {
+      handleStop();
+      setTimeout(() => {
+        void handlePlay(currentHead);
+      }, 10);
+    }
+  }, [isPlaying, trimStart, handleStop, handlePlay]);
+
+  const handleLoopToggle = useCallback(() => {
+    setLoop((v) => !v);
+  }, []);
+
+  // ─── unmount cleanup ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    return () => {
+      abortTokenRef.current = {};
+      controllerRef.current?.stop();
+      controllerRef.current = null;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (reverbDebounceRef.current) clearTimeout(reverbDebounceRef.current);
+    };
+  }, []);
+
+  // ─── keyboard shortcuts ─────────────────────────────────────────────────
+
+  // Capture latest handlers in refs so the keydown effect doesn't need to
+  // re-register on every render.
+  const handlersRef = useRef({
+    handlePlayToggle,
+    handleStop,
+    handleBypassToggle,
+    handleLoopToggle,
+  });
+  useEffect(() => {
+    handlersRef.current = {
+      handlePlayToggle,
+      handleStop,
+      handleBypassToggle,
+      handleLoopToggle,
+    };
+  });
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "select" || tag === "textarea") return;
+
+      const isMeta = e.metaKey || e.ctrlKey;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        handlersRef.current.handlePlayToggle();
+        return;
+      }
+      if (e.key === "/") {
+        e.preventDefault();
+        handlersRef.current.handleLoopToggle();
+        return;
+      }
+      if (e.key === "a" && !isMeta && !e.shiftKey) {
+        e.preventDefault();
+        handlersRef.current.handleBypassToggle();
+        return;
+      }
+      if (e.key === "z" && isMeta && !e.shiftKey) {
+        e.preventDefault();
+        dispatch({ type: "UNDO" });
+        return;
+      }
+      if (e.key === "z" && isMeta && e.shiftKey) {
+        e.preventDefault();
+        dispatch({ type: "REDO" });
+        return;
+      }
+      // [ and ] — set trim in/out to current playhead (only while playing)
+      if ((e.key === "[" || e.key === "]") && controllerRef.current) {
+        e.preventDefault();
+        const head =
+          playheadStartRef.current +
+          (Tone.getContext().currentTime - audioStartTimeRef.current);
+        if (trimIndex >= 0 && trimNode) {
+          const patched: EffectNode =
+            e.key === "["
+              ? { ...trimNode, enabled: true, startSec: Math.min(head, trimNode.endSec - 0.01) }
+              : { ...trimNode, enabled: true, endSec: Math.max(head, trimNode.startSec + 0.01) };
+          dispatch({ type: "SET_EFFECT", index: trimIndex, node: patched });
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [trimIndex, trimNode]);
+
+  // ─── render ─────────────────────────────────────────────────────────────
+
+  const peaks = Array.isArray(sample.waveform_peaks) ? (sample.waveform_peaks as number[]) : [];
+  const isOwner = false; // Phase 6
+  void currentUserId;
 
   return (
     <div className="workbench -m-6 min-h-[calc(100vh-3.5rem)] p-8">
@@ -194,12 +477,12 @@ export function Editor({ sample, currentUserId }: Props) {
               <span className="workbench-readout text-sm text-[color:var(--ink-300)]">
                 {formatSampleId(sample.id)}
               </span>
-              {sample.family && (
-                <span className="workbench-label">{sample.family}</span>
-              )}
+              {sample.family && <span className="workbench-label">{sample.family}</span>}
             </div>
             <h1 className="workbench-heading text-3xl">
-              {sample.root_note ? `${sample.family ?? "sample"} · ${sample.root_note.toLowerCase()}` : (sample.family ?? "untitled")}
+              {sample.root_note
+                ? `${sample.family ?? "sample"} · ${sample.root_note.toLowerCase()}`
+                : sample.family ?? "untitled"}
             </h1>
           </div>
 
@@ -252,25 +535,35 @@ export function Editor({ sample, currentUserId }: Props) {
 
         {/* Waveform */}
         <WaveformCanvas
+          ref={waveformRef}
           peaks={peaks}
           durationSec={duration}
           trimStart={trimStart}
           trimEnd={trimEnd}
           onTrimChange={handleTrimChange}
-          playheadSec={0}
         />
 
-        {/* Transport placeholder — wired in Phase 5 */}
-        <section className="border border-[color:var(--wb-line-soft)] px-5 py-4 text-xs workbench-readout text-[color:var(--ink-500)] lowercase">
-          transport — coming in phase 5
-        </section>
+        {/* Transport strip */}
+        <TransportBar
+          ref={timecodeRef}
+          isPlaying={isPlaying}
+          isStarting={isStarting}
+          disabled={!audioBuffer}
+          loop={loop}
+          bypass={bypass}
+          analyser={analyser}
+          onPlayToggle={handlePlayToggle}
+          onLoopToggle={handleLoopToggle}
+          onBypassToggle={handleBypassToggle}
+        />
 
         {/* Signal chain — horizontal pedalboard */}
         <section className="space-y-2">
           <h2 className="workbench-label">chain</h2>
           <EffectChain
             chain={state.chain}
-            onNodeChange={(index, node) => dispatch({ type: "SET_EFFECT", index, node })}
+            onNodeChange={handleNodeChange}
+            reverbBusy={reverbBusy}
           />
         </section>
 
