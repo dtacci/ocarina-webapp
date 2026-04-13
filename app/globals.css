@@ -356,6 +356,102 @@
   }
 }
 
+/* ── Sample Editor "workbench" scope ─────────────────────────────────
+   Field-recordist's-workbench aesthetic: warm charcoal canvas, rationed
+   amber accent, mono readouts everywhere. Scoped to .workbench wrapper
+   so it doesn't leak into the rest of the site. */
+.workbench {
+  /* Warm ink scale (not purple-tinted like site default) */
+  --ink-900: oklch(0.12 0.010 70);
+  --ink-800: oklch(0.16 0.010 70);
+  --ink-700: oklch(0.22 0.008 70);
+  --ink-600: oklch(0.30 0.008 70);
+  --ink-500: oklch(0.50 0.012 75);
+  --ink-300: oklch(0.78 0.012 80);
+  --ink-200: oklch(0.88 0.010 80);
+  --ink-100: oklch(0.96 0.008 80);
+
+  /* Rationed accents — amber for active/LED, oxide for clipping, moss for saved */
+  --wb-amber: oklch(0.78 0.18 68);
+  --wb-amber-dim: oklch(0.50 0.12 65);
+  --wb-amber-glow: oklch(0.78 0.18 68 / 0.30);
+  --wb-oxide: oklch(0.55 0.19 28);
+  --wb-moss: oklch(0.62 0.08 140);
+
+  /* Hairlines */
+  --wb-line: oklch(0.30 0.008 70);
+  --wb-line-soft: oklch(0.22 0.008 70);
+
+  background-color: var(--ink-900);
+  color: var(--ink-200);
+}
+
+.workbench-heading {
+  font-family: var(--font-heading), serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-transform: lowercase;
+}
+
+.workbench-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+
+.workbench-readout {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  color: var(--ink-300);
+}
+
+.workbench-led {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--wb-amber-dim);
+  background: transparent;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.workbench-led[data-on="true"] {
+  background: var(--wb-amber);
+  border-color: var(--wb-amber);
+  box-shadow: 0 0 6px var(--wb-amber-glow), 0 0 1px var(--wb-amber);
+}
+
+.workbench-hr {
+  border: 0;
+  border-top: 1px solid var(--wb-line-soft);
+}
+
+/* Bake-on-save sweep — amber wipe driven by --bake-progress (0..1) */
+.workbench-bake-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--wb-amber) 45%,
+    var(--wb-amber) 55%,
+    transparent 100%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.6;
+  transform: translateX(calc((var(--bake-progress, 0) * 100%) - 100%));
+  transition: transform 80ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench-bake-mask {
+    transition: none;
+  }
+}
+
 /* Karaoke theater mode — dims sidebar and header during playback */
 body.karaoke-theater [data-slot="sidebar"],
 body.karaoke-theater nav,

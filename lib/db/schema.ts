@@ -159,6 +159,10 @@ export const samples = pgTable("samples", {
   loopable: boolean("loopable").notNull().default(false),
   verified: boolean("verified").notNull().default(false),
   isSystem: boolean("is_system").notNull().default(false),
+  /** Source sample this was edited from (sample-editor lineage, null for originals). */
+  sourceSampleId: text("source_sample_id"),
+  /** Effect-chain spec from the sample editor, replayable on re-open. */
+  editSpec: jsonb("edit_spec"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
