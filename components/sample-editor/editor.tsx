@@ -4,6 +4,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { WaveformCanvas } from "./waveform-canvas";
+import { EffectChain } from "./effect-chain";
 import { defaultChain, type EffectNode } from "@/lib/audio/editor-types";
 import { formatDuration, formatSampleId, formatTimecode } from "@/lib/sample-editor/format";
 import { findNearestZeroCrossing } from "@/lib/audio/zero-crossing";
@@ -259,9 +260,23 @@ export function Editor({ sample, currentUserId }: Props) {
           playheadSec={0}
         />
 
-        {/* Placeholder strips for future phases */}
-        <section className="border border-[color:var(--wb-line-soft)] px-5 py-6 text-xs workbench-readout text-[color:var(--ink-500)] lowercase">
-          transport · effect chain · metadata — coming in phases 4–6
+        {/* Transport placeholder — wired in Phase 5 */}
+        <section className="border border-[color:var(--wb-line-soft)] px-5 py-4 text-xs workbench-readout text-[color:var(--ink-500)] lowercase">
+          transport — coming in phase 5
+        </section>
+
+        {/* Signal chain — horizontal pedalboard */}
+        <section className="space-y-2">
+          <h2 className="workbench-label">chain</h2>
+          <EffectChain
+            chain={state.chain}
+            onNodeChange={(index, node) => dispatch({ type: "SET_EFFECT", index, node })}
+          />
+        </section>
+
+        {/* Metadata placeholder — wired in Phase 6 */}
+        <section className="border border-[color:var(--wb-line-soft)] px-5 py-4 text-xs workbench-readout text-[color:var(--ink-500)] lowercase">
+          metadata — coming in phase 6
         </section>
       </div>
     </div>
