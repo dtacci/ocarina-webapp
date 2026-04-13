@@ -1555,9 +1555,6 @@ const handleAddTrack = useCallback(() => {
   onReorder={handleReorder}
   />
 
-      {/* Drum Machine Panel (inline, below tracks) */}
-      {drumsOpen && <DrumMachine compact deviceId={deviceId} />}
-
       {/* Actions */}
       <div className="flex items-center gap-2">
         <Button variant="outline" onClick={handleAddTrack}>
@@ -1569,6 +1566,9 @@ const handleAddTrack = useCallback(() => {
           Clear All
         </Button>
       </div>
+
+      {/* Drum Machine Panel (inline, after track actions) */}
+      {drumsOpen && <DrumMachine compact deviceId={deviceId} />}
 
       {/* Status Bar */}
       <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
