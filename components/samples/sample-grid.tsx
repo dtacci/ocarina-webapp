@@ -1,6 +1,7 @@
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import type { SampleUserState } from "@/lib/db/queries/sample-user-data";
 import { SampleCard } from "./sample-card";
+import { SampleListProvider } from "./sample-list-context";
 
 interface Props {
   samples: SampleWithVibes[];
@@ -19,18 +20,21 @@ export function SampleGrid({ samples, userData }: Props) {
   }
 
   return (
-    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 stagger-fade">
-      {samples.map((sample) => {
-        const state = userData?.get(sample.id);
-        return (
-          <SampleCard
-            key={sample.id}
-            sample={sample}
-            initialFavorite={state?.isFavorite ?? false}
-            initialRating={state?.userRating ?? null}
-          />
-        );
-      })}
-    </div>
+    <SampleListProvider samples={samples}>
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 stagger-fade">
+        {samples.map((sample, index) => {
+          const state = userData?.get(sample.id);
+          return (
+            <SampleCard
+              key={sample.id}
+              sample={sample}
+              index={index}
+              initialFavorite={state?.isFavorite ?? false}
+              initialRating={state?.userRating ?? null}
+            />
+          );
+        })}
+      </div>
+    </SampleListProvider>
   );
 }
