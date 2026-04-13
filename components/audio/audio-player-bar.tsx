@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import {
   useAudioPlayerStore,
+  useCurrentTime,
   useHasHydrated,
   useLastTrack,
   useNowPlaying,
@@ -128,7 +129,7 @@ function ResumeChip() {
 
 function PlayerBarShell() {
   const current = useNowPlaying();
-  const { status, currentTime, duration } = useTransport();
+  const { status, duration } = useTransport();
   const queueLength = useQueueLength();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -141,7 +142,6 @@ function PlayerBarShell() {
   if (!current) return null;
 
   const isPlaying = status === "playing" || status === "buffering";
-  const progress = duration > 0 ? currentTime / duration : 0;
   const hasQueue = queueLength > 1;
 
   return (
@@ -211,8 +211,6 @@ function PlayerBarShell() {
           </div>
           <ProgressRow
             peaks={current.peaks ?? null}
-            progress={progress}
-            currentTime={currentTime}
             duration={duration}
             onSeek={seek}
             status={status}
@@ -258,11 +256,7 @@ function PlayerBarShell() {
 
       {/* Mobile progress strip under the row */}
       <div className="block sm:hidden">
-        <MobileProgressStrip
-          currentTime={currentTime}
-          duration={duration}
-          onSeek={seek}
-        />
+        <MobileProgressStrip duration={duration} onSeek={seek} />
       </div>
 
       <ExpandedSheet open={sheetOpen} onOpenChange={setSheetOpen} />
@@ -290,20 +284,18 @@ function TrackArtwork({ track }: { track: ReturnType<typeof useNowPlaying> }) {
 
 function ProgressRow({
   peaks,
-  progress,
-  currentTime,
   duration,
   onSeek,
   status,
 }: {
   peaks: number[] | null;
-  progress: number;
-  currentTime: number;
   duration: number;
   onSeek: (s: number) => void;
   status: string;
 }) {
+  const currentTime = useCurrentTime();
   const disabled = duration <= 0 || status === "loading";
+  const progress = duration > 0 ? currentTime / duration : 0;
   return (
     <div className="flex items-center gap-2 text-[10px] tabular-nums text-muted-foreground">
       <span className="w-8 text-right">{fmtTime(currentTime)}</span>
@@ -327,14 +319,13 @@ function ProgressRow({
 }
 
 function MobileProgressStrip({
-  currentTime,
   duration,
   onSeek,
 }: {
-  currentTime: number;
   duration: number;
   onSeek: (s: number) => void;
 }) {
+  const currentTime = useCurrentTime();
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
   return (
     <div className="relative h-1 w-full bg-muted">
@@ -409,7 +400,8 @@ function ExpandedSheet({
 
 function ExpandedBody({ onClose }: { onClose: () => void }) {
   const current = useNowPlaying();
-  const { currentTime, duration, status } = useTransport();
+  const { duration, status } = useTransport();
+  const currentTime = useCurrentTime();
   const queue = useAudioPlayerStore((s) => s.queue);
   const queueIndex = useAudioPlayerStore((s) => s.queueIndex);
   const loop = useAudioPlayerStore((s) => s.loop);

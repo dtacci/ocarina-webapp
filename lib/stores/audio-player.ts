@@ -6,6 +6,7 @@ import {
   subscribeWithSelector,
   createJSONStorage,
 } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 
 export type TrackKind = "sample" | "recording";
 
@@ -340,6 +341,10 @@ if (typeof window !== "undefined") {
 }
 
 // Selector hooks — keep re-renders tight by picking only what you need.
+// Object-returning hooks use useShallow so consumers only re-render when
+// a picked field actually changes. currentTime ticks at ~4 Hz, so it's
+// split into its own hook to keep the bar's title/artwork/buttons still
+// when only the playhead advances.
 
 export const useNowPlaying = () =>
   useAudioPlayerStore((s) => s.current);
@@ -352,15 +357,22 @@ export const useIsPlaying = (trackId: string | null | undefined): boolean =>
       (s.status === "playing" || s.status === "buffering"),
   );
 
+export const useStatus = () => useAudioPlayerStore((s) => s.status);
+
+export const useCurrentTime = () =>
+  useAudioPlayerStore((s) => s.currentTime);
+
+export const useDuration = () => useAudioPlayerStore((s) => s.duration);
+
 export const useTransport = () =>
-  useAudioPlayerStore((s) => ({
-    status: s.status,
-    currentTime: s.currentTime,
-    duration: s.duration,
-  }));
+  useAudioPlayerStore(
+    useShallow((s) => ({ status: s.status, duration: s.duration })),
+  );
 
 export const useVolumeState = () =>
-  useAudioPlayerStore((s) => ({ volume: s.volume, muted: s.muted }));
+  useAudioPlayerStore(
+    useShallow((s) => ({ volume: s.volume, muted: s.muted })),
+  );
 
 export const useQueueLength = () =>
   useAudioPlayerStore((s) => s.queue.length);
