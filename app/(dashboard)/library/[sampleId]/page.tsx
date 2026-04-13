@@ -8,7 +8,7 @@ import { SamplePlayer } from "@/components/audio/sample-player";
 import { FavoriteButton } from "@/components/samples/favorite-button";
 import { RatingStars } from "@/components/samples/rating-stars";
 import Link from "next/link";
-import { ArrowLeft, Mic } from "lucide-react";
+import { ArrowLeft, Mic, Scissors } from "lucide-react";
 
 interface Props {
   params: Promise<{ sampleId: string }>;
@@ -91,6 +91,13 @@ export default async function SampleDetailPage({ params }: Props) {
           initialRating={userState.userRating}
           size="md"
         />
+        <Link
+          href={`/sample-editor/${encodeURIComponent(sample.id)}`}
+          className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors lowercase"
+        >
+          <Scissors className="size-3.5" />
+          edit in sample editor →
+        </Link>
       </div>
 
       {/* Audio — preview if available, otherwise decorative waveform */}
