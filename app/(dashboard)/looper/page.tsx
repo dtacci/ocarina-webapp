@@ -1334,6 +1334,11 @@ const handleAddTrack = useCallback(() => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
+      // Skip when any modifier is held so OS/browser shortcuts pass through
+      // (Cmd+R reload, Ctrl+R, Cmd+T new tab, etc.)
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
 
       switch (e.code) {
         case "Space":
@@ -1400,7 +1405,7 @@ const handleAddTrack = useCallback(() => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">LooperDA</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Looper</h1>
             <p className="text-muted-foreground">
               Multi-track loop station inspired by GarageBand
             </p>
@@ -1515,9 +1520,6 @@ const handleAddTrack = useCallback(() => {
         </div>
       </div>
 
-      {/* Drum Machine Panel (inline) */}
-      {drumsOpen && <DrumMachine compact deviceId={deviceId} />}
-
       {/* Loop Length Selector */}
       <div className="flex items-center gap-3">
         <span className="text-sm text-muted-foreground">Loop Length:</span>
@@ -1552,6 +1554,9 @@ const handleAddTrack = useCallback(() => {
   onPanChange={handlePanChange}
   onReorder={handleReorder}
   />
+
+      {/* Drum Machine Panel (inline, below tracks) */}
+      {drumsOpen && <DrumMachine compact deviceId={deviceId} />}
 
       {/* Actions */}
       <div className="flex items-center gap-2">
