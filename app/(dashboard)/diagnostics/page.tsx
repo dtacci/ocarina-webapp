@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { DeviceStatusBar } from "@/components/metrics/device-status-bar";
-import { StatsGrid } from "@/components/metrics/stats-grid";
-import { UploadChart } from "@/components/metrics/upload-chart";
-import { LatencyChart } from "@/components/metrics/latency-chart";
-import { EventsFeed } from "@/components/metrics/events-feed";
-import type { MetricsResponse } from "@/app/api/metrics/route";
+import { DeviceStatusBar } from "@/components/diagnostics/device-status-bar";
+import { StatsGrid } from "@/components/diagnostics/stats-grid";
+import { UploadChart } from "@/components/diagnostics/upload-chart";
+import { LatencyChart } from "@/components/diagnostics/latency-chart";
+import { EventsFeed } from "@/components/diagnostics/events-feed";
+import type { MetricsResponse } from "@/app/api/diagnostics/route";
 
 async function getMetrics(userId: string): Promise<MetricsResponse> {
   const supabase = await createClient();
