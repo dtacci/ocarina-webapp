@@ -19,6 +19,7 @@ import {
   Drum,
   Heart,
   Scissors,
+  Wrench,
 } from "lucide-react";
 
 import {
@@ -72,7 +73,6 @@ const navTools: NavItem[] = [
   { title: "Sample Editor", url: "/sample-editor", icon: Scissors, feature: "sampleEditor" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
-  { title: "Metrics", url: "/metrics", icon: BarChart2, feature: "deviceMetrics" as const },
   { title: "Analytics", url: "/analytics", icon: BarChart2, feature: "analyticsDashboard" as const },
 ];
 
@@ -216,6 +216,10 @@ export function AppSidebar() {
                 <ChevronUp className="ml-auto size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" className="w-[--radix-popper-anchor-width]">
+                <DropdownMenuItem render={<Link href="/diagnostics" />}>
+                  <Wrench className="size-4" />
+                  Diagnostics
+                </DropdownMenuItem>
                 <form action="/api/auth/signout" method="post">
                   <DropdownMenuItem render={<button type="submit" className="w-full" />}>
                     <LogOut className="size-4" />
