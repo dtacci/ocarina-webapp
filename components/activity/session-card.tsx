@@ -3,9 +3,17 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Music, Repeat, Clock, Play, Pause, Download } from "lucide-react";
-import { useWaveSurfer } from "@/components/audio/use-wavesurfer";
+import { Music, Repeat, Clock, Play, Pause, Download, Loader2 } from "lucide-react";
+import { PeaksSvg } from "@/components/audio/peaks-svg";
+import {
+  RecordingListProvider,
+  recordingToTrack,
+  useRecordingList,
+} from "@/components/recordings/recording-list-context";
+import {
+  useAudioPlayerStore,
+  useIsPlaying,
+} from "@/lib/stores/audio-player";
 import type { SessionWithRecordings, SessionRecording } from "@/lib/db/queries/sessions";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -44,38 +52,59 @@ function formatDate(dateStr: string): string {
 // ── Recording waveform row (SoundCloud-style) ─────────────────────────────────
 
 function RecordingWave({ recording }: { recording: SessionRecording }) {
-  const {
-    containerRef,
-    isReady,
-    isPlaying,
-    currentTime,
-    duration: wsDuration,
-    togglePlay,
-  } = useWaveSurfer({
-    url: recording.blob_url,
-    height: 56,
-    barWidth: 2,
-    barGap: 1,
-    barRadius: 1,
-    waveColor: "oklch(0.45 0.02 65)",
-    progressColor: "oklch(0.70 0.18 65)",
-    lazy: true,
-  });
+  const list = useRecordingList();
+  const isPlaying = useIsPlaying(recording.id);
+  const isCurrent = useAudioPlayerStore(
+    (s) => s.current?.id === recording.id,
+  );
+  const isLoading = useAudioPlayerStore(
+    (s) => s.current?.id === recording.id && s.status === "loading",
+  );
+  const currentTime = useAudioPlayerStore((s) =>
+    s.current?.id === recording.id ? s.currentTime : 0,
+  );
+  const storeDuration = useAudioPlayerStore((s) =>
+    s.current?.id === recording.id ? s.duration : 0,
+  );
+  const playList = useAudioPlayerStore((s) => s.playList);
+  const playTrack = useAudioPlayerStore((s) => s.playTrack);
 
-  const dur = wsDuration > 0 ? wsDuration : recording.duration_sec;
-  const label = recording.recording_type === "master"
-    ? (recording.title ?? "Session Mix")
-    : recording.title ?? "Recording";
+  function handlePlay() {
+    if (list) {
+      const tracks = list.recordings.map((r) => list.toTrack(r));
+      const idx = list.recordings.findIndex((r) => r.id === recording.id);
+      playList(tracks, idx >= 0 ? idx : 0);
+      return;
+    }
+    playTrack(recordingToTrack(recording));
+  }
+
+  const dur = storeDuration > 0 ? storeDuration : recording.duration_sec;
+  const label =
+    recording.recording_type === "master"
+      ? (recording.title ?? "Session Mix")
+      : (recording.title ?? "Recording");
+  const progress = dur > 0 ? Math.min(1, currentTime / dur) : 0;
 
   return (
-    <div className="flex items-center gap-3">
+    <div
+      className="flex items-center gap-3"
+      data-playing={isCurrent ? "true" : undefined}
+    >
       {/* Play button */}
       <button
-        onClick={togglePlay}
-        disabled={!isReady}
-        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
+        onClick={handlePlay}
+        aria-label={isPlaying ? `Pause ${label}` : `Play ${label}`}
+        aria-pressed={isPlaying}
+        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
       >
-        {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5 ml-px" />}
+        {isLoading ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : isPlaying ? (
+          <Pause className="size-3.5" />
+        ) : (
+          <Play className="size-3.5 ml-px" />
+        )}
       </button>
 
       {/* Waveform + title */}
@@ -83,12 +112,17 @@ function RecordingWave({ recording }: { recording: SessionRecording }) {
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-xs font-medium truncate">{label}</span>
           <span className="text-xs tabular-nums text-muted-foreground shrink-0">
-            {formatWaveDuration(currentTime || dur)}
+            {formatWaveDuration(isCurrent ? currentTime : dur)}
           </span>
         </div>
-        <div className="relative h-14 rounded bg-muted overflow-hidden">
-          <div ref={containerRef} className="absolute inset-0" />
-          {!isReady && <Skeleton className="absolute inset-0 rounded" />}
+        <div className="relative h-14 rounded bg-muted/40 overflow-hidden">
+          <PeaksSvg
+            peaks={recording.waveform_peaks}
+            height={56}
+            bars={120}
+            progress={isCurrent ? progress : undefined}
+            className="px-1"
+          />
         </div>
       </div>
     </div>
@@ -170,11 +204,13 @@ export function SessionCard({ session }: { session: SessionWithRecordings }) {
       <div className="px-4 py-4 space-y-4">
         {/* Waveforms for each recording (SoundCloud-inspired) */}
         {hasRecordings ? (
-          <div className="space-y-4">
-            {session.recordings.map((rec) => (
-              <RecordingWave key={rec.id} recording={rec} />
-            ))}
-          </div>
+          <RecordingListProvider recordings={session.recordings}>
+            <div className="space-y-4">
+              {session.recordings.map((rec) => (
+                <RecordingWave key={rec.id} recording={rec} />
+              ))}
+            </div>
+          </RecordingListProvider>
         ) : null}
 
         {/* Session metadata footer */}
