@@ -18,7 +18,7 @@ Web companion for the Digital Ocarina (voice-to-instrument synthesizer). Dual pu
 | File Storage | Vercel Blob |
 | AI | Vercel AI SDK 6.x (Anthropic default, OpenAI switchable) |
 | UI | Tailwind CSS + shadcn/ui |
-| Audio | WaveSurfer.js 7.12 (real waveform rendering) |
+| Audio | WaveSurfer.js 7.12 (waveform + regions + timeline), Tone.js 15.1 (realtime effect chain + Tone.Offline render), native Web Audio (decode + OfflineAudioContext for peaks) |
 | Theme | Dark mode, warm amber/gold (oklch), DM Serif Display + DM Sans + JetBrains Mono |
 
 ## What's Built (v0.1 + v0.2 Early — COMPLETE)
@@ -49,11 +49,11 @@ Web companion for the Digital Ocarina (voice-to-instrument synthesizer). Dual pu
 - **Analytics Dashboard** (/analytics) — Session aggregates (total/avg/per-day), mode breakdown pie chart, day-of-week + hour-of-day histograms, top vibes/kits ranked; 30/90/180/365 day range selector; pure HTML/CSS charts (no charting library)
 - **Auth Page Visual Overhaul** — Split-screen layout (left brand panel + right form), serif DM headline, sine wave SVG visualizer, glassmorphic cards, staggered fade-up animations (CSS-only, no JS), warm focus halos
 - **Accessibility Guard** — `@media (prefers-reduced-motion: reduce)` silences all decorative animations; snaps to final visual states without breaking interactions
-- **Sample Editor Stub** (/sample-editor) — Placeholder page with "Drafts", "Your Samples", "Recent Edits" sections; wired into sidebar; WaveSurfer trimmer deferred to Phase 2
+- **Sample Editor** (/sample-editor) — Full "field recordist's workbench" editor shipped in 7 phases. Landing with drafts + user samples + lineage ledger; per-sample editor at `/sample-editor/[id]` with WaveSurfer regions trimmer (shift = snap to zero crossing), timeline tick ruler, horizontal signal-chain with 6 effects (trim · fade · filter · pitch · reverb · gain), custom physical A|B bypass switch, post-chain peak meter, rAF playhead sync via imperative handle (zero React re-renders at 60fps), Tone.js realtime + Tone.Offline save render, PCM16 WAV encode, Vercel Blob upload, non-destructive forks via `samples.source_sample_id` + `samples.edit_spec` JSONB, amber bake-on-save animation, full keyboard shortcuts (space · / · a · [ ] · ⌘z · ⌘⇧z · ⌘s · shift). Bespoke primitives (Knob/LinearSlider/Dropdown/SegmentedGroup/Overlay) — no shadcn in editor chrome. Warm charcoal + rationed amber palette scoped via `.workbench` CSS class.
 - **Diagnostics Dashboard Refactor** — Renamed "Metrics" → "Diagnostics"; moved from sidebar Tools to "My Account" dropdown (admin-only, design ready for future access control)
 
-**Database (17 tables, +1 from v0.1):**
-users, user_subscriptions, devices, samples, sample_vibes, sample_user_data, kits, recordings, loop_tracks, sessions, karaoke_songs, karaoke_lyrics, karaoke_user_data, sync_queue, device_configs, (+ sample_editor_lineage for Phase 2)
+**Database (16 tables, +2 columns on `samples`):**
+users, user_subscriptions, devices, samples, sample_vibes, sample_user_data, kits, recordings, loop_tracks, sessions, karaoke_songs, karaoke_lyrics, karaoke_user_data, sync_queue, device_configs. Sample Editor added `samples.source_sample_id` (FK to samples.id, ON DELETE SET NULL) + `samples.edit_spec` (jsonb) for fork lineage and chain round-trip — no new table.
 
 **Seeded Data:**
 3,859 samples + 24,484 vibes + 12 kits + 1,084 karaoke songs + 213 sessions
@@ -65,7 +65,6 @@ Enabled: sampleBrowser, aiSearch, aiKitBuilder, kitBrowser, deviceRegistration, 
 
 **v0.2 Phase 2 (Remaining):**
 - **Looper Dashboard** — Visual representation of Teensy's 4-6 track loop state with waveform rendering
-- **Sample Editor Phase 2** — WaveSurfer.js regions plugin for trimming (start/end markers, snap-to-zero crossing)
 - **Global Audio Player Singleton** — Zustand store, persists across navigation
 - **Realtime Bridge** — Supabase Realtime relay: Pi publishes Teensy STATUS → web subscribes
 - **Pi Sync Agent** — Python daemon: FileWatcher + SQLite queue + presigned Blob uploads
@@ -73,6 +72,23 @@ Enabled: sampleBrowser, aiSearch, aiKitBuilder, kitBrowser, deviceRegistration, 
 
 Disabled flags (v0.2 Phase 2 ready):
 - **looperDashboard**, **realtimeBridge**, **mp3Transcoding**, **piSyncAgent**
+
+### Sample Editor v2 Backlog (deferred, not blocking)
+
+- **Overwrite save** — gate `save` (vs `save as new`) by `sample.user_id === currentUserId`; update existing row + blob in place
+- **Chain restore on reopen** — re-seed reducer from `samples.edit_spec` when a fork is opened (currently always defaults); needs care to avoid double-applying effects since the WAV is already baked
+- **`samples.title` column** — promote the editor's metadata `name` field to a real DB column so library cards can show human-readable names (today `id` is shown)
+- **Compressor** effect (threshold, ratio, attack, release, makeup)
+- **Normalize / LUFS target** — integrated-loudness render pass for broadcast-ready output
+- **Spectrogram view** — WebGL canvas toggle over the waveform
+- **Silence auto-trim** — detect sub-threshold head/tail regions and offer a one-click crop
+- **Preset chains** — "lo-fi warm", "field-recording cleanup", savable user presets
+- **Loop crossfade** — micro-crossfade at loop points for seamless sustained samples
+- **Time-stretch** — independent of pitch (Tone.GrainPlayer or WSOLA)
+- **Mobile touch pass** — current layout degrades gracefully but isn't optimized for single-thumb editing
+- **LUFS + True Peak meter** — alongside the current peak meter
+- **Drag reorder effects** — effect-chain accepts the action already; just needs HTML5 drag handlers on cards
+- **Add / remove effects via "+ ADD"** — reducer + Overlay component exist; just needs the command-menu UI wiring
 
 ## v0.3 (Future)
 
@@ -91,15 +107,26 @@ looperWaveforms, quantizationControls, sampleDragDrop, drumPatternEditor, karaok
 ## Key Files
 
 ```
-app/(dashboard)/library/       Parallel routes: layout.tsx + page.tsx + @filters/ + @grid/
-components/audio/use-wavesurfer.ts   Custom WaveSurfer.js hook
-lib/features.ts                37 feature flags controlling all route access
-lib/db/queries/                All Supabase REST queries
-lib/config/default-config.ts   70+ config fields matching pi/config.yaml
-lib/ai/provider.ts             Async provider switching (Anthropic/OpenAI)
-middleware.ts                  Auth + device API key validation
-app/api/sync/                  Pi sync endpoints (5 routes)
-app/api/ai/                    AI search + kit builder + provider toggle
+app/(dashboard)/library/             Parallel routes: layout.tsx + page.tsx + @filters/ + @grid/
+app/(dashboard)/sample-editor/       Landing + [sampleId]/ editor route + actions.ts
+app/api/samples/create/route.ts      Sample Editor save-as-new endpoint (blob + DB insert)
+components/audio/use-wavesurfer.ts   Library list/detail WaveSurfer hook
+components/sample-editor/            Workbench editor: editor.tsx + waveform-canvas.tsx +
+                                     transport-bar.tsx + effect-chain.tsx + effect-cards/ +
+                                     primitives/ (knob, linear-slider, dropdown, segmented-group,
+                                     overlay) + peak-meter + ab-switch + bake-overlay + metadata-panel
+lib/audio/tone-chain.ts              playRealtime + renderOffline, Tone.js effect graph
+lib/audio/editor-types.ts            EffectNode discriminated union + EditSpec + defaults
+lib/audio/wav-encoder.ts             AudioBuffer → PCM16 RIFF/WAVE encoder
+lib/audio/compute-peaks.ts           Shared 200-point peak computation
+lib/audio/zero-crossing.ts           Snap-to-zero helper for click-free trims
+lib/features.ts                      Feature flags controlling all route access
+lib/db/queries/                      All Supabase REST queries (+ sample-editor.ts)
+lib/config/default-config.ts         70+ config fields matching pi/config.yaml
+lib/ai/provider.ts                   Async provider switching (Anthropic/OpenAI)
+middleware.ts                        Auth + device API key validation
+app/api/sync/                        Pi sync endpoints (5 routes)
+app/api/ai/                          AI search + kit builder + provider toggle
 ```
 
 ## The Hardware Project
