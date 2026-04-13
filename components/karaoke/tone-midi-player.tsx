@@ -6,6 +6,7 @@ import { Play, Pause, SkipBack, Volume2, ChevronDown, ChevronUp } from "lucide-r
 // Dynamically imported — only loads in browser
 import * as Tone from "tone";
 import { Midi } from "@tonejs/midi";
+import { useAudioPlayerStore } from "@/lib/stores/audio-player";
 
 type PlayerState = "loading" | "ready" | "playing" | "paused" | "error";
 
@@ -140,6 +141,8 @@ export default function ToneMidiPlayer({
       setState("paused");
       onStateChange(false);
     } else {
+      // Mutual exclusion with the global player.
+      useAudioPlayerStore.getState().stop();
       await Tone.start();
       Tone.getTransport().start();
       startRaf();
