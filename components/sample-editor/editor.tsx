@@ -2,15 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import * as Tone from "tone";
 import { WaveformCanvas, type WaveformCanvasHandle } from "./waveform-canvas";
 import { EffectChain } from "./effect-chain";
 import { TransportBar } from "./transport-bar";
+import { BakeOverlay, type BakeOverlayHandle } from "./bake-overlay";
+import {
+  MetadataPanel,
+  type SampleCategory,
+  type SampleFamily,
+  type SampleMetadata,
+} from "./metadata-panel";
 import { defaultChain, type EffectNode } from "@/lib/audio/editor-types";
-import { playRealtime, type RealtimeController } from "@/lib/audio/tone-chain";
+import { playRealtime, renderOffline, type RealtimeController } from "@/lib/audio/tone-chain";
+import { encodeWav } from "@/lib/audio/wav-encoder";
+import { computePeaksFromBuffer } from "@/lib/audio/compute-peaks";
 import { formatDuration, formatSampleId, formatTimecode } from "@/lib/sample-editor/format";
 import { findNearestZeroCrossing } from "@/lib/audio/zero-crossing";
+import { revalidateSampleEditor } from "@/app/(dashboard)/sample-editor/actions";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 
 interface Props {
@@ -102,9 +113,40 @@ function getTrimBounds(
   return { start: 0, end: fallbackDuration };
 }
 
+function initialMetadata(sample: SampleWithVibes): SampleMetadata {
+  const validFamilies: SampleFamily[] = [
+    "strings", "brass", "woodwind", "keys", "mallet",
+    "drums", "guitar", "other_perc", "other", "fx",
+  ];
+  const validCategories: SampleCategory[] = ["acoustic", "percussion", "fx"];
+
+  const family: SampleFamily | "" =
+    sample.family && validFamilies.includes(sample.family as SampleFamily)
+      ? (sample.family as SampleFamily)
+      : "";
+  const category: SampleCategory | "" =
+    sample.category && validCategories.includes(sample.category as SampleCategory)
+      ? (sample.category as SampleCategory)
+      : "";
+
+  return {
+    name: "",
+    family,
+    category,
+    rootNote: sample.root_note ?? "",
+    brightness: sample.brightness ?? 5,
+    attack: sample.attack ?? 5,
+    sustain: sample.sustain ?? 5,
+    texture: sample.texture ?? 5,
+    warmth: sample.warmth ?? 5,
+    vibes: sample.vibes ?? [],
+  };
+}
+
 // ─── component ────────────────────────────────────────────────────────────
 
 export function Editor({ sample, currentUserId }: Props) {
+  const router = useRouter();
   const duration = sample.duration_sec;
   const [state, dispatch] = useReducer(reducer, undefined, () => ({
     chain: defaultChain(duration),
@@ -134,6 +176,24 @@ export function Editor({ sample, currentUserId }: Props) {
   const timecodeRef = useRef<HTMLSpanElement>(null);
   const waveformRef = useRef<WaveformCanvasHandle>(null);
   const reverbDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── save / metadata state ──────────────────────────────────────────────
+
+  const [metadata, setMetadata] = useState<SampleMetadata>(() => initialMetadata(sample));
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const bakeRef = useRef<BakeOverlayHandle>(null);
+
+  const handleMetadataChange = useCallback((patch: Partial<SampleMetadata>) => {
+    setMetadata((m) => ({ ...m, ...patch }));
+  }, []);
+
+  // Auto-dismiss toast after 3s.
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), toast.kind === "success" ? 3000 : 5000);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   // ─── decode WAV once ────────────────────────────────────────────────────
 
@@ -170,7 +230,7 @@ export function Editor({ sample, currentUserId }: Props) {
     };
   }, [sample.blob_url]);
 
-  // ─── shift-held tracking (zero-crossing snap) ───────────────────────────
+  // ─── shift-held tracking ────────────────────────────────────────────────
 
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
@@ -219,19 +279,14 @@ export function Editor({ sample, currentUserId }: Props) {
     [trimIndex, trimNode, duration, shiftHeld, audioBuffer],
   );
 
-  // ─── effect-chain node updates (with reverb debounce) ───────────────────
-
-  const handleNodeChange = useCallback(
-    (index: number, node: EffectNode) => {
-      dispatch({ type: "SET_EFFECT", index, node });
-      if (node.kind === "reverb") {
-        setReverbBusy(true);
-        if (reverbDebounceRef.current) clearTimeout(reverbDebounceRef.current);
-        reverbDebounceRef.current = setTimeout(() => setReverbBusy(false), 300);
-      }
-    },
-    [],
-  );
+  const handleNodeChange = useCallback((index: number, node: EffectNode) => {
+    dispatch({ type: "SET_EFFECT", index, node });
+    if (node.kind === "reverb") {
+      setReverbBusy(true);
+      if (reverbDebounceRef.current) clearTimeout(reverbDebounceRef.current);
+      reverbDebounceRef.current = setTimeout(() => setReverbBusy(false), 300);
+    }
+  }, []);
 
   // ─── rAF playhead loop ──────────────────────────────────────────────────
 
@@ -267,7 +322,7 @@ export function Editor({ sample, currentUserId }: Props) {
     [],
   );
 
-  // ─── play / stop handlers ───────────────────────────────────────────────
+  // ─── play / stop / bypass handlers ──────────────────────────────────────
 
   const resetTimecodeDisplay = useCallback((sec: number) => {
     waveformRef.current?.setPlayhead(sec);
@@ -275,7 +330,7 @@ export function Editor({ sample, currentUserId }: Props) {
   }, []);
 
   const handleStop = useCallback(() => {
-    abortTokenRef.current = {}; // invalidate any in-flight play
+    abortTokenRef.current = {};
     controllerRef.current?.stop();
     controllerRef.current = null;
     stopRaf();
@@ -313,7 +368,6 @@ export function Editor({ sample, currentUserId }: Props) {
         return;
       }
 
-      // Stale check — user may have stopped while awaiting reverb.ready
       if (abortTokenRef.current !== token) {
         ctrl.stop();
         return;
@@ -322,7 +376,6 @@ export function Editor({ sample, currentUserId }: Props) {
       controllerRef.current = ctrl;
       setAnalyser(ctrl.analyser);
 
-      // Override onended to sync React state when playback finishes naturally
       ctrl.source.onended = () => {
         if (abortTokenRef.current !== token) return;
         ctrl.stop();
@@ -367,6 +420,84 @@ export function Editor({ sample, currentUserId }: Props) {
     setLoop((v) => !v);
   }, []);
 
+  // ─── save as new ────────────────────────────────────────────────────────
+
+  const handleSaveAsNew = useCallback(async () => {
+    if (!audioBuffer || saving) return;
+
+    // Stop any playback first — render needs a clean Tone graph
+    handleStop();
+    setSaving(true);
+    setToast(null);
+
+    // Estimate render duration ~= trimmed duration (Tone.Offline usually runs
+    // at or faster than real-time for simple chains). We cap the animation
+    // at 0.95 until finish() is called.
+    const estimatedMs = Math.max(600, trimmedDuration * 1000);
+    bakeRef.current?.start(estimatedMs);
+
+    try {
+      const rendered = await renderOffline(audioBuffer, state.chain);
+
+      // Compute peaks from the rendered buffer for the library preview
+      const peaks = computePeaksFromBuffer(rendered, 200);
+      const wavBytes = encodeWav(rendered);
+
+      const payload = {
+        name: metadata.name.trim() || null,
+        family: metadata.family || null,
+        category: metadata.category || null,
+        rootNote: metadata.rootNote || null,
+        rootFreq: sample.root_freq ?? null,
+        brightness: metadata.brightness,
+        attack: metadata.attack,
+        sustain: metadata.sustain,
+        texture: metadata.texture,
+        warmth: metadata.warmth,
+        vibes: metadata.vibes,
+        waveformPeaks: peaks,
+        durationSec: rendered.duration,
+        sampleRate: rendered.sampleRate,
+      };
+
+      const form = new FormData();
+      form.append("wav", new Blob([wavBytes], { type: "audio/wav" }));
+      form.append("metadata", JSON.stringify(payload));
+      form.append("editSpec", JSON.stringify({
+        chain: state.chain,
+        sourceSampleId: sample.id,
+      }));
+      form.append("sourceSampleId", sample.id);
+
+      const res = await fetch("/api/samples/create", {
+        method: "POST",
+        body: form,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "save failed" }));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+
+      const { id } = (await res.json()) as { id: string };
+
+      await bakeRef.current?.finish();
+      await revalidateSampleEditor();
+
+      setToast({ kind: "success", text: `saved · ${formatSampleId(id, "SE")}` });
+
+      // Give the toast a beat, then navigate to the new sample's library page
+      setTimeout(() => {
+        router.push(`/library/${encodeURIComponent(id)}`);
+      }, 800);
+    } catch (err) {
+      bakeRef.current?.cancel();
+      const msg = err instanceof Error ? err.message : "save failed";
+      setToast({ kind: "error", text: msg });
+      setSaving(false);
+    }
+  }, [audioBuffer, saving, handleStop, trimmedDuration, state.chain, metadata, sample.id, sample.root_freq, router]);
+
   // ─── unmount cleanup ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -384,13 +515,12 @@ export function Editor({ sample, currentUserId }: Props) {
 
   // ─── keyboard shortcuts ─────────────────────────────────────────────────
 
-  // Capture latest handlers in refs so the keydown effect doesn't need to
-  // re-register on every render.
   const handlersRef = useRef({
     handlePlayToggle,
     handleStop,
     handleBypassToggle,
     handleLoopToggle,
+    handleSaveAsNew,
   });
   useEffect(() => {
     handlersRef.current = {
@@ -398,6 +528,7 @@ export function Editor({ sample, currentUserId }: Props) {
       handleStop,
       handleBypassToggle,
       handleLoopToggle,
+      handleSaveAsNew,
     };
   });
 
@@ -434,7 +565,11 @@ export function Editor({ sample, currentUserId }: Props) {
         dispatch({ type: "REDO" });
         return;
       }
-      // [ and ] — set trim in/out to current playhead (only while playing)
+      if ((e.key === "s" || e.key === "S") && isMeta) {
+        e.preventDefault();
+        handlersRef.current.handleSaveAsNew();
+        return;
+      }
       if ((e.key === "[" || e.key === "]") && controllerRef.current) {
         e.preventDefault();
         const head =
@@ -457,11 +592,10 @@ export function Editor({ sample, currentUserId }: Props) {
   // ─── render ─────────────────────────────────────────────────────────────
 
   const peaks = Array.isArray(sample.waveform_peaks) ? (sample.waveform_peaks as number[]) : [];
-  const isOwner = false; // Phase 6
-  void currentUserId;
+  void currentUserId; // v2: use for overwrite gating
 
   return (
-    <div className="workbench -m-6 min-h-[calc(100vh-3.5rem)] p-8">
+    <div className="workbench -m-6 min-h-[calc(100vh-3.5rem)] p-8 relative">
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
         <header className="flex items-start justify-between gap-6">
@@ -490,23 +624,18 @@ export function Editor({ sample, currentUserId }: Props) {
             <button
               type="button"
               onClick={() => dispatch({ type: "RESET", chain: defaultChain(duration) })}
-              className="workbench-label px-3 py-2 border border-[color:var(--wb-line)] hover:border-[color:var(--ink-500)] transition-colors"
+              disabled={saving}
+              className="workbench-label px-3 py-2 border border-[color:var(--wb-line)] hover:border-[color:var(--ink-500)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               revert
             </button>
             <button
               type="button"
-              disabled={!isOwner}
-              className="workbench-label px-3 py-2 border border-[color:var(--wb-line)] hover:border-[color:var(--wb-amber-dim)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title={isOwner ? "save — overwrite this sample" : "save — only available on your own samples"}
+              onClick={handleSaveAsNew}
+              disabled={saving || !audioBuffer}
+              className="workbench-label px-3 py-2 border border-[color:var(--wb-amber-dim)] text-[color:var(--wb-amber)] hover:bg-[color:var(--wb-amber-glow)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              save
-            </button>
-            <button
-              type="button"
-              className="workbench-label px-3 py-2 border border-[color:var(--wb-amber-dim)] text-[color:var(--wb-amber)] hover:bg-[color:var(--wb-amber-glow)] transition-colors"
-            >
-              save as new
+              {saving ? "saving…" : "save as new"}
             </button>
           </div>
         </header>
@@ -533,22 +662,25 @@ export function Editor({ sample, currentUserId }: Props) {
           </span>
         </div>
 
-        {/* Waveform */}
-        <WaveformCanvas
-          ref={waveformRef}
-          peaks={peaks}
-          durationSec={duration}
-          trimStart={trimStart}
-          trimEnd={trimEnd}
-          onTrimChange={handleTrimChange}
-        />
+        {/* Waveform + bake overlay */}
+        <div className="relative">
+          <WaveformCanvas
+            ref={waveformRef}
+            peaks={peaks}
+            durationSec={duration}
+            trimStart={trimStart}
+            trimEnd={trimEnd}
+            onTrimChange={handleTrimChange}
+          />
+          <BakeOverlay ref={bakeRef} />
+        </div>
 
         {/* Transport strip */}
         <TransportBar
           ref={timecodeRef}
           isPlaying={isPlaying}
           isStarting={isStarting}
-          disabled={!audioBuffer}
+          disabled={!audioBuffer || saving}
           loop={loop}
           bypass={bypass}
           analyser={analyser}
@@ -567,11 +699,26 @@ export function Editor({ sample, currentUserId }: Props) {
           />
         </section>
 
-        {/* Metadata placeholder — wired in Phase 6 */}
-        <section className="border border-[color:var(--wb-line-soft)] px-5 py-4 text-xs workbench-readout text-[color:var(--ink-500)] lowercase">
-          metadata — coming in phase 6
-        </section>
+        {/* Metadata */}
+        <MetadataPanel metadata={metadata} onChange={handleMetadataChange} />
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-6 right-6 z-50 border px-4 py-3 workbench-readout text-xs lowercase"
+          style={{
+            backgroundColor: "var(--ink-800)",
+            borderColor: toast.kind === "success" ? "var(--wb-amber)" : "var(--wb-oxide)",
+            color: toast.kind === "success" ? "var(--wb-amber)" : "var(--wb-oxide)",
+            boxShadow: "0 8px 24px oklch(0 0 0 / 0.4)",
+          }}
+        >
+          {toast.text}
+        </div>
+      )}
     </div>
   );
 }

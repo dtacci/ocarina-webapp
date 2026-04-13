@@ -2,31 +2,13 @@
 
 import { useRef, useState, useCallback } from "react";
 import { Upload, X, FileAudio, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { computePeaksFromFile } from "@/lib/audio/compute-peaks";
 
 type Stage = "idle" | "selected" | "uploading" | "confirming" | "done" | "error";
 
 interface UploadedRecording {
   id: string;
   title: string;
-}
-
-async function computePeaks(file: File, nPoints = 200): Promise<number[]> {
-  const arrayBuffer = await file.arrayBuffer();
-  const audioCtx = new OfflineAudioContext(1, 1, 44100);
-  const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-  const channelData = decoded.getChannelData(0);
-  const chunkSize = Math.floor(channelData.length / nPoints);
-  const peaks: number[] = [];
-  for (let i = 0; i < nPoints; i++) {
-    let sum = 0;
-    const start = i * chunkSize;
-    for (let j = start; j < start + chunkSize; j++) {
-      sum += channelData[j] ** 2;
-    }
-    peaks.push(Math.sqrt(sum / chunkSize));
-  }
-  const max = Math.max(...peaks, 0.001);
-  return peaks.map((p) => Math.round((p / max) * 10000) / 10000);
 }
 
 interface Props {
@@ -73,7 +55,7 @@ export function UploadModal({ onClose, onUploaded }: Props) {
 
     try {
       // 1. Compute waveform peaks in-browser
-      const peaks = await computePeaks(file);
+      const peaks = await computePeaksFromFile(file);
       setProgress(20);
 
       // 2. Upload binary to /api/recordings/upload
