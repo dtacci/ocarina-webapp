@@ -4,6 +4,7 @@ import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Search, Loader2, Disc3, ChevronDown, ChevronUp, Download, Disc, X } from "lucide-react";
 import { RecordingCard } from "@/components/recordings/recording-card";
+import { RecordingListProvider } from "@/components/recordings/recording-list-context";
 import { useRecordingsRealtime } from "@/hooks/use-recordings-realtime";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
 
@@ -334,24 +335,26 @@ export function RecordingsClient({
       {/* Grid */}
       {groups.length > 0 ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {groups.map((group) =>
-              group.sessionId ? (
-                <SessionGroup
-                  key={group.sessionId}
-                  sessionId={group.sessionId}
-                  tracks={group.tracks}
-                  onDelete={handleDelete}
-                />
-              ) : (
-                <RecordingCard
-                  key={group.tracks[0].id}
-                  recording={group.tracks[0]}
-                  onDelete={handleDelete}
-                />
-              )
-            )}
-          </div>
+          <RecordingListProvider recordings={recordings}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.map((group) =>
+                group.sessionId ? (
+                  <SessionGroup
+                    key={group.sessionId}
+                    sessionId={group.sessionId}
+                    tracks={group.tracks}
+                    onDelete={handleDelete}
+                  />
+                ) : (
+                  <RecordingCard
+                    key={group.tracks[0].id}
+                    recording={group.tracks[0]}
+                    onDelete={handleDelete}
+                  />
+                )
+              )}
+            </div>
+          </RecordingListProvider>
 
           <div className="flex items-center justify-center gap-3 pt-2">
             {currentPage > 1 && (
