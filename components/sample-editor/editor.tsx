@@ -424,6 +424,10 @@ export function Editor({ sample, currentUserId }: Props) {
 
   const handleSaveAsNew = useCallback(async () => {
     if (!audioBuffer || saving) return;
+    if (trimmedDuration < 0.1) {
+      setToast({ kind: "error", text: "trim is too short — needs at least 100ms" });
+      return;
+    }
 
     // Stop any playback first — render needs a clean Tone graph
     handleStop();
@@ -594,8 +598,13 @@ export function Editor({ sample, currentUserId }: Props) {
   const peaks = Array.isArray(sample.waveform_peaks) ? (sample.waveform_peaks as number[]) : [];
   void currentUserId; // v2: use for overwrite gating
 
+  const sourceLineageId =
+    typeof sample.source_sample_id === "string" && sample.source_sample_id.length > 0
+      ? sample.source_sample_id
+      : null;
+
   return (
-    <div className="workbench -m-6 min-h-[calc(100vh-3.5rem)] p-8 relative">
+    <div className="workbench -m-6 min-h-[calc(100vh-3.5rem)] p-8 relative" aria-busy={saving}>
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
         <header className="flex items-start justify-between gap-6">
@@ -609,7 +618,7 @@ export function Editor({ sample, currentUserId }: Props) {
             </Link>
             <div className="flex items-baseline gap-3">
               <span className="workbench-readout text-sm text-[color:var(--ink-300)]">
-                {formatSampleId(sample.id)}
+                {formatSampleId(sample.id, sourceLineageId ? "SE" : "SMP")}
               </span>
               {sample.family && <span className="workbench-label">{sample.family}</span>}
             </div>
@@ -618,6 +627,15 @@ export function Editor({ sample, currentUserId }: Props) {
                 ? `${sample.family ?? "sample"} · ${sample.root_note.toLowerCase()}`
                 : sample.family ?? "untitled"}
             </h1>
+            {sourceLineageId && (
+              <Link
+                href={`/library/${encodeURIComponent(sourceLineageId)}`}
+                className="inline-flex items-center gap-1.5 text-xs text-[color:var(--ink-500)] hover:text-[color:var(--wb-amber)] transition-colors lowercase"
+              >
+                ← forked from{" "}
+                <span className="workbench-readout">{formatSampleId(sourceLineageId)}</span>
+              </Link>
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -701,6 +719,18 @@ export function Editor({ sample, currentUserId }: Props) {
 
         {/* Metadata */}
         <MetadataPanel metadata={metadata} onChange={handleMetadataChange} />
+
+        {/* Keyboard hints — specimen-catalog footer */}
+        <footer className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-4 border-t border-[color:var(--wb-line-soft)] workbench-readout text-[10px] text-[color:var(--ink-600)] lowercase">
+          <KeyHint keys={["space"]} label="play / stop" />
+          <KeyHint keys={["a"]} label="a / b" />
+          <KeyHint keys={["/"]} label="loop" />
+          <KeyHint keys={["[", "]"]} label="trim in / out" />
+          <KeyHint keys={["⌘", "z"]} label="undo" />
+          <KeyHint keys={["⌘", "⇧", "z"]} label="redo" />
+          <KeyHint keys={["⌘", "s"]} label="save as new" />
+          <KeyHint keys={["shift"]} label="snap to zero crossing" />
+        </footer>
       </div>
 
       {/* Toast */}
@@ -720,5 +750,24 @@ export function Editor({ sample, currentUserId }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+function KeyHint({ keys, label }: { keys: string[]; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="inline-flex items-center gap-0.5">
+        {keys.map((k, i) => (
+          <kbd
+            key={i}
+            className="border border-[color:var(--wb-line)] bg-[color:var(--ink-900)] px-1.5 py-0.5 text-[9px] text-[color:var(--ink-300)] tabular-nums"
+            style={{ minWidth: 18, textAlign: "center" }}
+          >
+            {k}
+          </kbd>
+        ))}
+      </span>
+      <span>{label}</span>
+    </span>
   );
 }

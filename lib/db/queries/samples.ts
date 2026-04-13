@@ -41,6 +41,11 @@ export interface SampleRow {
   loopable: boolean;
   is_system: boolean;
   waveform_peaks: number[] | null;
+  /** Set on samples forked by the sample editor — points to the original. */
+  source_sample_id?: string | null;
+  /** JSONB — the EffectNode[] chain that was applied when this sample was baked. */
+  edit_spec?: unknown;
+  user_id?: string | null;
 }
 
 export interface SampleWithVibes extends SampleRow {
