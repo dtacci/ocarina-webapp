@@ -1,4 +1,14 @@
-# Ocarina Webapp — Project Context
+# Ocarina Webapp — Project Context [ARCHIVED]
+
+> **⚠️ Archived — kept only for historical reference.**
+>
+> This doc was the single source of truth through v0.2 Early. It has been split and superseded:
+> - **What's shipped** → [`/progress.md`](../progress.md)
+> - **What's upcoming + ideas park** → [`/todo.md`](../todo.md)
+>
+> Don't update this file. Update `progress.md` / `todo.md` instead.
+
+---
 
 ## What This Is
 
