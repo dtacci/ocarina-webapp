@@ -23,6 +23,7 @@ import { formatDuration, formatSampleId, formatTimecode } from "@/lib/sample-edi
 import { findNearestZeroCrossing } from "@/lib/audio/zero-crossing";
 import { revalidateSampleEditor } from "@/app/(dashboard)/sample-editor/actions";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
+import { useAudioTakeover } from "@/hooks/use-audio-takeover";
 
 interface Props {
   sample: SampleWithVibes;
@@ -146,6 +147,8 @@ function initialMetadata(sample: SampleWithVibes): SampleMetadata {
 // ─── component ────────────────────────────────────────────────────────────
 
 export function Editor({ sample, currentUserId }: Props) {
+  useAudioTakeover();
+
   const router = useRouter();
   const duration = sample.duration_sec;
   const [state, dispatch] = useReducer(reducer, undefined, () => ({
