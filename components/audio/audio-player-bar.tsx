@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import {
   ChevronUp,
+  Loader2,
   Music,
   Pause,
   Play,
@@ -17,6 +18,7 @@ import {
 import {
   useAudioPlayerStore,
   useHasHydrated,
+  useLastTrack,
   useNowPlaying,
   useQueueLength,
   useTransport,
@@ -30,17 +32,98 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { resumeTrack } from "@/app/actions/resume-track";
 import { PeaksSvg } from "./peaks-svg";
 
 export function AudioPlayerBar() {
   const hasHydrated = useHasHydrated();
   const current = useNowPlaying();
+  const lastTrack = useLastTrack();
 
   // Avoid hydration mismatch: wait for persisted state before rendering.
   if (!hasHydrated) return null;
-  if (!current) return null;
+  if (current) return <PlayerBarShell />;
+  if (lastTrack) return <ResumeChip />;
+  return null;
+}
 
-  return <PlayerBarShell />;
+function ResumeChip() {
+  const lastTrack = useLastTrack();
+  const [isPending, startTransition] = useTransition();
+  const [failed, setFailed] = useState(false);
+  const playTrack = useAudioPlayerStore((s) => s.playTrack);
+  const setState = useAudioPlayerStore.setState;
+
+  if (!lastTrack) return null;
+
+  function handleResume() {
+    if (!lastTrack) return;
+    // iOS: the initial play() must happen inside a user gesture. Since the
+    // server action is async we can't await it before calling playTrack(),
+    // so we fetch metadata optimistically and dispatch as soon as it returns.
+    startTransition(async () => {
+      try {
+        const track = await resumeTrack(lastTrack.id, lastTrack.kind);
+        if (!track) {
+          setFailed(true);
+          return;
+        }
+        playTrack(track);
+      } catch {
+        setFailed(true);
+      }
+    });
+  }
+
+  function handleDismiss() {
+    // Drop the snapshot so the chip stops appearing.
+    setState({ lastTrack: null });
+  }
+
+  return (
+    <footer
+      role="region"
+      aria-label="Resume last played"
+      className="sticky bottom-0 z-30 shrink-0 border-t border-border/60 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75"
+    >
+      <div className="mx-auto flex h-14 w-full items-center gap-3 px-3 sm:px-4">
+        <button
+          onClick={handleResume}
+          disabled={isPending}
+          aria-label={`Resume ${lastTrack.title}`}
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+        >
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Play className="size-4 ml-px" />
+          )}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Resume
+          </div>
+          <div className="truncate text-sm font-medium">
+            {failed ? (
+              <span className="text-destructive">
+                Couldn&rsquo;t load {lastTrack.title}
+              </span>
+            ) : (
+              lastTrack.title
+            )}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleDismiss}
+          aria-label="Dismiss resume chip"
+        >
+          <X />
+        </Button>
+      </div>
+    </footer>
+  );
 }
 
 function PlayerBarShell() {
@@ -256,7 +339,7 @@ function MobileProgressStrip({
   return (
     <div className="relative h-1 w-full bg-muted">
       <div
-        className="absolute inset-y-0 left-0 bg-primary transition-[width] duration-150"
+        className="absolute inset-y-0 left-0 bg-primary transition-[width] duration-150 motion-reduce:transition-none"
         style={{ width: `${pct}%` }}
       />
       <input
