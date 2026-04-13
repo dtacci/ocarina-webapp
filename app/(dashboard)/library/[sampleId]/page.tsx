@@ -103,7 +103,7 @@ export default async function SampleDetailPage({ params }: Props) {
       {/* Audio — preview if available, otherwise decorative waveform */}
       {sample.mp3_blob_url ? (
         <div className="space-y-2">
-          <SamplePlayer blobUrl={sample.mp3_blob_url} duration={sample.duration_sec} />
+          <SamplePlayer sample={sample} />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Mic className="size-3.5 shrink-0" />
             <span>6-second preview. Say <span className="font-medium text-foreground">&ldquo;load {sample.family ?? "sample"}&rdquo;</span> to hear the full sample on your Pi.</span>
