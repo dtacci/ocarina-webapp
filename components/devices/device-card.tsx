@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { DeleteDeviceButton } from "@/components/devices/delete-device-button";
 import type { DeviceRow } from "@/lib/db/queries/devices";
 
 const typeLabels: Record<string, string> = {
@@ -44,7 +45,7 @@ export function DeviceCard({ device }: { device: DeviceRow }) {
           <div className={`size-2.5 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/30"}`} />
           <h3 className="font-medium">{device.name}</h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {device.capabilities?.config && (
             <Link
               href={`/devices/${device.id}/config`}
@@ -54,10 +55,11 @@ export function DeviceCard({ device }: { device: DeviceRow }) {
               Configure
             </Link>
           )}
-        <Badge variant="secondary" className="text-xs">
-          <span className={`inline-block size-1.5 rounded-full mr-1.5 ${typeColors[device.device_type] ?? "bg-gray-500"}`} />
-          {typeLabels[device.device_type] ?? device.device_type}
-        </Badge>
+          <DeleteDeviceButton id={device.id} name={device.name} />
+          <Badge variant="secondary" className="text-xs">
+            <span className={`inline-block size-1.5 rounded-full mr-1.5 ${typeColors[device.device_type] ?? "bg-gray-500"}`} />
+            {typeLabels[device.device_type] ?? device.device_type}
+          </Badge>
         </div>
       </div>
 
