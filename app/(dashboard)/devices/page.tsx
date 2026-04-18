@@ -12,7 +12,7 @@ export default async function DevicesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Devices</h1>
           <p className="text-muted-foreground">
-            Register your Ocarina and manage connected devices.
+            Pair your Ocarina and manage connected devices.
           </p>
         </div>
       </div>
@@ -29,9 +29,9 @@ export default async function DevicesPage() {
         <div className="flex h-[300px] items-center justify-center rounded-lg border border-dashed">
           <div className="text-center">
             <MonitorSmartphone className="mx-auto mb-3 size-10 text-muted-foreground/50" />
-            <p className="text-sm font-medium">No devices registered</p>
+            <p className="text-sm font-medium">No devices paired</p>
             <p className="text-xs text-muted-foreground">
-              Register your Ocarina above to enable sync, real-time control, and more
+              Power on your Ocarina and pair it above — no file editing required
             </p>
           </div>
         </div>

@@ -363,6 +363,29 @@ export const deviceConfigs = pgTable("device_configs", {
 });
 
 // ============================================================================
+// DEVICE PAIRING (unpaired Pi <-> cloud <-> user's webapp session)
+// ============================================================================
+// Lifecycle: Pi POSTs /pair/announce → row created with pairing_code.
+// User types code on /devices → /pair/claim creates a `devices` row and writes
+// the raw API key onto this row (claimed_raw_key) for one-shot retrieval.
+// Pi polls /pair/poll → key returned exactly once and nulled on the row.
+export const devicePairings = pgTable("device_pairings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pairingCode: text("pairing_code").notNull().unique(), // 6-digit numeric, displayed as XXX-XXX
+  deviceFingerprint: text("device_fingerprint").notNull(), // stable per-Pi identifier (e.g. machine-id hash)
+  nameHint: text("name_hint"), // optional suggested name from Pi (e.g. hostname)
+  hardwareVersion: text("hardware_version"),
+  announceIp: text("announce_ip"), // public IP of the Pi when announcing; used for "Nearby" matching
+  deviceId: uuid("device_id").references(() => devices.id), // populated on claim
+  claimedRawKey: text("claimed_raw_key"), // plaintext, one-shot — cleared after Pi polls it
+  claimAttempts: smallint("claim_attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// ============================================================================
 // DEVICE COMMANDS (web → Pi, Pi polls)
 // ============================================================================
 export const deviceCommands = pgTable("device_commands", {
