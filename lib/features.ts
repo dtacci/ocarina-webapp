@@ -24,6 +24,7 @@ export const features = {
   piSyncAgent: false,
   analyticsDashboard: true,
   diagnostics: true,
+  liveConsole: true,
   karaokeBrowser: true,
 
   /** v0.3 features — disabled */

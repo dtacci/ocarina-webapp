@@ -20,6 +20,7 @@ import {
   Heart,
   Scissors,
   Wrench,
+  Gamepad2,
 } from "lucide-react";
 
 import {
@@ -43,6 +44,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { isEnabled, type FeatureFlag } from "@/lib/features";
+import { useOnlineDevices } from "@/hooks/use-online-devices";
 
 type NavItem = {
   title: string;
@@ -74,6 +76,13 @@ const navTools: NavItem[] = [
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
   { title: "Analytics", url: "/analytics", icon: BarChart2, feature: "analyticsDashboard" as const },
+];
+
+// Diagnostics section — entries only render when there's a device to debug
+// (plus the corresponding feature flag). Keeps the sidebar uncluttered when
+// no Ocarina is paired / online.
+const navDiagnostics: NavItem[] = [
+  { title: "Console", url: "/diagnostics/live", icon: Gamepad2, feature: "liveConsole" as const },
 ];
 
 const navComingSoon: NavItem[] = [
@@ -154,10 +163,19 @@ function NavSection({
 
 function DynamicNavContent({ pathname }: { pathname: string }) {
   const searchParams = useSearchParams();
+  const { onlineDeviceId } = useOnlineDevices();
   return (
     <>
       <NavSection items={navMain} label="Browse" pathname={pathname} searchParams={searchParams} />
       <NavSection items={navTools} label="Tools" pathname={pathname} searchParams={searchParams} />
+      {onlineDeviceId && (
+        <NavSection
+          items={navDiagnostics}
+          label="Diagnostics"
+          pathname={pathname}
+          searchParams={searchParams}
+        />
+      )}
       <NavSection items={navComingSoon} label="Coming Soon" pathname={pathname} searchParams={searchParams} />
     </>
   );
