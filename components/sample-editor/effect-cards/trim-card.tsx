@@ -1,12 +1,14 @@
 "use client";
 
-import { EffectCard } from "../effect-card";
+import { EffectCard, type ReorderProps } from "../effect-card";
 import { formatTimecode, formatDuration } from "@/lib/sample-editor/format";
 import type { EffectNode } from "@/lib/audio/editor-types";
 
 interface Props {
   node: Extract<EffectNode, { kind: "trim" }>;
   onChange: (node: Extract<EffectNode, { kind: "trim" }>) => void;
+  onRemove?: () => void;
+  reorder?: ReorderProps;
 }
 
 /**
@@ -14,7 +16,7 @@ interface Props {
  * shows the resulting timestamps as readouts. Toggle disables the crop
  * (plays the full duration).
  */
-export function TrimCard({ node, onChange }: Props) {
+export function TrimCard({ node, onChange, onRemove, reorder }: Props) {
   const duration = Math.max(0, node.endSec - node.startSec);
 
   return (
@@ -22,6 +24,8 @@ export function TrimCard({ node, onChange }: Props) {
       label="TRIM"
       enabled={node.enabled}
       onToggle={() => onChange({ ...node, enabled: !node.enabled })}
+      onRemove={onRemove}
+      reorder={reorder}
     >
       <div className="flex flex-col gap-2 workbench-readout text-xs tabular-nums">
         <Row label="in" value={formatTimecode(node.startSec)} />

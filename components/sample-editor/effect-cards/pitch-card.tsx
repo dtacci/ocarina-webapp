@@ -1,12 +1,14 @@
 "use client";
 
-import { EffectCard } from "../effect-card";
+import { EffectCard, type ReorderProps } from "../effect-card";
 import { Knob } from "../primitives/knob";
 import { EFFECT_RANGES, type EffectNode } from "@/lib/audio/editor-types";
 
 interface Props {
   node: Extract<EffectNode, { kind: "pitch" }>;
   onChange: (node: Extract<EffectNode, { kind: "pitch" }>) => void;
+  onRemove?: () => void;
+  reorder?: ReorderProps;
 }
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -18,12 +20,14 @@ function formatSemitones(st: number): string {
   return `${sign}${st.toFixed(0)} st · ${note}`;
 }
 
-export function PitchCard({ node, onChange }: Props) {
+export function PitchCard({ node, onChange, onRemove, reorder }: Props) {
   return (
     <EffectCard
       label="PITCH"
       enabled={node.enabled}
       onToggle={() => onChange({ ...node, enabled: !node.enabled })}
+      onRemove={onRemove}
+      reorder={reorder}
     >
       <div className="flex justify-center">
         <Knob

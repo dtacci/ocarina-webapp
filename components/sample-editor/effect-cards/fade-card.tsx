@@ -1,6 +1,6 @@
 "use client";
 
-import { EffectCard } from "../effect-card";
+import { EffectCard, type ReorderProps } from "../effect-card";
 import { Knob } from "../primitives/knob";
 import { SegmentedGroup } from "../primitives/segmented-group";
 import { EFFECT_RANGES, type EffectNode, type FadeCurve } from "@/lib/audio/editor-types";
@@ -8,6 +8,8 @@ import { EFFECT_RANGES, type EffectNode, type FadeCurve } from "@/lib/audio/edit
 interface Props {
   node: Extract<EffectNode, { kind: "fade" }>;
   onChange: (node: Extract<EffectNode, { kind: "fade" }>) => void;
+  onRemove?: () => void;
+  reorder?: ReorderProps;
 }
 
 const CURVE_OPTIONS = [
@@ -15,12 +17,14 @@ const CURVE_OPTIONS = [
   { value: "exp" as FadeCurve, label: "EXP" },
 ] as const;
 
-export function FadeCard({ node, onChange }: Props) {
+export function FadeCard({ node, onChange, onRemove, reorder }: Props) {
   return (
     <EffectCard
       label="FADE"
       enabled={node.enabled}
       onToggle={() => onChange({ ...node, enabled: !node.enabled })}
+      onRemove={onRemove}
+      reorder={reorder}
     >
       <div className="flex items-start gap-4">
         <Knob
