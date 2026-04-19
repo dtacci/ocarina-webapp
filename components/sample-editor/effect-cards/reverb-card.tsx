@@ -1,6 +1,6 @@
 "use client";
 
-import { EffectCard } from "../effect-card";
+import { EffectCard, type ReorderProps } from "../effect-card";
 import { Knob } from "../primitives/knob";
 import { EFFECT_RANGES, type EffectNode } from "@/lib/audio/editor-types";
 
@@ -9,15 +9,19 @@ interface Props {
   onChange: (node: Extract<EffectNode, { kind: "reverb" }>) => void;
   /** True while Tone.Reverb.ready is pending (IR regeneration). */
   busy?: boolean;
+  onRemove?: () => void;
+  reorder?: ReorderProps;
 }
 
-export function ReverbCard({ node, onChange, busy = false }: Props) {
+export function ReverbCard({ node, onChange, busy = false, onRemove, reorder }: Props) {
   return (
     <EffectCard
       label="REVERB"
       enabled={node.enabled}
       onToggle={() => onChange({ ...node, enabled: !node.enabled })}
       busy={busy}
+      onRemove={onRemove}
+      reorder={reorder}
     >
       <div className="flex items-start gap-4">
         <Knob

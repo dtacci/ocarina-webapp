@@ -67,6 +67,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { chain: nextChain, past: pushPast(state.past, state.chain), future: [] };
     }
     case "REORDER_EFFECTS": {
+      // No-op reorder shouldn't pollute undo stack.
+      if (action.from === action.to) return state;
       const nextChain = [...state.chain];
       const [moved] = nextChain.splice(action.from, 1);
       nextChain.splice(action.to, 0, moved);
@@ -288,6 +290,18 @@ export function Editor({ sample, currentUserId }: Props) {
     }
   }, []);
 
+  const handleRemoveNode = useCallback((index: number) => {
+    dispatch({ type: "REMOVE_EFFECT", index });
+  }, []);
+
+  const handleAddNode = useCallback((node: EffectNode) => {
+    dispatch({ type: "ADD_EFFECT", node });
+  }, []);
+
+  const handleReorder = useCallback((from: number, to: number) => {
+    dispatch({ type: "REORDER_EFFECTS", from, to });
+  }, []);
+
   // ─── rAF playhead loop ──────────────────────────────────────────────────
 
   const stopRaf = useCallback(() => {
@@ -376,7 +390,7 @@ export function Editor({ sample, currentUserId }: Props) {
       controllerRef.current = ctrl;
       setAnalyser(ctrl.analyser);
 
-      ctrl.source.onended = () => {
+      ctrl.onNaturalEnd(() => {
         if (abortTokenRef.current !== token) return;
         ctrl.stop();
         stopRaf();
@@ -384,8 +398,8 @@ export function Editor({ sample, currentUserId }: Props) {
         setIsStarting(false);
         setAnalyser(null);
         controllerRef.current = null;
-        resetTimecodeDisplay(loop ? trimStart : trimEnd);
-      };
+        resetTimecodeDisplay(trimEnd);
+      });
 
       setIsStarting(false);
       setIsPlaying(true);
@@ -712,7 +726,11 @@ export function Editor({ sample, currentUserId }: Props) {
           <h2 className="workbench-label">chain</h2>
           <EffectChain
             chain={state.chain}
+            durationSec={duration}
             onNodeChange={handleNodeChange}
+            onRemove={handleRemoveNode}
+            onAdd={handleAddNode}
+            onReorder={handleReorder}
             reverbBusy={reverbBusy}
           />
         </section>

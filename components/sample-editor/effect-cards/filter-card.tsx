@@ -1,6 +1,6 @@
 "use client";
 
-import { EffectCard } from "../effect-card";
+import { EffectCard, type ReorderProps } from "../effect-card";
 import { Knob } from "../primitives/knob";
 import { SegmentedGroup } from "../primitives/segmented-group";
 import { EFFECT_RANGES, type EffectNode, type FilterMode } from "@/lib/audio/editor-types";
@@ -8,6 +8,8 @@ import { EFFECT_RANGES, type EffectNode, type FilterMode } from "@/lib/audio/edi
 interface Props {
   node: Extract<EffectNode, { kind: "filter" }>;
   onChange: (node: Extract<EffectNode, { kind: "filter" }>) => void;
+  onRemove?: () => void;
+  reorder?: ReorderProps;
 }
 
 const MODE_OPTIONS = [
@@ -21,12 +23,14 @@ function formatFreq(hz: number): string {
   return `${hz.toFixed(0)} Hz`;
 }
 
-export function FilterCard({ node, onChange }: Props) {
+export function FilterCard({ node, onChange, onRemove, reorder }: Props) {
   return (
     <EffectCard
       label="FILTER"
       enabled={node.enabled}
       onToggle={() => onChange({ ...node, enabled: !node.enabled })}
+      onRemove={onRemove}
+      reorder={reorder}
     >
       <div className="flex flex-col gap-3">
         <SegmentedGroup

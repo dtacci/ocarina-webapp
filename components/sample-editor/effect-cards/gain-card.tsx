@@ -1,12 +1,14 @@
 "use client";
 
-import { EffectCard } from "../effect-card";
+import { EffectCard, type ReorderProps } from "../effect-card";
 import { Knob } from "../primitives/knob";
 import { EFFECT_RANGES, type EffectNode } from "@/lib/audio/editor-types";
 
 interface Props {
   node: Extract<EffectNode, { kind: "gain" }>;
   onChange: (node: Extract<EffectNode, { kind: "gain" }>) => void;
+  onRemove?: () => void;
+  reorder?: ReorderProps;
 }
 
 function formatDb(v: number): string {
@@ -14,12 +16,14 @@ function formatDb(v: number): string {
   return `${sign}${v.toFixed(1)} dB`;
 }
 
-export function GainCard({ node, onChange }: Props) {
+export function GainCard({ node, onChange, onRemove, reorder }: Props) {
   return (
     <EffectCard
       label="GAIN"
       enabled={node.enabled}
       onToggle={() => onChange({ ...node, enabled: !node.enabled })}
+      onRemove={onRemove}
+      reorder={reorder}
     >
       <div className="flex justify-center">
         <Knob

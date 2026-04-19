@@ -16,7 +16,23 @@ export type EffectNode =
   | { kind: "filter"; enabled: boolean; mode: FilterMode; freq: number; q: number }
   | { kind: "pitch"; enabled: boolean; semitones: number }
   | { kind: "reverb"; enabled: boolean; decaySec: number; wet: number }
-  | { kind: "gain"; enabled: boolean; db: number };
+  | { kind: "gain"; enabled: boolean; db: number }
+  | {
+      kind: "compressor";
+      enabled: boolean;
+      /** dB, typically -60..0. Signal above this triggers compression. */
+      threshold: number;
+      /** Compression ratio, 1..20. */
+      ratio: number;
+      /** Seconds, 0.0001..0.1 (0.1..100 ms). */
+      attack: number;
+      /** Seconds, 0.01..1 (10..1000 ms). */
+      release: number;
+      /** dB, 0..40. Softness of the threshold knee. */
+      knee: number;
+      /** dB, applied post-compression. -12..+12. */
+      makeup: number;
+    };
 
 export type EffectKind = EffectNode["kind"];
 
@@ -49,6 +65,7 @@ export const EFFECT_LABELS: Record<EffectKind, string> = {
   pitch: "PITCH",
   reverb: "REVERB",
   gain: "GAIN",
+  compressor: "COMPRESSOR",
 };
 
 /** Param ranges — reference for primitives. */
@@ -58,4 +75,48 @@ export const EFFECT_RANGES = {
   pitch: { semitones: { min: -24, max: 24, default: 0 } },
   reverb: { decaySec: { min: 0.1, max: 10, default: 2 }, wet: { min: 0, max: 1, default: 0.25 } },
   gain: { db: { min: -24, max: 12, default: 0 } },
+  compressor: {
+    threshold: { min: -60, max: 0, default: -24 },
+    ratio: { min: 1, max: 20, default: 4 },
+    /** Stored in seconds; card displays ms. */
+    attack: { min: 0.0001, max: 0.1, default: 0.003 },
+    /** Stored in seconds; card displays ms. */
+    release: { min: 0.01, max: 1, default: 0.25 },
+    knee: { min: 0, max: 40, default: 30 },
+    makeup: { min: -12, max: 12, default: 0 },
+  },
 } as const;
+
+/**
+ * Factory for a freshly-added effect node of the given kind.
+ * Used by the `+ ADD` menu to seed new chain entries. `duration` is only
+ * consulted for `trim` (which spans the full sample by default); other kinds
+ * ignore it.
+ */
+export function makeDefaultNode(kind: EffectKind, duration: number): EffectNode {
+  switch (kind) {
+    case "trim":
+      return { kind: "trim", enabled: true, startSec: 0, endSec: duration };
+    case "fade":
+      return { kind: "fade", enabled: true, inMs: 0, outMs: 0, curve: "linear" };
+    case "filter":
+      return { kind: "filter", enabled: true, mode: "hp", freq: 80, q: 0.7 };
+    case "pitch":
+      return { kind: "pitch", enabled: true, semitones: 0 };
+    case "reverb":
+      return { kind: "reverb", enabled: true, decaySec: 2, wet: 0.25 };
+    case "gain":
+      return { kind: "gain", enabled: true, db: 0 };
+    case "compressor":
+      return {
+        kind: "compressor",
+        enabled: true,
+        threshold: -24,
+        ratio: 4,
+        attack: 0.003,
+        release: 0.25,
+        knee: 30,
+        makeup: 0,
+      };
+  }
+}
