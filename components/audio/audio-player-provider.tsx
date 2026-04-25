@@ -22,6 +22,15 @@ export function AudioPlayerProvider() {
   useEffect(() => {
     const store = useAudioPlayerStore;
 
+    // Dev-only: expose the store on window so it's reachable from DevTools.
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { useAudioPlayerStore: typeof store })
+        .useAudioPlayerStore = store;
+      console.log(
+        "[audio-player] provider mounted — window.useAudioPlayerStore ready",
+      );
+    }
+
     audioEngine.register({
       onTimeUpdate: store.getState()._onEngineTimeUpdate,
       onDuration: store.getState()._onEngineDuration,

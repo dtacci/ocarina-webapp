@@ -338,6 +338,10 @@ if (typeof window !== "undefined") {
       store.setState({ hasHydrated: true });
     });
   }
+  if (process.env.NODE_ENV !== "production") {
+    (window as unknown as { useAudioPlayerStore: typeof store })
+      .useAudioPlayerStore = store;
+  }
 }
 
 // Selector hooks — keep re-renders tight by picking only what you need.
