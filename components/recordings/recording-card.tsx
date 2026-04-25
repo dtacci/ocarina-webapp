@@ -12,10 +12,7 @@ import {
   recordingToTrack,
   useRecordingList,
 } from "./recording-list-context";
-import {
-  useAudioPlayerStore,
-  useIsPlaying,
-} from "@/lib/stores/audio-player";
+import { usePlayback } from "@/hooks/use-playback";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
 
 function formatDuration(sec: number): string {
@@ -54,28 +51,31 @@ export function RecordingCard({ recording, onDelete }: Props) {
 
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  // Global audio player bindings
+  // Playback — delegates to global store or local Audio based on flag
   const list = useRecordingList();
-  const isPlaying = useIsPlaying(recording.id);
-  const isCurrent = useAudioPlayerStore(
-    (s) => s.current?.id === recording.id,
-  );
-  const isLoading = useAudioPlayerStore(
-    (s) => s.current?.id === recording.id && s.status === "loading",
-  );
-  const currentTime = useAudioPlayerStore((s) =>
-    s.current?.id === recording.id ? s.currentTime : 0,
-  );
-  const storeDuration = useAudioPlayerStore((s) =>
-    s.current?.id === recording.id ? s.duration : 0,
-  );
-  const playList = useAudioPlayerStore((s) => s.playList);
-  const playTrack = useAudioPlayerStore((s) => s.playTrack);
-  const clearPlayer = useAudioPlayerStore((s) => s.clear);
+  const listTracks = list
+    ? list.recordings.map((r) => list.toTrack(r))
+    : undefined;
+  const listIndex = list
+    ? list.recordings.findIndex((r) => r.id === recording.id)
+    : undefined;
 
-  const displayDuration = storeDuration > 0 ? storeDuration : recording.duration_sec;
-  const progress =
-    displayDuration > 0 ? Math.min(1, currentTime / displayDuration) : 0;
+  const {
+    isPlaying,
+    isLoading,
+    isCurrent,
+    currentTime,
+    duration: playbackDuration,
+    progress,
+    play,
+    stop: clearPlayer,
+  } = usePlayback({
+    track: recordingToTrack(recording),
+    listTracks,
+    listIndex,
+  });
+
+  const displayDuration = playbackDuration > 0 ? playbackDuration : recording.duration_sec;
 
   // Focus input when editing starts
   useEffect(() => {
@@ -86,13 +86,7 @@ export function RecordingCard({ recording, onDelete }: Props) {
   }, [editingTitle]);
 
   function handlePlay() {
-    if (list) {
-      const tracks = list.recordings.map((r) => list.toTrack(r));
-      const idx = list.recordings.findIndex((r) => r.id === recording.id);
-      playList(tracks, idx >= 0 ? idx : 0);
-      return;
-    }
-    playTrack(recordingToTrack(recording));
+    play();
   }
 
   // ── Title editing ────────────────────────────────────────────────────────────

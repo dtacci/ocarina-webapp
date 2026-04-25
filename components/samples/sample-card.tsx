@@ -10,10 +10,7 @@ import {
   sampleToTrack,
   useSampleList,
 } from "./sample-list-context";
-import {
-  useAudioPlayerStore,
-  useIsPlaying,
-} from "@/lib/stores/audio-player";
+import { usePlayback } from "@/hooks/use-playback";
 
 const familyColors: Record<string, string> = {
   strings: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
@@ -46,15 +43,12 @@ function AttributeBar({ label, value }: { label: string; value: number | null })
 
 interface SampleCardProps {
   sample: SampleWithVibes;
-  /** Index within the enclosing SampleListProvider; used as the queue start. */
-  index?: number;
   initialFavorite?: boolean;
   initialRating?: number | null;
 }
 
 export function SampleCard({
   sample,
-  index,
   initialFavorite = false,
   initialRating = null,
 }: SampleCardProps) {
@@ -62,29 +56,24 @@ export function SampleCard({
   const hasPreview = !!sample.mp3_blob_url;
 
   const list = useSampleList();
-  const isPlaying = useIsPlaying(sample.id);
-  const isCurrent = useAudioPlayerStore((s) => s.current?.id === sample.id);
-  const isLoading = useAudioPlayerStore(
-    (s) => s.current?.id === sample.id && s.status === "loading",
-  );
-  const playList = useAudioPlayerStore((s) => s.playList);
-  const playTrack = useAudioPlayerStore((s) => s.playTrack);
+  const listTracks = list
+    ? list.samples.map((s) => list.toTrack(s)).filter((t) => !!t.src)
+    : undefined;
+  const listIndex = list
+    ? list.samples.findIndex((s) => s.id === sample.id)
+    : undefined;
+
+  const { isPlaying, isLoading, isCurrent, play } = usePlayback({
+    track: sampleToTrack(sample),
+    listTracks,
+    listIndex,
+  });
 
   function handlePlay(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (!hasPreview) return;
-
-    // Prefer queue context so Next/Prev walk through the visible grid.
-    if (list && typeof index === "number" && index >= 0) {
-      const tracks = list.samples
-        .map((s) => list.toTrack(s))
-        .filter((t) => !!t.src);
-      const activeIndex = list.samples.findIndex((s) => s.id === sample.id);
-      playList(tracks, activeIndex >= 0 ? activeIndex : 0);
-      return;
-    }
-    playTrack(sampleToTrack(sample));
+    play();
   }
 
   return (

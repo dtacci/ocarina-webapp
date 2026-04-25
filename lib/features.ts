@@ -14,6 +14,7 @@ export const features = {
   embeddablePlayer: true,
 
   /** v0.2 features — disabled until ready */
+  globalAudioPlayer: false,
   looperDashboard: false,
   looperDA: true,
   realtimeBridge: false,
@@ -24,6 +25,7 @@ export const features = {
   piSyncAgent: false,
   analyticsDashboard: true,
   diagnostics: true,
+  liveConsole: true,
   karaokeBrowser: true,
 
   /** v0.3 features — disabled */

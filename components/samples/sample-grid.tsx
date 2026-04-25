@@ -22,13 +22,12 @@ export function SampleGrid({ samples, userData }: Props) {
   return (
     <SampleListProvider samples={samples}>
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 stagger-fade">
-        {samples.map((sample, index) => {
+        {samples.map((sample) => {
           const state = userData?.get(sample.id);
           return (
             <SampleCard
               key={sample.id}
               sample={sample}
-              index={index}
               initialFavorite={state?.isFavorite ?? false}
               initialRating={state?.userRating ?? null}
             />

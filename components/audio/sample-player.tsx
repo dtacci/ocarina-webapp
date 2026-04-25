@@ -5,10 +5,7 @@ import { Play, Pause, Loader2 } from "lucide-react";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import { PeaksSvg } from "./peaks-svg";
 import { sampleToTrack } from "@/components/samples/sample-list-context";
-import {
-  useAudioPlayerStore,
-  useIsPlaying,
-} from "@/lib/stores/audio-player";
+import { usePlayback } from "@/hooks/use-playback";
 
 function formatTime(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -21,36 +18,27 @@ interface Props {
 }
 
 /**
- * Hero player on the sample detail page. Renders the sample's pre-computed
- * waveform peaks and routes playback through the global audio store, so
- * audio keeps going if the user navigates back to the library.
+ * Hero player on the sample detail page. Routes playback through the global
+ * audio store (when enabled) or a local Audio element, so the flag controls
+ * whether audio persists across navigation.
  */
 export function SamplePlayer({ sample }: Props) {
-  const isPlaying = useIsPlaying(sample.id);
-  const isCurrent = useAudioPlayerStore(
-    (s) => s.current?.id === sample.id,
-  );
-  const isLoading = useAudioPlayerStore(
-    (s) => s.current?.id === sample.id && s.status === "loading",
-  );
-  const currentTime = useAudioPlayerStore((s) =>
-    s.current?.id === sample.id ? s.currentTime : 0,
-  );
-  const storeDuration = useAudioPlayerStore((s) =>
-    s.current?.id === sample.id ? s.duration : 0,
-  );
-  const playTrack = useAudioPlayerStore((s) => s.playTrack);
-  const seek = useAudioPlayerStore((s) => s.seek);
+  const {
+    isPlaying,
+    isLoading,
+    isCurrent,
+    currentTime,
+    duration: playbackDuration,
+    progress,
+    play,
+    seek,
+  } = usePlayback({ track: sampleToTrack(sample) });
 
   const waveRef = useRef<HTMLDivElement>(null);
-
-  const displayDuration =
-    storeDuration > 0 ? storeDuration : sample.duration_sec;
-  const progress =
-    displayDuration > 0 ? Math.min(1, currentTime / displayDuration) : 0;
+  const displayDuration = playbackDuration > 0 ? playbackDuration : sample.duration_sec;
 
   function handlePlayClick() {
-    playTrack(sampleToTrack(sample));
+    play();
   }
 
   function handleSeekClick(e: React.MouseEvent<HTMLDivElement>) {

@@ -10,10 +10,7 @@ import {
   recordingToTrack,
   useRecordingList,
 } from "@/components/recordings/recording-list-context";
-import {
-  useAudioPlayerStore,
-  useIsPlaying,
-} from "@/lib/stores/audio-player";
+import { usePlayback } from "@/hooks/use-playback";
 import type { SessionWithRecordings, SessionRecording } from "@/lib/db/queries/sessions";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -53,38 +50,32 @@ function formatDate(dateStr: string): string {
 
 function RecordingWave({ recording }: { recording: SessionRecording }) {
   const list = useRecordingList();
-  const isPlaying = useIsPlaying(recording.id);
-  const isCurrent = useAudioPlayerStore(
-    (s) => s.current?.id === recording.id,
-  );
-  const isLoading = useAudioPlayerStore(
-    (s) => s.current?.id === recording.id && s.status === "loading",
-  );
-  const currentTime = useAudioPlayerStore((s) =>
-    s.current?.id === recording.id ? s.currentTime : 0,
-  );
-  const storeDuration = useAudioPlayerStore((s) =>
-    s.current?.id === recording.id ? s.duration : 0,
-  );
-  const playList = useAudioPlayerStore((s) => s.playList);
-  const playTrack = useAudioPlayerStore((s) => s.playTrack);
+  const listTracks = list
+    ? list.recordings.map((r) => list.toTrack(r))
+    : undefined;
+  const listIndex = list
+    ? list.recordings.findIndex((r) => r.id === recording.id)
+    : undefined;
 
-  function handlePlay() {
-    if (list) {
-      const tracks = list.recordings.map((r) => list.toTrack(r));
-      const idx = list.recordings.findIndex((r) => r.id === recording.id);
-      playList(tracks, idx >= 0 ? idx : 0);
-      return;
-    }
-    playTrack(recordingToTrack(recording));
-  }
+  const {
+    isPlaying,
+    isLoading,
+    isCurrent,
+    currentTime,
+    duration: playbackDuration,
+    progress,
+    play: handlePlay,
+  } = usePlayback({
+    track: recordingToTrack(recording),
+    listTracks,
+    listIndex,
+  });
 
-  const dur = storeDuration > 0 ? storeDuration : recording.duration_sec;
+  const dur = playbackDuration > 0 ? playbackDuration : recording.duration_sec;
   const label =
     recording.recording_type === "master"
       ? (recording.title ?? "Session Mix")
       : (recording.title ?? "Recording");
-  const progress = dur > 0 ? Math.min(1, currentTime / dur) : 0;
 
   return (
     <div

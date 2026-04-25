@@ -3,6 +3,9 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { AudioPlayerProvider } from "@/components/audio/audio-player-provider";
 import { AudioPlayerBar } from "@/components/audio/audio-player-bar";
+import { isEnabled } from "@/lib/features";
+
+const globalPlayer = isEnabled("globalAudioPlayer");
 
 export default function DashboardLayout({
   children,
@@ -19,9 +22,9 @@ export default function DashboardLayout({
           <div className="flex-1" />
         </header>
         <main className="flex-1 overflow-auto p-6">{children}</main>
-        <AudioPlayerBar />
+        {globalPlayer && <AudioPlayerBar />}
       </SidebarInset>
-      <AudioPlayerProvider />
+      {globalPlayer && <AudioPlayerProvider />}
     </SidebarProvider>
   );
 }
