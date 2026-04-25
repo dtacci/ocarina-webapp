@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useRef } from "react";
 import Link from "next/link";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, Loader2 } from "lucide-react";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import { Badge } from "@/components/ui/badge";
 import { FavoriteButton } from "./favorite-button";
 import { RatingStars } from "./rating-stars";
+import {
+  sampleToTrack,
+  useSampleList,
+} from "./sample-list-context";
+import { usePlayback } from "@/hooks/use-playback";
 
 const familyColors: Record<string, string> = {
   strings: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
@@ -49,36 +53,34 @@ export function SampleCard({
   initialRating = null,
 }: SampleCardProps) {
   const familyClass = familyColors[sample.family || ""] || familyColors.other;
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
   const hasPreview = !!sample.mp3_blob_url;
+
+  const list = useSampleList();
+  const listTracks = list
+    ? list.samples.map((s) => list.toTrack(s)).filter((t) => !!t.src)
+    : undefined;
+  const listIndex = list
+    ? list.samples.findIndex((s) => s.id === sample.id)
+    : undefined;
+
+  const { isPlaying, isLoading, isCurrent, play } = usePlayback({
+    track: sampleToTrack(sample),
+    listTracks,
+    listIndex,
+  });
 
   function handlePlay(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (!hasPreview) return;
-
-    // Lazy-create the audio element on first click
-    if (!audioRef.current) {
-      const a = new Audio(sample.mp3_blob_url!);
-      a.addEventListener("ended", () => setIsPlaying(false));
-      a.addEventListener("pause", () => setIsPlaying(false));
-      a.addEventListener("play", () => setIsPlaying(true));
-      audioRef.current = a;
-    }
-
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(() => {/* browser autoplay policy */});
-    }
+    play();
   }
 
   return (
     <Link
       href={`/library/${encodeURIComponent(sample.id)}`}
       className="group block rounded-xl border border-border/50 bg-card/80 p-3 transition-all hover:border-primary/30 hover:bg-card hover-lift"
+      data-playing={isCurrent ? "true" : undefined}
     >
       {/* Waveform / play area */}
       <div className="mb-2 h-12 rounded bg-muted/50 relative flex items-center justify-center overflow-hidden">
@@ -91,7 +93,12 @@ export function SampleCard({
             return (
               <div
                 key={i}
-                className="flex-1 rounded-sm bg-foreground/20 group-hover:bg-foreground/30 transition-colors"
+                className={
+                  "flex-1 rounded-sm transition-colors " +
+                  (isCurrent
+                    ? "bg-primary/60 group-hover:bg-primary/70"
+                    : "bg-foreground/20 group-hover:bg-foreground/30")
+                }
                 style={{ height: `${h}px` }}
               />
             );
@@ -102,13 +109,22 @@ export function SampleCard({
         {hasPreview && (
           <button
             onClick={handlePlay}
-            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-background/40 backdrop-blur-[1px]"
-            title={isPlaying ? "Pause preview" : "Play 6s preview"}
+            className={
+              "absolute inset-0 flex items-center justify-center transition-opacity bg-background/40 backdrop-blur-[1px] " +
+              (isCurrent ? "opacity-100" : "opacity-0 group-hover:opacity-100")
+            }
+            aria-label={isPlaying ? `Pause ${sample.id}` : `Play ${sample.id}`}
+            aria-pressed={isPlaying}
+            title={isPlaying ? "Pause" : "Play 6s preview"}
           >
             <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-colors">
-              {isPlaying
-                ? <Pause className="size-3.5" />
-                : <Play className="size-3.5 ml-px" />}
+              {isLoading ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : isPlaying ? (
+                <Pause className="size-3.5" />
+              ) : (
+                <Play className="size-3.5 ml-px" />
+              )}
             </span>
           </button>
         )}

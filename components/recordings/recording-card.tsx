@@ -2,13 +2,17 @@
 
 import { useState, useRef, useEffect } from "react";
 import {
-  Play, Pause, Volume2, VolumeX, Download, Loader2, Music, Clock,
+  Play, Pause, Download, Loader2, Music, Clock,
   Trash2, Pencil, Globe, Link, Share2, Check, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useWaveSurfer } from "@/components/audio/use-wavesurfer";
+import { PeaksSvg } from "@/components/audio/peaks-svg";
+import {
+  recordingToTrack,
+  useRecordingList,
+} from "./recording-list-context";
+import { usePlayback } from "@/hooks/use-playback";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
 
 function formatDuration(sec: number): string {
@@ -31,8 +35,6 @@ interface Props {
 }
 
 export function RecordingCard({ recording, onDelete }: Props) {
-  const [muted, setMuted] = useState(false);
-
   // Editable state — mirrors recording fields optimistically
   const [title, setTitle] = useState(recording.title ?? "Untitled");
   const [isPublic, setIsPublic] = useState(recording.is_public);
@@ -49,24 +51,31 @@ export function RecordingCard({ recording, onDelete }: Props) {
 
   const titleInputRef = useRef<HTMLInputElement>(null);
 
+  // Playback — delegates to global store or local Audio based on flag
+  const list = useRecordingList();
+  const listTracks = list
+    ? list.recordings.map((r) => list.toTrack(r))
+    : undefined;
+  const listIndex = list
+    ? list.recordings.findIndex((r) => r.id === recording.id)
+    : undefined;
+
   const {
-    containerRef,
-    isReady,
     isPlaying,
+    isLoading,
+    isCurrent,
     currentTime,
-    duration: wsDuration,
-    togglePlay,
-    setMuted: wsSetMuted,
-  } = useWaveSurfer({
-    url: recording.blob_url,
-    height: 48,
-    barWidth: 2,
-    barGap: 1,
-    barRadius: 1,
-    lazy: true,
+    duration: playbackDuration,
+    progress,
+    play,
+    stop: clearPlayer,
+  } = usePlayback({
+    track: recordingToTrack(recording),
+    listTracks,
+    listIndex,
   });
 
-  const displayDuration = wsDuration > 0 ? wsDuration : recording.duration_sec;
+  const displayDuration = playbackDuration > 0 ? playbackDuration : recording.duration_sec;
 
   // Focus input when editing starts
   useEffect(() => {
@@ -76,10 +85,8 @@ export function RecordingCard({ recording, onDelete }: Props) {
     }
   }, [editingTitle]);
 
-  function handleMuteToggle() {
-    const next = !muted;
-    setMuted(next);
-    wsSetMuted(next);
+  function handlePlay() {
+    play();
   }
 
   // ── Title editing ────────────────────────────────────────────────────────────
@@ -129,6 +136,9 @@ export function RecordingCard({ recording, onDelete }: Props) {
     try {
       const res = await fetch(`/api/recordings/${recording.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
+      // If this recording was playing, stop + clear so the bar doesn't
+      // hold a ghost reference to a deleted blob.
+      if (isCurrent) clearPlayer();
       setDeleteOpen(false);
       onDelete?.(recording.id);
     } catch {
@@ -168,13 +178,19 @@ export function RecordingCard({ recording, onDelete }: Props) {
   }
 
   return (
-    <div className="group rounded-lg border bg-card p-4 space-y-3 hover:border-foreground/20 transition-colors">
-      {/* Waveform */}
-      <div className="relative h-12 rounded bg-muted overflow-hidden">
-        <div ref={containerRef} className="absolute inset-0" />
-        {!isReady && (
-          <Skeleton className="absolute inset-0 rounded" />
-        )}
+    <div
+      className="group rounded-lg border bg-card p-4 space-y-3 hover:border-foreground/20 transition-colors"
+      data-playing={isCurrent ? "true" : undefined}
+    >
+      {/* Waveform — static peaks with live progress when current */}
+      <div className="relative h-12 rounded bg-muted/40 overflow-hidden">
+        <PeaksSvg
+          peaks={recording.waveform_peaks}
+          height={48}
+          bars={96}
+          progress={isCurrent ? progress : undefined}
+          className="px-1"
+        />
       </div>
 
       {/* Title */}
@@ -222,17 +238,24 @@ export function RecordingCard({ recording, onDelete }: Props) {
 
       {/* Controls row */}
       <div className="flex items-center gap-2">
-        {/* Play/Pause */}
+        {/* Play/Pause — dispatches to the global store */}
         <button
-          onClick={togglePlay}
-          disabled={!isReady}
-          className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 shrink-0"
+          onClick={handlePlay}
+          aria-label={isPlaying ? `Pause ${title}` : `Play ${title}`}
+          aria-pressed={isPlaying}
+          className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
         >
-          {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5 ml-px" />}
+          {isLoading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : isPlaying ? (
+            <Pause className="size-3.5" />
+          ) : (
+            <Play className="size-3.5 ml-px" />
+          )}
         </button>
 
         <span className="text-xs tabular-nums text-muted-foreground w-9 shrink-0">
-          {formatDuration(currentTime)}
+          {formatDuration(isCurrent ? currentTime : 0)}
         </span>
 
         {/* Badges */}
@@ -255,15 +278,6 @@ export function RecordingCard({ recording, onDelete }: Props) {
 
         {/* Action buttons */}
         <div className="flex items-center gap-1 shrink-0">
-          {/* Mute */}
-          <button
-            onClick={handleMuteToggle}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1"
-            title={muted ? "Unmute" : "Mute"}
-          >
-            {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
-          </button>
-
           {/* Download */}
           <a
             href={recording.blob_url}

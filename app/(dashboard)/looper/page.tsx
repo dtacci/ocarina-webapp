@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useLoopState } from "@/hooks/use-loop-state";
+import { useAudioTakeover } from "@/hooks/use-audio-takeover";
 import { DrumMachine } from "@/components/looper/drum-machine";
 import {
   TRACK_COLORS,
@@ -863,6 +864,8 @@ function TrackGrid({
 
 // Main LooperDA Component
 export default function LooperDAPage() {
+  useAudioTakeover();
+
   const [tracks, setTracks] = useState<Track[]>([
     {
       id: "1",
