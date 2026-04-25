@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { put } from "@vercel/blob";
+import { transcodeToMp3 } from "@/lib/audio/transcode-mp3";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /**
  * Sample Editor — "save as new" endpoint.
@@ -102,12 +103,32 @@ export async function POST(request: Request) {
     addRandomSuffix: true,
   });
 
+  // Transcode WAV → MP3 (VBR V0, ~245kbps avg) for browser playback.
+  // Non-destructive: blob_url keeps the WAV; mp3_blob_url gets the MP3.
+  let mp3BlobUrl: string | null = null;
+  try {
+    const wavBytes = await wav.arrayBuffer();
+    const mp3Buffer = await transcodeToMp3(wavBytes);
+    const mp3Path = `${user.id}/samples/${Date.now()}-${slug}.mp3`;
+    const mp3Blob = await put(mp3Path, mp3Buffer, {
+      access: "public",
+      contentType: "audio/mpeg",
+      addRandomSuffix: true,
+    });
+    mp3BlobUrl = mp3Blob.url;
+  } catch (e) {
+    // MP3 transcoding is best-effort — the sample saves with WAV only.
+    // Log but don't fail the request.
+    console.error("[samples/create] MP3 transcoding failed:", e);
+  }
+
   const { error } = await supabase.from("samples").insert({
     id: sampleId,
     user_id: user.id,
     is_system: false,
     verified: false,
     blob_url: blob.url,
+    mp3_blob_url: mp3BlobUrl,
     duration_sec: metadata.durationSec,
     sample_rate: metadata.sampleRate,
     waveform_peaks: metadata.waveformPeaks,
