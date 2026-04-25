@@ -18,10 +18,32 @@ For what's already shipped: see [`progress.md`](./progress.md).
 - **Looper Dashboard** — visual representation of Teensy's 4–6 track loop state with waveform rendering
 - **Realtime Bridge** — Supabase Realtime relay: Pi publishes Teensy STATUS → web subscribes (~80–130 ms)
 - **Pi Sync Agent** — Python daemon: FileWatcher + SQLite queue + presigned Blob uploads
-- **MP3 Transcoding** — Pi-side Python (pydub/ffmpeg) before upload
 - **Flip `globalAudioPlayer: true`** — the global audio player is merged and feature-flagged; manual-test both modes in a preview deploy, then decide whether to enable by default
 
 Feature flags already declared (disabled) for these: `looperDashboard`, `realtimeBridge`, `mp3Transcoding`, `piSyncAgent`, `globalAudioPlayer`.
+
+---
+
+## MP3 Transcoding — sequencing
+
+**Webapp forward path is shipped** (PR #13): `/api/samples/create` now auto-transcodes WAV → MP3 (VBR V0, ~245kbps) and sets `mp3_blob_url` for every new user-created sample. Admin backfill endpoint at `/api/admin/transcode-samples` is ready for user samples with Vercel Blob URLs.
+
+**System samples (3,859) are a Pi-side job.** Their `blob_url` values are Pi-local filesystem paths (e.g. `samples/organized/woodwinds/saxophone/...`), not cloud URLs — the webapp can't download them. The Pi must transcode + upload + call the existing `PATCH /api/sync/samples/[id]/preview`.
+
+**But: curate before transcoding.** The current library is bloated — 800+ varieties of individual articulations that the instrument doesn't need. A separate conversation (see `digital-ocarina/docs/LIBRARY_GROWTH_PLAN.md` and `SAMPLE_LIBRARY_INTELLIGENCE.md`) explored culling to a focused core set and building expression envelopes. No point transcoding 3,859 samples if the final set is 200–500.
+
+### Sequencing
+
+1. **Curate the sample library** — decide which samples stay. Consider: what does the Ocarina actually play? How do expression envelopes (ADSR, velocity layers, round-robin) change what's needed? A single well-enveloped instrument may replace dozens of static articulation variants. Capture curation decisions in a markdown doc in the digital-ocarina repo.
+2. **Clean the DB** — remove or archive culled samples from Supabase. Update the Pi's `index.json` to match.
+3. **Pi batch script** — `transcode_and_upload.py`: iterate curated samples, ffmpeg WAV → MP3 (VBR V0), upload to Vercel Blob via `/api/sync/upload`, then `PATCH /api/sync/samples/[id]/preview` with the blob URL. Script lives in `digital-ocarina/pi/scripts/`.
+4. **Verify** — library cards show play buttons for every curated sample. Global player queue works. Resume chip appears.
+5. **Flip `mp3Transcoding` flag** — enable in `lib/features.ts` if any UI gates on it (currently nothing does — playback is gated on `mp3_blob_url` being non-null, which is data-driven, not flag-driven).
+
+### Reference docs (digital-ocarina repo)
+- `docs/SAMPLE_LIBRARY_INTELLIGENCE.md` — how the library grew from 1,454 → 4,886
+- `docs/LIBRARY_GROWTH_PLAN.md` — problem areas: sparse vibes, too many articulations, family misclassification, search gaps
+- Envelope/expression discussion — **not yet captured in a doc.** Was discussed in a separate thread. Should be written up before curation begins so the decisions are durable.
 
 ### Mic Recording — v2 backlog (after merge)
 
