@@ -4,6 +4,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // POST — web app queues a command for the Pi
 // Body: { deviceId, command, params }
+//
+// Special kind: { command: "sim_key", params: { key: "w", event: "down"|"up" } }
+// — simulates a hardware/keyboard button press on the device. Used by the Live
+// Console page to drive the same code path as a physical button. Rate-limited
+// to 20 sim_key events per device per second.
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -26,6 +31,33 @@ export async function POST(request: Request) {
 
   if (!device) {
     return Response.json({ error: "Device not found" }, { status: 404 });
+  }
+
+  if (command === "sim_key") {
+    const key = params?.key;
+    const event = params?.event;
+    if (typeof key !== "string" || key.length === 0 || key.length > 4) {
+      return Response.json({ error: "sim_key requires a short `key` string" }, { status: 400 });
+    }
+    if (event !== "down" && event !== "up" && event !== "tap") {
+      return Response.json(
+        { error: "sim_key `event` must be 'down' | 'up' | 'tap'" },
+        { status: 400 }
+      );
+    }
+
+    // 20/sec rate limit per device
+    const admin = createAdminClient();
+    const oneSecondAgo = new Date(Date.now() - 1000).toISOString();
+    const { count } = await admin
+      .from("device_commands")
+      .select("id", { count: "exact", head: true })
+      .eq("device_id", deviceId)
+      .eq("command", "sim_key")
+      .gte("created_at", oneSecondAgo);
+    if ((count ?? 0) >= 20) {
+      return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
+    }
   }
 
   const { data, error } = await supabase
