@@ -13,37 +13,15 @@ For what's already shipped: see [`progress.md`](./progress.md).
 
 ---
 
-## Next up — v0.2 Phase 2 (remaining)
+## Next up
 
 - **Looper Dashboard** — visual representation of Teensy's 4–6 track loop state with waveform rendering
-- **Global Audio Player Singleton** — Zustand store, persists across navigation so audio doesn't stop on route change
 - **Realtime Bridge** — Supabase Realtime relay: Pi publishes Teensy STATUS → web subscribes (~80–130 ms)
 - **Pi Sync Agent** — Python daemon: FileWatcher + SQLite queue + presigned Blob uploads
 - **MP3 Transcoding** — Pi-side Python (pydub/ffmpeg) before upload
+- **Flip `globalAudioPlayer: true`** — the global audio player is merged and feature-flagged; manual-test both modes in a preview deploy, then decide whether to enable by default
 
-Feature flags already declared (disabled) for these: `looperDashboard`, `realtimeBridge`, `mp3Transcoding`, `piSyncAgent`.
-
----
-
-## In flight
-
-### Mic Recording in Add-recording modal — `feat/sample-mic-recording`
-
-Browser microphone capture as a second tab in the upload modal. Same server pipeline as file upload (WAV → `/api/recordings/upload` → `confirm` → `recordings` table → surfaces as a draft in `/sample-editor`), zero backend changes.
-
-**What's built:**
-- `useMicrophoneRecord` hook — MediaRecorder state machine with device enumeration, live `AnalyserNode` for metering, 5:00 warn / 10:00 hard cap, full stream teardown on reset
-- `blobToWav` (`lib/audio/decode-to-wav.ts`) — webm/opus (Chrome) and mp4/aac (Safari) → PCM16 WAV via existing `encodeWav`
-- `uploadAndConfirmRecording` helper (`lib/recordings/upload-and-confirm.ts`) — shared by both tabs
-- `RecordPanel` with field-recording-rig aesthetic — corner tick brackets, INPUT ∙ ARMED ∙ REC LED cluster, channel-strip rows, dB scale, hardware-key record button
-- `InputLevelMeter` — Web-Audio-native (not `Tone.Analyser`), horizontal + vertical
-- `UploadModal` refactored to tabbed "Add recording"; `UploadButton` renamed/icon updated
-- "Save & open in editor" shortcut navigates straight to `/sample-editor/[id]`
-
-**Needs before merge:**
-- **Real-browser manual test** across Chrome + Safari desktop + iOS Safari (automated verification can't grant mic permission). Verify: permission grant, device switch mid-session, mic LED extinguishes on modal close, 5-min warn/10-min cap, decoded WAV plays back correctly in the editor
-- **Screenshot or Loom** for the PR description — the aesthetic is the whole pitch and the diff alone doesn't sell it
-- **Consider**: default tab logic — today persisted via localStorage (`ocarina:add-recording:last-tab`). May want to bias toward "Record" if we see people using it more than file upload
+Feature flags already declared (disabled) for these: `looperDashboard`, `realtimeBridge`, `mp3Transcoding`, `piSyncAgent`, `globalAudioPlayer`.
 
 ### Mic Recording — v2 backlog (after merge)
 
@@ -80,9 +58,7 @@ Browser microphone capture as a second tab in the upload modal. Same server pipe
 
 ---
 
-## Sample Editor — v2 backlog
-
-Deferred from the v1 ship. Not blocking — the editor is fully usable without these. Ordered roughly by user-visible value.
+## Sample Editor — remaining backlog
 
 ### Data + persistence
 - **`samples.title` column** — promote the metadata `name` field to a real DB column so library cards show human-readable names (today the raw `id` is shown)
@@ -90,7 +66,6 @@ Deferred from the v1 ship. Not blocking — the editor is fully usable without t
 - **Chain restore on reopen** — re-seed reducer from `samples.edit_spec` when a fork is opened (currently always defaults). **Tricky**: the WAV is already baked, so re-applying the chain would double-process. Decide the right semantics — probably "show chain as a read-only recipe, default new edits to empty"
 
 ### More effects
-- **Compressor** — threshold, ratio, attack, release, makeup gain
 - **Normalize / LUFS target** — integrated-loudness render pass for broadcast-ready output
 - **Time-stretch** — independent of pitch (Tone.GrainPlayer or WSOLA)
 
@@ -101,9 +76,6 @@ Deferred from the v1 ship. Not blocking — the editor is fully usable without t
 
 ### UX
 - **Preset chains** — "lo-fi warm", "field-recording cleanup", savable user presets
-- **Loop crossfade** — micro-crossfade at loop points for seamless sustained samples
-- **Drag reorder effects** — reducer already supports `REORDER_EFFECTS`; just needs HTML5 drag handlers on cards
-- **Add / remove effects via `+ ADD` menu** — reducer supports `ADD_EFFECT` / `REMOVE_EFFECT`; Overlay primitive exists; needs the command-menu UI wiring
 - **Mobile touch pass** — current layout degrades gracefully but isn't optimized for single-thumb editing
 
 ---

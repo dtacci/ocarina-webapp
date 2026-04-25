@@ -23,6 +23,56 @@ Web companion for the Digital Ocarina (voice-to-instrument synthesizer). Dual pu
 | Audio | WaveSurfer.js 7.12 (waveform + regions + timeline), Tone.js 15.1 (realtime effect chain + `Tone.Offline` render), native Web Audio (`decodeAudioData` + `OfflineAudioContext` for peaks) |
 | Theme | Dark mode, warm amber/gold (oklch), DM Serif Display + DM Sans + JetBrains Mono |
 
+## v0.2 Mid (April 2026)
+
+### Global Audio Player (feature-flagged)
+
+Singleton audio engine behind `globalAudioPlayer` feature flag (starts disabled). When enabled, audio persists across page navigation — when disabled, cards fall back to per-component `<audio>` elements (original behavior). Toggle with a one-line flag flip + redeploy.
+
+- **Zustand store** (`lib/stores/audio-player.ts`) — track, queue, status, time, volume, persist to localStorage
+- **Engine** (`components/audio/audio-engine.ts`) — headless HTML5 `<audio>` singleton, throttled time updates (~4 Hz), Media Session API for lock-screen/headset controls
+- **Provider + Bar** — `AudioPlayerProvider` (no DOM, pure side-effects) + `AudioPlayerBar` (sticky footer with transport, waveform, volume, resume chip); both conditionally mounted in dashboard layout
+- **`usePlayback` adapter** (`hooks/use-playback.ts`) — cards call one hook that branches between the global store and a local `new Audio()` fallback based on the flag. No conditional rendering in card JSX
+- **Mutual exclusion** — `useAudioTakeover` hook stops the global player when looper, sample editor, or karaoke mount
+- **Keyboard shortcuts** — Space (toggle), ← → (seek ±5s), ↑ ↓ (volume), M (mute), N/P (next/prev)
+- **Queue context** — `SampleListProvider` + `RecordingListProvider` give cards next/prev traversal through visible grids
+- **Resume chip** — last-played track stored in localStorage; offers one-tap resume on re-entry
+
+### Mic Recording — browser microphone capture
+
+Adds a "Record" tab to the upload modal so users can capture audio directly in the browser (vocal direction, instrument demos, laptop-mic takes). Routes through the existing upload pipeline — zero backend changes.
+
+- **`useMicrophoneRecord`** (`hooks/use-microphone-record.ts`) — MediaRecorder state machine (idle → requesting → ready → recording → captured), device enumeration via `enumerateDevices`, live `AnalyserNode` for metering, 5:00 warn / 10:00 hard cap, full `MediaStream` teardown on reset/unmount
+- **`blobToWav`** (`lib/audio/decode-to-wav.ts`) — decodes MediaRecorder output (webm/opus on Chrome, mp4/aac on Safari) via `AudioContext.decodeAudioData`, re-encodes to PCM16 WAV via existing `encodeWav`
+- **`RecordPanel`** — field-recording-rig aesthetic: corner tick brackets, INPUT ∙ ARMED ∙ REC LED cluster, channel-strip rows with mono uppercase labels, dB scale tick marks, hardware-key record button (amber aura when armed, oxide-pulsing when recording)
+- **`InputLevelMeter`** — Web-Audio-native (`getFloatTimeDomainData`), amber/oxide, peak-hold at 8 dB/s, horizontal + vertical
+- **Upload modal refactored** to tabbed "Add recording" (Upload file | Record), last tab persisted in localStorage
+- **"Save & open in editor"** shortcut navigates directly to `/sample-editor/[id]`
+- iOS-safe: `AudioContext` created/resumed inside the permission-grant click gesture; raw capture (echoCancellation/noiseSuppression/autoGainControl all off)
+
+### Sample Editor v2 additions
+
+- **Compressor card** — threshold, ratio, attack, release, makeup gain
+- **Add / remove effects** via `+ ADD` command menu (Overlay primitive)
+- **Drag-reorder effects** — HTML5 drag handlers on pedalboard cards
+- **Loop crossfade** — micro-crossfade at loop points for seamless sustained samples
+
+### Live Console — Pi telemetry + virtual keyboard
+
+Real-time diagnostics at `/diagnostics/live` for webapp-triggered Pi interaction.
+
+- **Telemetry stream** — `POST /api/sync/telemetry` receives Pi events; `useDeviceTelemetry` hook subscribes via polling
+- **Virtual keyboard** — on-screen piano/button grid sends `sim_key` commands to the Pi (`POST /api/sync/commands`), rate-limited to 20/sec per device
+- **FX state panel** — live view of the Pi's effect chain state
+- **Event log** — scrolling real-time log of telemetry events
+- **Sidebar integration** — "Console" link under diagnostics (Gamepad2 icon), gated by `liveConsole` flag, only renders when a device is online
+
+### Other v0.2 Mid features
+
+- **Device Pairing** — seamless Pi pairing via spoken 6-digit code
+- **Device Deletion** — remove-device button on `/devices` cards
+- **Dev tooling** — `useAudioPlayerStore` exposed on `window` in dev mode for DevTools inspection
+
 ## v0.2 Early (April 2026)
 
 ### Sample Editor — "field recordist's workbench"
@@ -88,7 +138,9 @@ Sample editor additions (no new table): `samples.source_sample_id` (FK → `samp
 
 ## Feature flags (lib/features.ts)
 
-**Enabled**: `sampleBrowser`, `aiSearch`, `aiKitBuilder`, `kitBrowser`, `deviceRegistration`, `syncApi`, `activityTimeline`, `embeddablePlayer`, `configManager`, `recordingLibrary`, `karaokeBrowser`, `looperDA`, `drumPatternEditor`, `sampleEditor`, `analyticsDashboard`, `diagnostics`.
+**Enabled**: `sampleBrowser`, `aiSearch`, `aiKitBuilder`, `kitBrowser`, `deviceRegistration`, `syncApi`, `activityTimeline`, `embeddablePlayer`, `configManager`, `recordingLibrary`, `karaokeBrowser`, `looperDA`, `drumPatternEditor`, `sampleEditor`, `analyticsDashboard`, `diagnostics`, `liveConsole`.
+
+**Disabled (ready to flip)**: `globalAudioPlayer`.
 
 ## Architecture decisions (don't revisit)
 
