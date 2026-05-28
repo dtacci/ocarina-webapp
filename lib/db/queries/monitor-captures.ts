@@ -16,6 +16,10 @@ export interface MonitorCaptureRow {
   note_event_count: number;
   fx_event_count: number;
   heartbeat_count: number;
+  loop_event_count: number;
+  gpio_event_count: number;
+  misc_event_count: number;
+  notes: string | null;
   created_at: string;
 }
 

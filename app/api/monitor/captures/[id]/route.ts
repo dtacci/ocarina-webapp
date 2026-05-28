@@ -4,7 +4,10 @@ import { del } from "@vercel/blob";
 import { createClient } from "@/lib/supabase/server";
 
 const patchSchema = z.object({
-  name: z.string().min(1).max(120),
+  name: z.string().min(1).max(120).optional(),
+  notes: z.string().max(8000).nullable().optional(),
+}).refine((v) => v.name !== undefined || v.notes !== undefined, {
+  message: "Provide name or notes",
 });
 
 interface Params {
@@ -25,9 +28,13 @@ export async function PATCH(request: Request, { params }: Params) {
     return Response.json({ error: "Invalid body" }, { status: 400 });
   }
 
+  const patch: Record<string, unknown> = {};
+  if (parsed.data.name !== undefined) patch.name = parsed.data.name;
+  if (parsed.data.notes !== undefined) patch.notes = parsed.data.notes;
+
   const { data, error } = await supabase
     .from("monitor_captures")
-    .update({ name: parsed.data.name })
+    .update(patch)
     .eq("id", id)
     .eq("user_id", user.id)
     .select()

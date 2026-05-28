@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { getMyCapture } from "@/lib/db/queries/monitor-captures";
 import { ReplaySurface } from "@/components/monitor/replay-surface";
+import { CaptureNotesEditor } from "@/components/monitor/capture-notes-editor";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -19,10 +20,22 @@ export default async function CapturePage({ params }: PageProps) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{capture.name}</h1>
-          <p className="text-muted-foreground text-sm">
-            Saved capture · {capture.event_count} events ·{" "}
-            {Math.round(capture.duration_ms / 1000)}s ·{" "}
+          <p className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground text-sm">
+            <span>Saved capture · {capture.event_count} events ·{" "}
+              {Math.round(capture.duration_ms / 1000)}s</span>
             <span className="font-mono">{capture.source}</span>
+            {capture.button_event_count > 0 && (
+              <span className="text-violet-300/80">{capture.button_event_count} buttons</span>
+            )}
+            {capture.note_event_count > 0 && (
+              <span className="text-emerald-300/80">{capture.note_event_count} notes</span>
+            )}
+            {capture.loop_event_count > 0 && (
+              <span className="text-blue-300/80">{capture.loop_event_count} loop</span>
+            )}
+            {capture.fx_event_count > 0 && (
+              <span className="text-amber-300/80">{capture.fx_event_count} fx</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -43,6 +56,11 @@ export default async function CapturePage({ params }: PageProps) {
           </Link>
         </div>
       </div>
+
+      <CaptureNotesEditor
+        captureId={capture.id}
+        initialNotes={capture.notes}
+      />
 
       <ReplaySurface
         capture={{

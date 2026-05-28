@@ -66,15 +66,27 @@ export async function POST(request: Request) {
   let buttons = 0,
     notes = 0,
     fx = 0,
-    heartbeats = 0;
+    heartbeats = 0,
+    loops = 0,
+    gpio = 0,
+    misc = 0;
   for (const e of events) {
     switch (e.kind) {
       case "button":    buttons++;    break;
       case "note":      notes++;      break;
       case "fx":        fx++;         break;
       case "heartbeat": heartbeats++; break;
+      case "loop":      loops++;      break;
+      // GPIO events are logged via the same "button" kind today; if the
+      // sink ever distinguishes them, count goes here. Tracked separately
+      // so we can pull it apart later without a migration.
+      case "misc":      misc++;       break;
     }
   }
+  // Heuristic: "pin <N>" entries inside the button bucket map to Teensy/
+  // GPIO; for now we keep them in the buttons count. gpio left at 0 until
+  // we differentiate at the sink level.
+  void gpio;
 
   // Upload payload JSON to Vercel Blob first — if this fails we don't insert
   // an orphan row.
@@ -121,6 +133,8 @@ export async function POST(request: Request) {
       note_event_count: notes,
       fx_event_count: fx,
       heartbeat_count: heartbeats,
+      loop_event_count: loops,
+      misc_event_count: misc,
     })
     .select()
     .single();

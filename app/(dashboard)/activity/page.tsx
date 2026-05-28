@@ -90,7 +90,15 @@ export default async function ActivityPage() {
                     <span>{c.event_count} events</span>
                     <span>{Math.round(c.duration_ms / 1000)}s</span>
                     <span className="font-mono">{c.source}</span>
+                    {c.loop_event_count > 0 && (
+                      <span className="text-blue-300/80">{c.loop_event_count} loop</span>
+                    )}
                   </div>
+                  {c.notes && (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 italic whitespace-pre-wrap">
+                      {c.notes}
+                    </p>
+                  )}
                 </Link>
                 <Link
                   href={`/monitor/captures/${c.id}`}

@@ -85,7 +85,15 @@ export function RecentCapturesPanel({ refreshNonce }: Props) {
                   <span>{c.event_count} events</span>
                   <span>{Math.round(c.duration_ms / 1000)}s</span>
                   <span className="font-mono">{c.source}</span>
+                  {c.loop_event_count > 0 && (
+                    <span className="text-blue-300/80">{c.loop_event_count} loop</span>
+                  )}
                 </div>
+                {c.notes && (
+                  <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground/80 italic">
+                    {c.notes}
+                  </p>
+                )}
               </Link>
               <Link
                 href={`/monitor/captures/${c.id}`}

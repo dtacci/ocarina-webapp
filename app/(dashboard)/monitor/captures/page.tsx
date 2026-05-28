@@ -78,7 +78,22 @@ export default async function CapturesPage() {
                       {c.fx_event_count} fx
                     </span>
                   )}
+                  {c.loop_event_count > 0 && (
+                    <span className="text-blue-300/80">
+                      {c.loop_event_count} loop
+                    </span>
+                  )}
+                  {c.misc_event_count > 0 && (
+                    <span className="text-muted-foreground/80">
+                      {c.misc_event_count} misc
+                    </span>
+                  )}
                 </div>
+                {c.notes && (
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 whitespace-pre-wrap">
+                    {c.notes}
+                  </p>
+                )}
               </Link>
               <Link
                 href={`/monitor/captures/${c.id}`}

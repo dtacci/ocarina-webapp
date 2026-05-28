@@ -305,6 +305,11 @@ export const monitorCaptures = pgTable("monitor_captures", {
   noteEventCount: integer("note_event_count").notNull().default(0),
   fxEventCount: integer("fx_event_count").notNull().default(0),
   heartbeatCount: integer("heartbeat_count").notNull().default(0),
+  loopEventCount: integer("loop_event_count").notNull().default(0),
+  gpioEventCount: integer("gpio_event_count").notNull().default(0),
+  miscEventCount: integer("misc_event_count").notNull().default(0),
+  /** Free-text annotation the user attaches after the fact. */
+  notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
