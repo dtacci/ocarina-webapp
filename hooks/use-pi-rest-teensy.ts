@@ -9,6 +9,7 @@ import {
   ocarina,
   openEventStream,
   type HeartbeatEvent,
+  type LoopSnapshot,
   type StatusResponse,
   type TeensyHealth,
   type VersionInfo,
@@ -59,6 +60,21 @@ export interface UsePiRestTeensy {
   teensyLatencyHistory: (number | null)[];
   /** Build info — git SHA, branch, firmware build date. Fetched once on connect. */
   version: VersionInfo | null;
+  /** Latest looper snapshot — from /loop on mount, kept current by loop_state events. */
+  loopSnapshot: LoopSnapshot | null;
+  /**
+   * Latest playhead sample — { positionMs, activeTrack, receivedAt }. The
+   * receivedAt wall-clock lets the dashboard interpolate between 1Hz progress
+   * events for smooth animation.
+   */
+  loopProgress:
+    | { positionMs: number; activeTrack: number; receivedAt: number }
+    | null;
+  /**
+   * True/false from teensy_status events. `null` means we haven't heard yet —
+   * fall back to treating it as "ok" since heartbeats also imply liveness.
+   */
+  teensyConnected: boolean | null;
 }
 
 /**
@@ -91,6 +107,9 @@ export function usePiRestTeensy(
   const [teensyLatencyMs, setTeensyLatencyMs] = useState<number | null>(null);
   const [teensyLatencyHistory, setTeensyLatencyHistory] = useState<(number | null)[]>([]);
   const [version, setVersion] = useState<VersionInfo | null>(null);
+  const [loopSnapshot, setLoopSnapshot] = useState<LoopSnapshot | null>(null);
+  const [loopProgress, setLoopProgress] = useState<UsePiRestTeensy["loopProgress"]>(null);
+  const [teensyConnected, setTeensyConnected] = useState<boolean | null>(null);
 
   const refreshStatus = useCallback(async () => {
     if (!isConfigured) return;
@@ -118,6 +137,22 @@ export function usePiRestTeensy(
         if (!cancelled) setVersion(v);
       } catch {
         // Silent — `version` stays null and the status card just omits the line.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [enabled, isConfigured]);
+
+  // One-shot loop snapshot. The WS will push a loop_state right after subscribe
+  // anyway, but this gets the dashboard rendering before the WS round-trip.
+  useEffect(() => {
+    if (!enabled || !isConfigured) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await ocarina.loop();
+        if (!cancelled) setLoopSnapshot(snap);
+      } catch {
+        // Silent — WS loop_state covers it.
       }
     })();
     return () => { cancelled = true; };
@@ -249,6 +284,24 @@ export function usePiRestTeensy(
             ts: e.ts_ms ?? Date.now(),
           });
         },
+        onLoopState: (e) => {
+          setLoopSnapshot({
+            bpm: e.bpm,
+            master_length_ms: e.master_length_ms,
+            active_track: e.active_track,
+            tracks: e.tracks,
+          });
+        },
+        onLoopProgress: (e) => {
+          setLoopProgress({
+            positionMs: e.position_ms,
+            activeTrack: e.active_track,
+            receivedAt: Date.now(),
+          });
+        },
+        onTeensyStatus: (e) => {
+          setTeensyConnected(e.connected);
+        },
       });
     };
     connect();
@@ -270,5 +323,8 @@ export function usePiRestTeensy(
     teensyLatencyMs,
     teensyLatencyHistory,
     version,
+    loopSnapshot,
+    loopProgress,
+    teensyConnected,
   };
 }

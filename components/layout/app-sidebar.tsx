@@ -23,6 +23,7 @@ import {
   Radar,
   Sliders,
   FolderArchive,
+  Repeat,
 } from "lucide-react";
 
 import {
@@ -79,6 +80,7 @@ const navTools: NavItem[] = [
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
   { title: "Configurator", url: "/configurator", icon: Sliders, feature: "buttonConfigurator" as const },
+  { title: "Looper", url: "/looper-dashboard", icon: Repeat, feature: "looperDashboard" as const },
   { title: "Analytics", url: "/analytics", icon: BarChart2, feature: "analyticsDashboard" as const },
 ];
 

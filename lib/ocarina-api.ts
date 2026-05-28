@@ -160,6 +160,52 @@ export interface NoteOffEvent {
   button: number;
 }
 
+export type LoopTrackState = "empty" | "recording" | "playing" | "muted";
+
+export interface LoopTrack {
+  id: number; // 1-based, 1..4
+  state: LoopTrackState;
+  length_ms: number;
+  muted: boolean;
+}
+
+/**
+ * Snapshot of the Teensy's 4-track looper. Same shape as a loop_state event
+ * minus the `type` / `ts_ms` envelope. Fetched from GET /loop on dashboard
+ * mount, then kept current by loop_state events.
+ */
+export interface LoopSnapshot {
+  /** BPM is null until a master loop is committed. */
+  bpm: number | null;
+  master_length_ms: number;
+  active_track: number; // 1-based
+  tracks: LoopTrack[];
+}
+
+export interface LoopStateEvent extends LoopSnapshot {
+  type: "loop_state";
+  ts_ms: number;
+}
+
+export interface LoopProgressEvent {
+  type: "loop_progress";
+  /** Master-loop position when ts_ms was sampled. */
+  position_ms: number;
+  active_track: number;
+  ts_ms: number;
+}
+
+/**
+ * Fired when the Pi's link to the Teensy goes up or down (unplug, reflash, or
+ * first connect). `connected: false` means note/heartbeat/loop events have
+ * stopped flowing — show a "Teensy disconnected / reconnecting" state.
+ */
+export interface TeensyStatusEvent {
+  type: "teensy_status";
+  connected: boolean;
+  ts_ms: number;
+}
+
 /**
  * Stable webapp-facing names for the 5 Pi GPIO buttons. The wire format uses
  * `name` (not `pin`) as the canonical identifier so future board revs can
@@ -186,7 +232,10 @@ export type EventMessage =
   | NoteOnEvent
   | NoteOffEvent
   | GpioPressEvent
-  | GpioReleaseEvent;
+  | GpioReleaseEvent
+  | LoopStateEvent
+  | LoopProgressEvent
+  | TeensyStatusEvent;
 
 // ---------- REST ----------
 
@@ -277,6 +326,15 @@ export const ocarina = {
       method: "DELETE",
       headers: authHeaders(),
     }).then((r) => jsonOrThrow<DeleteUserPresetResponse>(r)),
+
+  /**
+   * Looper snapshot. Mirrors `/status` — fetched on Looper Dashboard mount,
+   * then kept current via loop_state WS events.
+   */
+  loop: () =>
+    fetch(`${BASE}/loop`, { headers: authHeaders() }).then((r) =>
+      jsonOrThrow<LoopSnapshot>(r)
+    ),
 };
 
 // ---------- WebSocket ----------
@@ -287,6 +345,9 @@ export interface EventStreamHandlers {
   onNoteOff?: (e: NoteOffEvent) => void;
   onGpioPress?: (e: GpioPressEvent) => void;
   onGpioRelease?: (e: GpioReleaseEvent) => void;
+  onLoopState?: (e: LoopStateEvent) => void;
+  onLoopProgress?: (e: LoopProgressEvent) => void;
+  onTeensyStatus?: (e: TeensyStatusEvent) => void;
   onOpen?: () => void;
   onClose?: (reason: string) => void;
   onError?: (err: Event) => void;
@@ -313,6 +374,9 @@ export function openEventStream(handlers: EventStreamHandlers): WebSocket {
       else if (e.type === "note_off") handlers.onNoteOff?.(e);
       else if (e.type === "gpio_press") handlers.onGpioPress?.(e);
       else if (e.type === "gpio_release") handlers.onGpioRelease?.(e);
+      else if (e.type === "loop_state") handlers.onLoopState?.(e);
+      else if (e.type === "loop_progress") handlers.onLoopProgress?.(e);
+      else if (e.type === "teensy_status") handlers.onTeensyStatus?.(e);
     } catch {
       // Malformed payload — log and continue. The Pi shouldn't be sending
       // these but defensive parsing keeps the stream alive if it does.

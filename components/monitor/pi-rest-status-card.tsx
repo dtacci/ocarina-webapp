@@ -25,6 +25,7 @@ export function PiRestStatusCard({ piRest }: Props) {
     teensyLatencyMs,
     teensyLatencyHistory,
     version,
+    teensyConnected,
   } = piRest;
   const base = getOcarinaApiBase();
   const hostLabel = base ? hostFromUrl(base) : "—";
@@ -109,6 +110,12 @@ export function PiRestStatusCard({ piRest }: Props) {
             >
               Pi v{version.api_version} · {version.git_sha.slice(0, 7)}
               {version.git_dirty ? "*" : ""} · firmware {version.firmware.build_date}
+            </p>
+          )}
+          {teensyConnected === false && (
+            <p className="mt-1 text-xs text-red-300">
+              Teensy disconnected — note / heartbeat / loop events have
+              stopped. Reconnect is automatic when it returns.
             </p>
           )}
           {errorMessage && (status === "error" || status === "disconnected") && (

@@ -15,7 +15,6 @@ export const features = {
 
   /** v0.2 features — disabled until ready */
   globalAudioPlayer: false,
-  looperDashboard: false,
   looperDA: true,
   realtimeBridge: false,
   configManager: true,
@@ -34,6 +33,7 @@ export const features = {
   quantizationControls: false,
   sampleDragDrop: false,
   drumPatternEditor: true,
+  looperDashboard: true,
   karaokeDisplay: false,
   lyricsEditor: false,
   shareLinks: false,
