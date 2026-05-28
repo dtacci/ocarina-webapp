@@ -142,6 +142,8 @@ export const devices = pgTable("devices", {
 export const samples = pgTable("samples", {
   id: text("id").primaryKey(),
   userId: uuid("user_id").references(() => users.id), // null = system sample
+  /** User-entered display name from the sample editor metadata panel. */
+  title: text("title"),
   blobUrl: text("blob_url").notNull(), // WAV file in Vercel Blob
   mp3BlobUrl: text("mp3_blob_url"), // compressed for browser playback (v0.2)
   waveformPeaks: jsonb("waveform_peaks"), // 200-point peak array for WaveSurfer
@@ -273,6 +275,39 @@ export const sessions = pgTable("sessions", {
   vibesUsed: jsonb("vibes_used").notNull().default([]),
   mode: sessionModeEnum("mode").notNull().default("instrument"),
   metadata: jsonb("metadata").default({}),
+});
+
+/**
+ * One row per saved /monitor capture session. Events themselves live in a
+ * Vercel Blob JSON file referenced by `blobUrl` (pathname kept separately so
+ * we can `del()` the blob when the row is deleted). Counts are denormalized
+ * for the list view — saves having to fetch the blob just to render
+ * "12 buttons · 38 notes".
+ */
+export const monitorCaptures = pgTable("monitor_captures", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  deviceId: uuid("device_id").references(() => devices.id, {
+    onDelete: "set null",
+  }),
+  name: text("name").notNull(),
+  blobUrl: text("blob_url").notNull(),
+  blobPathname: text("blob_pathname").notNull(),
+  /** 'pi_rest' | 'realtime' | 'webserial' — kept as text since we may add more sources. */
+  source: text("source").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  eventCount: integer("event_count").notNull().default(0),
+  buttonEventCount: integer("button_event_count").notNull().default(0),
+  noteEventCount: integer("note_event_count").notNull().default(0),
+  fxEventCount: integer("fx_event_count").notNull().default(0),
+  heartbeatCount: integer("heartbeat_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 // ============================================================================

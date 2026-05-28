@@ -1,0 +1,98 @@
+import Link from "next/link";
+import { ArrowLeft, Download, FolderArchive } from "lucide-react";
+
+import { listMyCaptures } from "@/lib/db/queries/monitor-captures";
+import { DeleteCaptureButton } from "@/components/monitor/delete-capture-button";
+
+export const dynamic = "force-dynamic";
+
+export default async function CapturesPage() {
+  const captures = await listMyCaptures();
+
+  return (
+    <div className="space-y-4 max-w-4xl">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Captures</h1>
+          <p className="text-muted-foreground text-sm">
+            Saved Monitor sessions. Captures persist as JSON in your library;
+            delete what you don&apos;t need.
+          </p>
+        </div>
+        <Link
+          href="/monitor"
+          className="flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-3" />
+          Back to Monitor
+        </Link>
+      </div>
+
+      {captures.length === 0 ? (
+        <div className="mx-auto max-w-xl space-y-4 py-16 text-center">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full border bg-card">
+            <FolderArchive className="size-6 text-muted-foreground" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium">No captures yet</h2>
+            <p className="text-sm text-muted-foreground">
+              Open Monitor, click Start, do the thing, click Stop. The capture
+              shows up here.
+            </p>
+          </div>
+          <Link
+            href="/monitor"
+            className="inline-flex items-center rounded-md border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Open Monitor →
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {captures.map((c) => (
+            <div
+              key={c.id}
+              className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{c.name}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
+                  <span title={new Date(c.created_at).toISOString()}>
+                    {new Date(c.created_at).toLocaleString()}
+                  </span>
+                  <span>{c.event_count} events</span>
+                  <span>{Math.round(c.duration_ms / 1000)}s</span>
+                  <span className="font-mono">{c.source}</span>
+                  {c.button_event_count > 0 && (
+                    <span className="text-violet-300/80">
+                      {c.button_event_count} buttons
+                    </span>
+                  )}
+                  {c.note_event_count > 0 && (
+                    <span className="text-emerald-300/80">
+                      {c.note_event_count} notes
+                    </span>
+                  )}
+                  {c.fx_event_count > 0 && (
+                    <span className="text-amber-300/80">
+                      {c.fx_event_count} fx
+                    </span>
+                  )}
+                </div>
+              </div>
+              <a
+                href={c.blob_url}
+                download={`${c.name}.json`}
+                className="flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/15"
+              >
+                <Download className="size-3" />
+                JSON
+              </a>
+              <DeleteCaptureButton id={c.id} name={c.name} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

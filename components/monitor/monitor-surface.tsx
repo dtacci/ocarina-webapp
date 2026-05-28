@@ -18,6 +18,7 @@ import { LiveEventLog, type LogEntry } from "@/components/diagnostics/live-event
 
 import { MicActivityStrip } from "@/components/monitor/mic-activity-strip";
 import { SessionCapturePanel } from "@/components/monitor/session-capture-panel";
+import { RecentCapturesPanel } from "@/components/monitor/recent-captures-panel";
 import { TeensyConnectCard } from "@/components/monitor/teensy-connect-card";
 import { PiRestStatusCard } from "@/components/monitor/pi-rest-status-card";
 import { PotsPanel } from "@/components/monitor/pots-panel";
@@ -60,6 +61,7 @@ export function MonitorSurface({ mode }: Props) {
   }, [mode]);
 
   const signals = useLiveConsoleSignals(source, { onEvent });
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   // Run all transport hooks unconditionally (rules of hooks), gated by
   // `enabled` so only one is live at a time.
@@ -189,7 +191,13 @@ export function MonitorSurface({ mode }: Props) {
               ? "pi-rest"
               : "teensy"
         }
+        source={mode.kind}
+        deviceId={mode.kind === "realtime" ? mode.deviceId : null}
+        onSaved={() => setRefreshNonce((n) => n + 1)}
       />
+
+      <RecentCapturesPanel refreshNonce={refreshNonce} />
+
       <LiveEventLog entries={signals.log} />
     </div>
   );
