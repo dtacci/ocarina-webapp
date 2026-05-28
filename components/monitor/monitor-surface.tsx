@@ -2,9 +2,13 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import { useLiveConsoleSignals } from "@/hooks/use-live-console-signals";
+import {
+  useLiveConsoleSignals,
+  type LiveConsoleSource,
+} from "@/hooks/use-live-console-signals";
 import { useLoopState } from "@/hooks/use-loop-state";
 import { useWebSerialTeensy } from "@/hooks/use-web-serial-teensy";
+import { usePiRestTeensy } from "@/hooks/use-pi-rest-teensy";
 
 import { DeviceStatusBar } from "@/components/diagnostics/device-status-bar";
 import { VirtualKeyboard } from "@/components/diagnostics/virtual-keyboard";
@@ -15,23 +19,25 @@ import { LiveEventLog, type LogEntry } from "@/components/diagnostics/live-event
 import { MicActivityStrip } from "@/components/monitor/mic-activity-strip";
 import { SessionCapturePanel } from "@/components/monitor/session-capture-panel";
 import { TeensyConnectCard } from "@/components/monitor/teensy-connect-card";
+import { PiRestStatusCard } from "@/components/monitor/pi-rest-status-card";
+
+export type MonitorMode =
+  | {
+      kind: "realtime";
+      deviceId: string;
+      deviceName: string | null;
+      initialLastSeenAt: string | null;
+      initialIsOnline: boolean;
+      initialIsRecent: boolean;
+    }
+  | { kind: "pi_rest" }
+  | { kind: "webserial" };
 
 interface Props {
-  /** Realtime mode when set, WebSerial mode when null. */
-  deviceId: string | null;
-  deviceName: string | null;
-  initialLastSeenAt: string | null;
-  initialIsOnline: boolean;
-  initialIsRecent: boolean;
+  mode: MonitorMode;
 }
 
-export function MonitorSurface({
-  deviceId,
-  deviceName,
-  initialLastSeenAt,
-  initialIsOnline,
-  initialIsRecent,
-}: Props) {
+export function MonitorSurface({ mode }: Props) {
   const sinkRef = useRef<((entry: LogEntry) => void) | null>(null);
   const registerSink = useCallback(
     (sink: ((entry: LogEntry) => void) | null) => {
@@ -43,53 +49,64 @@ export function MonitorSurface({
     sinkRef.current?.(entry);
   }, []);
 
-  const source = useMemo(
-    () =>
-      deviceId
-        ? ({ kind: "realtime" as const, deviceId })
-        : ({ kind: "webserial" as const }),
-    [deviceId]
-  );
+  const source: LiveConsoleSource = useMemo(() => {
+    if (mode.kind === "realtime") {
+      return { kind: "realtime", deviceId: mode.deviceId };
+    }
+    if (mode.kind === "pi_rest") return { kind: "pi_rest" };
+    return { kind: "webserial" };
+  }, [mode]);
 
   const signals = useLiveConsoleSignals(source, { onEvent });
 
+  // Run all transport hooks unconditionally (rules of hooks), gated by
+  // `enabled` so only one is live at a time.
   const [baudRate, setBaudRate] = useState(115200);
-  const teensy = useWebSerialTeensy({
+  const webserial = useWebSerialTeensy({
     baudRate,
-    enabled: !deviceId,
+    enabled: mode.kind === "webserial",
+    onHardware: signals.pushHardwareEvent,
+    onTelemetry: signals.pushTelemetryEvent,
+  });
+  const piRest = usePiRestTeensy({
+    enabled: mode.kind === "pi_rest",
     onHardware: signals.pushHardwareEvent,
     onTelemetry: signals.pushTelemetryEvent,
   });
 
-  const isWebSerial = !deviceId;
-  const isConnected = isWebSerial
-    ? teensy.status === "connected"
-    : signals.status === "full" || signals.status === "pi_only";
-  const isFull = isWebSerial
-    ? teensy.status === "connected"
-    : signals.status === "full";
+  const isConnected = (() => {
+    if (mode.kind === "webserial") return webserial.status === "connected";
+    if (mode.kind === "pi_rest") return piRest.status === "connected";
+    return signals.status === "full" || signals.status === "pi_only";
+  })();
+  const isFull = (() => {
+    if (mode.kind === "webserial") return webserial.status === "connected";
+    if (mode.kind === "pi_rest") return piRest.status === "connected";
+    return signals.status === "full";
+  })();
 
   return (
     <div className="space-y-4">
-      {isWebSerial ? (
+      {mode.kind === "realtime" && (
+        <>
+          <DeviceStatusBar
+            initialLastSeenAt={mode.initialLastSeenAt}
+            initialIsOnline={mode.initialIsOnline}
+            initialIsRecent={mode.initialIsRecent}
+            deviceName={mode.deviceName}
+          />
+          <PiStatusRow status={signals.status} teensy={signals.teensyState} />
+        </>
+      )}
+
+      {mode.kind === "pi_rest" && <PiRestStatusCard piRest={piRest} />}
+
+      {mode.kind === "webserial" && (
         <TeensyConnectCard
-          teensy={teensy}
+          teensy={webserial}
           baudRate={baudRate}
           onBaudChange={setBaudRate}
         />
-      ) : (
-        <>
-          <DeviceStatusBar
-            initialLastSeenAt={initialLastSeenAt}
-            initialIsOnline={initialIsOnline}
-            initialIsRecent={initialIsRecent}
-            deviceName={deviceName}
-          />
-          <PiStatusRow
-            status={signals.status}
-            teensy={signals.teensyState}
-          />
-        </>
       )}
 
       {isConnected && (
@@ -99,9 +116,11 @@ export function MonitorSurface({
               <VirtualKeyboard
                 activePhysical={signals.activePhysical}
                 flashNote={signals.flashNote}
-                deviceId={isWebSerial ? null : deviceId}
+                deviceId={mode.kind === "realtime" ? mode.deviceId : null}
                 teensyInteractive={isFull}
-                onSimKey={isWebSerial ? teensy.sendSimKey : undefined}
+                onSimKey={
+                  mode.kind === "webserial" ? webserial.sendSimKey : undefined
+                }
               />
             </div>
             {isFull ? (
@@ -121,7 +140,7 @@ export function MonitorSurface({
             history={signals.noteHistory}
           />
 
-          {isFull && !isWebSerial && (
+          {isFull && mode.kind === "realtime" && (
             <>
               <FxStatePanel state={signals.fxState} />
               <LoopPanel
@@ -131,13 +150,21 @@ export function MonitorSurface({
             </>
           )}
 
-          {isFull && isWebSerial && <FxStatePanel state={signals.fxState} />}
+          {isFull && mode.kind !== "realtime" && (
+            <FxStatePanel state={signals.fxState} />
+          )}
         </>
       )}
 
       <SessionCapturePanel
         registerSink={registerSink}
-        deviceName={isWebSerial ? "teensy" : deviceName}
+        deviceName={
+          mode.kind === "realtime"
+            ? mode.deviceName
+            : mode.kind === "pi_rest"
+              ? "pi-rest"
+              : "teensy"
+        }
       />
       <LiveEventLog entries={signals.log} />
     </div>

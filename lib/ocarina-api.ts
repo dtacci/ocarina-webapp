@@ -1,0 +1,199 @@
+/**
+ * TypeScript client for the Pi's FastAPI server. The Pi exposes REST endpoints
+ * for button remapping + a WebSocket stream for live telemetry, fronted by
+ * Tailscale Funnel for HTTPS access from the Vercel-deployed page.
+ *
+ * Endpoint surface and shapes are authoritative in
+ * digital-ocarina/pi/api/NEXTJS_INTEGRATION.md.
+ */
+
+// Trim trailing whitespace + literal "\n" sequences that can sneak in when
+// the Vercel env value was pasted with a trailing newline (we hit this once
+// during setup — the symptom is "Bad hostname" on fetch).
+const RAW_BASE = (process.env.NEXT_PUBLIC_OCARINA_API ?? "").trim();
+const RAW_TOKEN = (process.env.NEXT_PUBLIC_OCARINA_TOKEN ?? "").trim();
+
+const BASE = RAW_BASE.replace(/(?:\\n|\s)+$/g, "").replace(/\/+$/, "");
+const TOKEN = RAW_TOKEN.replace(/(?:\\n|\s)+$/g, "");
+
+export function isOcarinaApiConfigured(): boolean {
+  return BASE.length > 0;
+}
+
+export function getOcarinaApiBase(): string {
+  return BASE;
+}
+
+const authHeaders = (): HeadersInit =>
+  TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {};
+
+const jsonHeaders = (): HeadersInit => ({
+  "content-type": "application/json",
+  ...authHeaders(),
+});
+
+async function jsonOrThrow<T>(r: Response): Promise<T> {
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    throw new Error(`${r.status} ${r.statusText}${body ? `: ${body}` : ""}`);
+  }
+  return (await r.json()) as T;
+}
+
+// ---------- Types ----------
+
+export interface ButtonState {
+  button: number; // 1..12
+  note_index: number; // 0..11
+  note_name: string | null;
+  default_name: string;
+  overridden: boolean;
+}
+
+export interface StatusResponse {
+  buttons: ButtonState[];
+}
+
+export type TeensyHealth =
+  | { connected: true; latency_ms: number }
+  | { connected: false; latency_ms?: number; error: string };
+
+export interface HeartbeatEvent {
+  type: "heartbeat";
+  uptime_s: number;
+  pots: {
+    volume: number;
+    reverb_mix: number;
+    filter: number;
+    pitch_bend: number;
+  };
+  mic: {
+    enabled: boolean;
+    freq_hz: number;
+    probability: number;
+    amplitude: number;
+    valid: boolean;
+  };
+}
+
+export interface NoteOnEvent {
+  type: "note_on";
+  note: string;
+  freq_hz: number;
+}
+
+export interface NoteOffEvent {
+  type: "note_off";
+  button: number;
+}
+
+export type EventMessage = HeartbeatEvent | NoteOnEvent | NoteOffEvent;
+
+// ---------- REST ----------
+
+export const ocarina = {
+  health: () =>
+    fetch(`${BASE}/health`).then((r) => jsonOrThrow<{ status: string }>(r)),
+
+  teensyHealth: () =>
+    fetch(`${BASE}/healthz/teensy`, { headers: authHeaders() }).then((r) =>
+      jsonOrThrow<TeensyHealth>(r)
+    ),
+
+  status: () =>
+    fetch(`${BASE}/status`, { headers: authHeaders() }).then((r) =>
+      jsonOrThrow<StatusResponse>(r)
+    ),
+
+  setButton: (button: number, note: string | number) =>
+    fetch(`${BASE}/map`, {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ button, note }),
+    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+
+  clearAll: () =>
+    fetch(`${BASE}/map/clear`, {
+      method: "POST",
+      headers: authHeaders(),
+    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+
+  reapplyPersisted: () =>
+    fetch(`${BASE}/map/reapply`, {
+      method: "POST",
+      headers: authHeaders(),
+    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+
+  listPresets: () =>
+    fetch(`${BASE}/presets`, { headers: authHeaders() }).then((r) =>
+      jsonOrThrow<{ presets: { name: string; description?: string }[] }>(r)
+    ),
+
+  applyPreset: (name: string) =>
+    fetch(`${BASE}/preset`, {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ name }),
+    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+
+  listUserPresets: () =>
+    fetch(`${BASE}/presets/user`, { headers: authHeaders() }).then((r) =>
+      jsonOrThrow<{ presets: string[] }>(r)
+    ),
+
+  saveUserPreset: (name: string) =>
+    fetch(`${BASE}/presets/user/${encodeURIComponent(name)}`, {
+      method: "POST",
+      headers: authHeaders(),
+    }).then((r) => jsonOrThrow<{ ok: true; name: string }>(r)),
+
+  applyUserPreset: (name: string) =>
+    fetch(`${BASE}/presets/user/${encodeURIComponent(name)}/apply`, {
+      method: "POST",
+      headers: authHeaders(),
+    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+
+  deleteUserPreset: (name: string) =>
+    fetch(`${BASE}/presets/user/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    }).then((r) => jsonOrThrow<{ ok: true }>(r)),
+};
+
+// ---------- WebSocket ----------
+
+export interface EventStreamHandlers {
+  onHeartbeat?: (e: HeartbeatEvent) => void;
+  onNoteOn?: (e: NoteOnEvent) => void;
+  onNoteOff?: (e: NoteOffEvent) => void;
+  onOpen?: () => void;
+  onClose?: (reason: string) => void;
+  onError?: (err: Event) => void;
+}
+
+/**
+ * Open the Pi's `/events` WebSocket. Browsers can't add Authorization headers
+ * to native WebSockets, so the token rides in the query string; the server
+ * matches it from there.
+ */
+export function openEventStream(handlers: EventStreamHandlers): WebSocket {
+  const wsBase = BASE.replace(/^http/, "ws");
+  const url = `${wsBase}/events${TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : ""}`;
+  const ws = new WebSocket(url);
+  ws.onopen = () => handlers.onOpen?.();
+  ws.onerror = (err) => handlers.onError?.(err);
+  ws.onclose = (ev) =>
+    handlers.onClose?.(`closed code=${ev.code} reason=${ev.reason || "?"}`);
+  ws.onmessage = (evt) => {
+    try {
+      const e = JSON.parse(evt.data) as EventMessage;
+      if (e.type === "heartbeat") handlers.onHeartbeat?.(e);
+      else if (e.type === "note_on") handlers.onNoteOn?.(e);
+      else if (e.type === "note_off") handlers.onNoteOff?.(e);
+    } catch {
+      // Malformed payload — log and continue. The Pi shouldn't be sending
+      // these but defensive parsing keeps the stream alive if it does.
+    }
+  };
+  return ws;
+}

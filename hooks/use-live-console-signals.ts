@@ -19,13 +19,20 @@ export type ConsoleStatus = "awaiting" | "agent_stale" | "pi_only" | "full";
 export type TeensyState = "ok" | "missing" | "busy" | "unknown";
 
 /**
- * Where events arrive from. The Realtime branch covers a paired Pi; the
- * WebSerial branch covers a Teensy plugged into the laptop directly — caller
- * is responsible for invoking the returned `pushHardwareEvent` /
- * `pushTelemetryEvent` functions for every byte the serial port hands them.
+ * Where events arrive from. The state machine downstream is the same for all
+ * three — only how raw bytes/messages turn into HardwareEvent / TelemetryEvent
+ * differs, and that's the caller's job: when source is "webserial" or
+ * "pi_rest", invoke the returned push functions for every event.
+ *
+ * - realtime: Supabase Realtime broadcast keyed by deviceId (existing Pi
+ *   `sync_agent.py` → `/api/sync/telemetry` path).
+ * - pi_rest: Direct Pi FastAPI WebSocket (`/events`) via Tailscale Funnel.
+ *   Preferred when NEXT_PUBLIC_OCARINA_API is configured.
+ * - webserial: Browser-side USB serial (dev-only, ?webserial=1 escape hatch).
  */
 export type LiveConsoleSource =
   | { kind: "realtime"; deviceId: string | null }
+  | { kind: "pi_rest" }
   | { kind: "webserial" };
 
 const MAX_HISTORY = 20;
