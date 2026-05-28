@@ -41,7 +41,7 @@ export function LiveConsole({
     loopState,
     loopStatus,
     log,
-  } = useLiveConsoleSignals(deviceId);
+  } = useLiveConsoleSignals({ kind: "realtime", deviceId });
 
   const isFull = status === "full";
 

@@ -15,7 +15,7 @@ export interface VirtualKeyboardProps {
   activePhysical: Set<string>;
   /** Most recently active note id (flash highlight). */
   flashNote: string | null;
-  /** Device id for sending sim_key commands. Null disables interactive mode. */
+  /** Device id for sending sim_key via /api/sync/commands. Null = no Pi route. */
   deviceId: string | null;
   /**
    * True only when the Teensy is confirmed attached and streaming telemetry.
@@ -23,6 +23,12 @@ export interface VirtualKeyboardProps {
    * reach). Pi GPIO row stays enabled whenever a deviceId exists.
    */
   teensyInteractive: boolean;
+  /**
+   * Optional sim-key sink. When provided, clicks bypass /api/sync/commands and
+   * write directly here (used by /monitor in WebSerial mode). When omitted,
+   * the existing Pi path is used.
+   */
+  onSimKey?: (key: string, event: "down" | "up" | "tap") => void;
 }
 
 export function VirtualKeyboard({
@@ -30,12 +36,19 @@ export function VirtualKeyboard({
   flashNote,
   deviceId,
   teensyInteractive,
+  onSimKey,
 }: VirtualKeyboardProps) {
   const [clickPressed, setClickPressed] = useState<Set<string>>(new Set());
   const activeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  const hasSink = Boolean(onSimKey || deviceId);
+
   const sendSim = useCallback(
     async (key: string, event: "down" | "up" | "tap") => {
+      if (onSimKey) {
+        onSimKey(key, event);
+        return;
+      }
       if (!deviceId) return;
       try {
         await fetch("/api/sync/commands", {
@@ -51,16 +64,15 @@ export function VirtualKeyboard({
         // Silent — the live event log will show absence of echo if it failed.
       }
     },
-    [deviceId]
+    [deviceId, onSimKey]
   );
 
   const handleDown = useCallback(
     (btn: ButtonDef) => {
-      if (!btn.simKey || !deviceId) return;
+      if (!btn.simKey || !hasSink) return;
       setClickPressed((prev) => new Set(prev).add(btn.id));
       if (btn.tap) {
         void sendSim(btn.simKey, "tap");
-        // Visual press lasts 150ms for tap-style controls.
         const t = setTimeout(() => {
           setClickPressed((prev) => {
             const next = new Set(prev);
@@ -74,12 +86,12 @@ export function VirtualKeyboard({
         void sendSim(btn.simKey, "down");
       }
     },
-    [sendSim, deviceId]
+    [sendSim, hasSink]
   );
 
   const handleUp = useCallback(
     (btn: ButtonDef) => {
-      if (!btn.simKey || btn.tap || !deviceId) return;
+      if (!btn.simKey || btn.tap || !hasSink) return;
       void sendSim(btn.simKey, "up");
       setClickPressed((prev) => {
         const next = new Set(prev);
@@ -87,7 +99,7 @@ export function VirtualKeyboard({
         return next;
       });
     },
-    [sendSim, deviceId]
+    [sendSim, hasSink]
   );
 
   return (
@@ -99,7 +111,7 @@ export function VirtualKeyboard({
             Lights up on physical press · click to simulate a hardware button
           </p>
         </div>
-        {!deviceId ? (
+        {!hasSink ? (
           <span className="text-[10px] font-mono text-muted-foreground">No device</span>
         ) : teensyInteractive ? (
           <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono text-amber-400 uppercase tracking-wider">
@@ -120,7 +132,7 @@ export function VirtualKeyboard({
         flashNote={flashNote}
         onDown={handleDown}
         onUp={handleUp}
-        deviceId={deviceId}
+        hasSink={hasSink}
         interactiveSource={teensyInteractive}
       />
       <ButtonRow
@@ -131,7 +143,7 @@ export function VirtualKeyboard({
         flashNote={null}
         onDown={handleDown}
         onUp={handleUp}
-        deviceId={deviceId}
+        hasSink={hasSink}
         interactiveSource={teensyInteractive}
       />
       <ButtonRow
@@ -142,10 +154,8 @@ export function VirtualKeyboard({
         flashNote={null}
         onDown={handleDown}
         onUp={handleUp}
-        deviceId={deviceId}
-        // Pi rows are always observational — the Pi GPIO reader sends events
-        // up through /api/sync/input-events, but we don't (yet) support
-        // driving a GPIO input from the web. So interactivity is read-only.
+        hasSink={hasSink}
+        // Pi rows are always observational — Pi GPIO inputs are physical-only.
         interactiveSource={false}
       />
     </div>
@@ -160,7 +170,7 @@ function ButtonRow({
   flashNote,
   onDown,
   onUp,
-  deviceId,
+  hasSink,
   interactiveSource,
 }: {
   title: string;
@@ -170,7 +180,7 @@ function ButtonRow({
   flashNote: string | null;
   onDown: (btn: ButtonDef) => void;
   onUp: (btn: ButtonDef) => void;
-  deviceId: string | null;
+  hasSink: boolean;
   interactiveSource: boolean;
 }) {
   return (
@@ -183,7 +193,7 @@ function ButtonRow({
           const isPhysical = activePhysical.has(btn.id);
           const isClicked = clickPressed.has(btn.id);
           const isFlash = flashNote === btn.id;
-          const interactive = Boolean(btn.simKey && deviceId && interactiveSource);
+          const interactive = Boolean(btn.simKey && hasSink && interactiveSource);
 
           const baseClasses =
             "relative flex h-16 flex-col items-center justify-center rounded-lg border px-2 text-xs font-medium transition-colors select-none";

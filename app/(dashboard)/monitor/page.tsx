@@ -1,6 +1,3 @@
-import Link from "next/link";
-import { MonitorSmartphone } from "lucide-react";
-
 import { createClient } from "@/lib/supabase/server";
 import { MonitorSurface } from "@/components/monitor/monitor-surface";
 
@@ -26,34 +23,16 @@ export default async function MonitorPage() {
     .order("last_seen_at", { ascending: false, nullsFirst: false });
 
   const primaryDevice = deviceRows?.[0] ?? null;
-
-  if (!primaryDevice) {
-    return (
-      <div className="mx-auto max-w-xl space-y-4 py-16 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full border bg-card">
-          <MonitorSmartphone className="size-6 text-muted-foreground" />
-        </div>
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">No Ocarina paired yet</h1>
-          <p className="text-sm text-muted-foreground">
-            The Monitor shows live button presses, voice activity, and lets you
-            capture a session for export. Pair a device first.
-          </p>
-        </div>
-        <Link
-          href="/devices"
-          className="inline-flex items-center rounded-md border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Pair an Ocarina →
-        </Link>
-      </div>
-    );
-  }
-
   const now = Date.now();
-  const lastSeenMs = primaryDevice.last_seen_at
+  const lastSeenMs = primaryDevice?.last_seen_at
     ? new Date(primaryDevice.last_seen_at).getTime()
     : 0;
+  const isOnline = lastSeenMs > now - 2 * 60 * 1000;
+
+  // If a Pi is paired and recently seen, prefer Realtime mode. Otherwise fall
+  // through to WebSerial — the surface renders the connect card and lets the
+  // user plug the Teensy in directly.
+  const useRealtime = primaryDevice !== null && isOnline;
 
   return (
     <div className="space-y-4 max-w-6xl">
@@ -67,10 +46,10 @@ export default async function MonitorPage() {
       </div>
 
       <MonitorSurface
-        deviceId={primaryDevice.id}
-        deviceName={primaryDevice.name ?? null}
-        initialLastSeenAt={primaryDevice.last_seen_at ?? null}
-        initialIsOnline={lastSeenMs > now - 2 * 60 * 1000}
+        deviceId={useRealtime ? primaryDevice.id : null}
+        deviceName={primaryDevice?.name ?? null}
+        initialLastSeenAt={primaryDevice?.last_seen_at ?? null}
+        initialIsOnline={isOnline}
         initialIsRecent={lastSeenMs > now - 10 * 60 * 1000}
       />
     </div>

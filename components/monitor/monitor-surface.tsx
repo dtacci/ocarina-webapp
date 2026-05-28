@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { useLiveConsoleSignals } from "@/hooks/use-live-console-signals";
 import { useLoopState } from "@/hooks/use-loop-state";
+import { useWebSerialTeensy } from "@/hooks/use-web-serial-teensy";
 
 import { DeviceStatusBar } from "@/components/diagnostics/device-status-bar";
 import { VirtualKeyboard } from "@/components/diagnostics/virtual-keyboard";
@@ -13,9 +14,11 @@ import { LiveEventLog, type LogEntry } from "@/components/diagnostics/live-event
 
 import { MicActivityStrip } from "@/components/monitor/mic-activity-strip";
 import { SessionCapturePanel } from "@/components/monitor/session-capture-panel";
+import { TeensyConnectCard } from "@/components/monitor/teensy-connect-card";
 
 interface Props {
-  deviceId: string;
+  /** Realtime mode when set, WebSerial mode when null. */
+  deviceId: string | null;
   deviceName: string | null;
   initialLastSeenAt: string | null;
   initialIsOnline: boolean;
@@ -29,9 +32,6 @@ export function MonitorSurface({
   initialIsOnline,
   initialIsRecent,
 }: Props) {
-  // The capture panel registers a sink imperatively. We hold it in a ref so
-  // the hook's onEvent callback stays stable while we swap the underlying
-  // function (start / stop without rebuilding subscriptions).
   const sinkRef = useRef<((entry: LogEntry) => void) | null>(null);
   const registerSink = useCallback(
     (sink: ((entry: LogEntry) => void) | null) => {
@@ -43,46 +43,72 @@ export function MonitorSurface({
     sinkRef.current?.(entry);
   }, []);
 
-  const {
-    status,
-    teensyState,
-    activePhysical,
-    flashNote,
-    currentNote,
-    noteHistory,
-    fxState,
-    loopState,
-    loopStatus,
-    log,
-  } = useLiveConsoleSignals(deviceId, { onEvent });
+  const source = useMemo(
+    () =>
+      deviceId
+        ? ({ kind: "realtime" as const, deviceId })
+        : ({ kind: "webserial" as const }),
+    [deviceId]
+  );
 
-  const ready = status === "full" || status === "pi_only";
-  const isFull = status === "full";
+  const signals = useLiveConsoleSignals(source, { onEvent });
+
+  const [baudRate, setBaudRate] = useState(115200);
+  const teensy = useWebSerialTeensy({
+    baudRate,
+    enabled: !deviceId,
+    onHardware: signals.pushHardwareEvent,
+    onTelemetry: signals.pushTelemetryEvent,
+  });
+
+  const isWebSerial = !deviceId;
+  const isConnected = isWebSerial
+    ? teensy.status === "connected"
+    : signals.status === "full" || signals.status === "pi_only";
+  const isFull = isWebSerial
+    ? teensy.status === "connected"
+    : signals.status === "full";
 
   return (
     <div className="space-y-4">
-      <DeviceStatusBar
-        initialLastSeenAt={initialLastSeenAt}
-        initialIsOnline={initialIsOnline}
-        initialIsRecent={initialIsRecent}
-        deviceName={deviceName}
-      />
+      {isWebSerial ? (
+        <TeensyConnectCard
+          teensy={teensy}
+          baudRate={baudRate}
+          onBaudChange={setBaudRate}
+        />
+      ) : (
+        <>
+          <DeviceStatusBar
+            initialLastSeenAt={initialLastSeenAt}
+            initialIsOnline={initialIsOnline}
+            initialIsRecent={initialIsRecent}
+            deviceName={deviceName}
+          />
+          <PiStatusRow
+            status={signals.status}
+            teensy={signals.teensyState}
+          />
+        </>
+      )}
 
-      <StatusRow status={status} teensy={teensyState} />
-
-      {ready && (
+      {isConnected && (
         <>
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <div className="rounded-xl border bg-card p-4">
               <VirtualKeyboard
-                activePhysical={activePhysical}
-                flashNote={flashNote}
-                deviceId={deviceId}
+                activePhysical={signals.activePhysical}
+                flashNote={signals.flashNote}
+                deviceId={isWebSerial ? null : deviceId}
                 teensyInteractive={isFull}
+                onSimKey={isWebSerial ? teensy.sendSimKey : undefined}
               />
             </div>
             {isFull ? (
-              <NoteReadout current={currentNote} history={noteHistory} />
+              <NoteReadout
+                current={signals.currentNote}
+                history={signals.noteHistory}
+              />
             ) : (
               <div className="rounded-xl border border-dashed border-border/70 bg-card/40 p-4 text-xs text-muted-foreground">
                 Pi only — plug the Teensy in for note readout, FX, and loop state.
@@ -90,24 +116,35 @@ export function MonitorSurface({
             )}
           </div>
 
-          <MicActivityStrip current={currentNote} history={noteHistory} />
+          <MicActivityStrip
+            current={signals.currentNote}
+            history={signals.noteHistory}
+          />
 
-          {isFull && (
+          {isFull && !isWebSerial && (
             <>
-              <FxStatePanel state={fxState} />
-              <LoopPanel loopState={loopState} status={loopStatus} />
+              <FxStatePanel state={signals.fxState} />
+              <LoopPanel
+                loopState={signals.loopState}
+                status={signals.loopStatus}
+              />
             </>
           )}
+
+          {isFull && isWebSerial && <FxStatePanel state={signals.fxState} />}
         </>
       )}
 
-      <SessionCapturePanel registerSink={registerSink} deviceName={deviceName} />
-      <LiveEventLog entries={log} />
+      <SessionCapturePanel
+        registerSink={registerSink}
+        deviceName={isWebSerial ? "teensy" : deviceName}
+      />
+      <LiveEventLog entries={signals.log} />
     </div>
   );
 }
 
-function StatusRow({
+function PiStatusRow({
   status,
   teensy,
 }: {

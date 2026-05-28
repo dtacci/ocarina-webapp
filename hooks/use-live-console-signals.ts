@@ -18,17 +18,23 @@ import type { LogEntry } from "@/components/diagnostics/live-event-log";
 export type ConsoleStatus = "awaiting" | "agent_stale" | "pi_only" | "full";
 export type TeensyState = "ok" | "missing" | "busy" | "unknown";
 
+/**
+ * Where events arrive from. The Realtime branch covers a paired Pi; the
+ * WebSerial branch covers a Teensy plugged into the laptop directly — caller
+ * is responsible for invoking the returned `pushHardwareEvent` /
+ * `pushTelemetryEvent` functions for every byte the serial port hands them.
+ */
+export type LiveConsoleSource =
+  | { kind: "realtime"; deviceId: string | null }
+  | { kind: "webserial" };
+
 const MAX_HISTORY = 20;
 const MAX_LOG = 200;
 const AWAITING_TIMEOUT_MS = 10_000;
 const TEENSY_STALE_MS = 30_000;
 
 export interface UseLiveConsoleSignalsOptions {
-  /**
-   * Sibling callback fired for every log entry. Surfaces like the monitor's
-   * session-capture buffer hook in without needing a second Realtime
-   * subscription.
-   */
+  /** Sibling callback fired for every log entry — used by session capture. */
   onEvent?: (entry: LogEntry) => void;
 }
 
@@ -43,15 +49,19 @@ export interface UseLiveConsoleSignalsResult {
   loopState: ReturnType<typeof useLoopState>["loopState"];
   loopStatus: ReturnType<typeof useLoopState>["status"];
   log: LogEntry[];
+  /** For WebSerial callers: feed parsed events in here. No-op when using Realtime. */
+  pushHardwareEvent: (ev: HardwareEvent) => void;
+  pushTelemetryEvent: (ev: TelemetryEvent) => void;
 }
 
 export function useLiveConsoleSignals(
-  deviceId: string | null,
+  source: LiveConsoleSource,
   options: UseLiveConsoleSignalsOptions = {}
 ): UseLiveConsoleSignalsResult {
   const { onEvent } = options;
+  const realtimeDeviceId = source.kind === "realtime" ? source.deviceId : null;
 
-  useLiveConsoleLifecycle(deviceId);
+  useLiveConsoleLifecycle(realtimeDeviceId);
 
   const [activePhysical, setActivePhysical] = useState<Set<string>>(new Set());
   const [currentNote, setCurrentNote] = useState<NoteSample | null>(null);
@@ -68,7 +78,10 @@ export function useLiveConsoleSignals(
   const onEventRef = useRef(onEvent);
   useEffect(() => { onEventRef.current = onEvent; }, [onEvent]);
 
-  const { loopState, status: loopStatus } = useLoopState(deviceId);
+  // The loop engine state Realtime channel is keyed by device id; for
+  // WebSerial there's no DB device, so we pass null and rely on the panel's
+  // empty-state rendering.
+  const { loopState, status: loopStatus } = useLoopState(realtimeDeviceId);
 
   const appendLog = useCallback((kind: LogEntry["kind"], text: string, ts: number) => {
     logCounterRef.current += 1;
@@ -78,7 +91,6 @@ export function useLiveConsoleSignals(
     onEventRef.current?.(entry);
   }, []);
 
-  // Re-tick while awaiting so the agent_stale timeout fires without a dependent state change.
   useEffect(() => {
     if (lastHeartbeatAt !== null) return;
     const iv = setInterval(() => setNowTick(Date.now()), 2000);
@@ -98,7 +110,6 @@ export function useLiveConsoleSignals(
     return "pi_only";
   }, [lastHeartbeatAt, lastTeensyTelemetryAt, mountedAt, nowTick]);
 
-  // Note flash — ~250ms highlight on the keyboard.
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [flashNote, setFlashNote] = useState<string | null>(null);
   const triggerFlash = useCallback((btnId: string | null) => {
@@ -135,7 +146,7 @@ export function useLiveConsoleSignals(
     [appendLog]
   );
 
-  useHardwareInput(deviceId, handleHardwareEvent);
+  useHardwareInput(realtimeDeviceId, handleHardwareEvent);
 
   const handleTelemetry = useCallback(
     (ev: TelemetryEvent) => {
@@ -180,9 +191,8 @@ export function useLiveConsoleSignals(
     [appendLog, triggerFlash]
   );
 
-  useDeviceTelemetry(deviceId, handleTelemetry);
+  useDeviceTelemetry(realtimeDeviceId, handleTelemetry);
 
-  // Loop state diffing → log line on change (panel itself is fed by loopState).
   const lastLoopSignatureRef = useRef<string>("");
   useEffect(() => {
     const sig = JSON.stringify({
@@ -213,5 +223,7 @@ export function useLiveConsoleSignals(
     loopState,
     loopStatus,
     log,
+    pushHardwareEvent: handleHardwareEvent,
+    pushTelemetryEvent: handleTelemetry,
   };
 }
