@@ -131,15 +131,13 @@ export function usePiRestTeensy(
             teensy: "ok",
             ts,
           });
-          // The Pi packs live mic data into every heartbeat. Surface it as a
-          // NOTE telemetry sample so the mic activity strip + note readout
-          // come alive whenever the mic is hearing something. Gate on
-          // `enabled` (mic on) and a noise floor on amplitude so we don't
-          // flood the history during silence. `valid` would be tighter but
-          // the Pi's gate is conservative — amplitude > 0.01 gives a useful
-          // signal for level monitoring while the pitch tracker is still
-          // settling.
-          if (e.mic.enabled && e.mic.amplitude > 0.01) {
+          // The Pi packs live mic data into every heartbeat. We emit a NOTE
+          // telemetry sample whenever the mic is enabled — no amplitude
+          // threshold — so the strip + readout always reflect what the Pi
+          // is hearing. Bar height comes from `amplitude` downstream, so
+          // silence renders as low bars and singing renders as tall bars
+          // without us needing to guess a threshold.
+          if (e.mic.enabled) {
             onTelRef.current?.({
               type: "NOTE",
               name: hzToNoteName(e.mic.freq_hz),

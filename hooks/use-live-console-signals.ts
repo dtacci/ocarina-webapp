@@ -172,7 +172,11 @@ export function useLiveConsoleSignals(
           setLastTeensyTelemetryAt(ts);
           const btnId = resolveNoteButtonId(ev.name);
           if (btnId) triggerFlash(btnId);
-          appendLog("note", `${ev.name} · ${ev.hz.toFixed(1)}Hz`, ts);
+          appendLog(
+            "note",
+            `${ev.name} · ${ev.hz.toFixed(1)}Hz${ev.amplitude !== undefined ? ` · amp ${ev.amplitude.toFixed(3)}` : ""}`,
+            ts
+          );
           break;
         }
         case "FX": {
