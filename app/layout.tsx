@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans, DM_Serif_Display, JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -39,6 +39,17 @@ export const metadata: Metadata = {
     title: "Digital Ocarina",
     description: "Voice-to-instrument synthesizer with 4,886 orchestral samples and AI-powered kit building.",
   },
+  appleWebApp: {
+    capable: true,
+    title: "Ocarina",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#d97706",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

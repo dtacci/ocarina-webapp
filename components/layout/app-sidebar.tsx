@@ -20,9 +20,9 @@ import {
   Heart,
   Scissors,
   Wrench,
-  Gamepad2,
   Radar,
   Sliders,
+  FolderArchive,
 } from "lucide-react";
 
 import {
@@ -46,7 +46,6 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { isEnabled, type FeatureFlag } from "@/lib/features";
-import { useOnlineDevices } from "@/hooks/use-online-devices";
 
 type NavItem = {
   title: string;
@@ -70,6 +69,7 @@ const navMain: NavItem[] = [
   { title: "Recordings", url: "/recordings", icon: Disc3, feature: "syncApi" as const },
   { title: "Activity", url: "/activity", icon: Activity, feature: "activityTimeline" as const },
   { title: "Monitor", url: "/monitor", icon: Radar, feature: "monitor" as const },
+  { title: "Captures", url: "/monitor/captures", icon: FolderArchive, feature: "monitor" as const },
 ];
 
 const navTools: NavItem[] = [
@@ -80,13 +80,6 @@ const navTools: NavItem[] = [
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
   { title: "Configurator", url: "/configurator", icon: Sliders, feature: "buttonConfigurator" as const },
   { title: "Analytics", url: "/analytics", icon: BarChart2, feature: "analyticsDashboard" as const },
-];
-
-// Diagnostics section — entries only render when there's a device to debug
-// (plus the corresponding feature flag). Keeps the sidebar uncluttered when
-// no Ocarina is paired / online.
-const navDiagnostics: NavItem[] = [
-  { title: "Console", url: "/diagnostics/live", icon: Gamepad2, feature: "liveConsole" as const },
 ];
 
 const navComingSoon: NavItem[] = [
@@ -167,19 +160,10 @@ function NavSection({
 
 function DynamicNavContent({ pathname }: { pathname: string }) {
   const searchParams = useSearchParams();
-  const { onlineDeviceId } = useOnlineDevices();
   return (
     <>
       <NavSection items={navMain} label="Browse" pathname={pathname} searchParams={searchParams} />
       <NavSection items={navTools} label="Tools" pathname={pathname} searchParams={searchParams} />
-      {onlineDeviceId && (
-        <NavSection
-          items={navDiagnostics}
-          label="Diagnostics"
-          pathname={pathname}
-          searchParams={searchParams}
-        />
-      )}
       <NavSection items={navComingSoon} label="Coming Soon" pathname={pathname} searchParams={searchParams} />
     </>
   );

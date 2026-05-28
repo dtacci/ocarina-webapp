@@ -9,12 +9,22 @@ interface Props {
   buttons: ButtonState[];
   /** Set of button numbers (1..12) currently being pressed on the device. */
   pressed: Set<number>;
+  /** Currently keyboard-focused button (1..12), null when none. */
+  focused?: number | null;
   onAssign: (button: number, value: string) => Promise<void>;
+  /** Tile click also sets keyboard focus, so a follow-up letter key assigns. */
+  onFocus?: (button: number | null) => void;
 }
 
 const FLASH_MS = 350;
 
-export function PiButtonGrid({ buttons, pressed, onAssign }: Props) {
+export function PiButtonGrid({
+  buttons,
+  pressed,
+  focused = null,
+  onAssign,
+  onFocus,
+}: Props) {
   // Hold a short post-release flash so quick presses register visually.
   const [flashing, setFlashing] = useState<Set<number>>(new Set());
   const flashTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(
@@ -57,6 +67,7 @@ export function PiButtonGrid({ buttons, pressed, onAssign }: Props) {
       {buttons.map((b) => {
         const isPressed = pressed.has(b.button);
         const isFlash = flashing.has(b.button);
+        const isFocused = focused === b.button;
         const tone = isPressed
           ? "border-emerald-400 bg-emerald-500/15 text-emerald-100 shadow-[0_0_18px_rgba(16,185,129,0.25)]"
           : isFlash
@@ -64,6 +75,9 @@ export function PiButtonGrid({ buttons, pressed, onAssign }: Props) {
             : b.overridden
               ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
               : "border-border bg-card text-foreground hover:border-foreground/40";
+        const focusRing = isFocused
+          ? "ring-2 ring-sky-400/70 ring-offset-1 ring-offset-background"
+          : "";
 
         return (
           <NotePickerPopover
@@ -74,9 +88,11 @@ export function PiButtonGrid({ buttons, pressed, onAssign }: Props) {
           >
             <button
               type="button"
+              onClick={() => onFocus?.(b.button)}
               className={[
                 "relative flex h-20 flex-col items-stretch justify-between rounded-lg border px-2 py-1.5 text-left transition-colors",
                 tone,
+                focusRing,
               ].join(" ")}
               title={`Button ${b.button} · default ${b.default_name}`}
             >

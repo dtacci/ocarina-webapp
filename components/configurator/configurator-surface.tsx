@@ -15,6 +15,8 @@ import type { HardwareEvent } from "@/hooks/use-hardware-input";
 import { PiRestStatusCard } from "@/components/monitor/pi-rest-status-card";
 import { PiButtonGrid } from "@/components/configurator/pi-button-grid";
 import { PresetRow } from "@/components/configurator/preset-row";
+import { ConfiguratorHotkeys } from "@/components/configurator/configurator-hotkeys";
+import { HotkeysHelp } from "@/components/configurator/hotkeys-help";
 import { NOTE_BUTTONS } from "@/lib/hardware/button-layout";
 
 /**
@@ -30,6 +32,8 @@ export function ConfiguratorSurface() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pressed, setPressed] = useState<Set<number>>(new Set());
+  const [focusedButton, setFocusedButton] = useState<number | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Live press flashes: NOTE_BUTTONS pin order matches Pi button 1..N for the
   // 8-pin firmware. The Pi sends note_off with `button: 1..12`; map back by
@@ -205,26 +209,31 @@ export function ConfiguratorSurface() {
       />
 
       <div className="rounded-xl border bg-card p-4">
-        <div className="mb-3 flex items-baseline justify-between">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
           <div>
             <h2 className="text-sm font-medium">Button assignments</h2>
             <p className="text-xs text-muted-foreground">
               {status
-                ? `${status.buttons.length} buttons · ${overrideCount} override${overrideCount === 1 ? "" : "s"}`
+                ? `${status.buttons.length} buttons · ${overrideCount} override${overrideCount === 1 ? "" : "s"}${focusedButton !== null ? ` · focused on #${focusedButton}` : ""}`
                 : "Loading…"}
             </p>
           </div>
-          {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+          <div className="flex items-center gap-2">
+            {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+            <HotkeysHelp open={helpOpen} onOpenChange={setHelpOpen} />
+          </div>
         </div>
 
         {status ? (
           <PiButtonGrid
             buttons={status.buttons}
             pressed={pressed}
+            focused={focusedButton}
             onAssign={handleAssign}
+            onFocus={setFocusedButton}
           />
         ) : (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
             {Array.from({ length: 12 }).map((_, i) => (
               <div
                 key={i}
@@ -234,6 +243,14 @@ export function ConfiguratorSurface() {
           </div>
         )}
       </div>
+
+      <ConfiguratorHotkeys
+        focused={focusedButton}
+        setFocused={setFocusedButton}
+        buttonCount={status?.buttons.length ?? 0}
+        onAssign={(button, value) => { void handleAssign(button, value); }}
+        onHelp={() => setHelpOpen(true)}
+      />
     </div>
   );
 }
