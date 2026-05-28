@@ -61,6 +61,8 @@ export interface UseLiveConsoleSignalsResult {
   /** For WebSerial callers: feed parsed events in here. No-op when using Realtime. */
   pushHardwareEvent: (ev: HardwareEvent) => void;
   pushTelemetryEvent: (ev: TelemetryEvent) => void;
+  /** Push a raw log entry — used by the Pi-REST monitor to surface loop state changes. */
+  pushLogEntry: (kind: LogEntry["kind"], text: string, ts?: number) => void;
 }
 
 export function useLiveConsoleSignals(
@@ -239,5 +241,6 @@ export function useLiveConsoleSignals(
     log,
     pushHardwareEvent: handleHardwareEvent,
     pushTelemetryEvent: handleTelemetry,
+    pushLogEntry: (kind, text, ts) => appendLog(kind, text, ts ?? Date.now()),
   };
 }

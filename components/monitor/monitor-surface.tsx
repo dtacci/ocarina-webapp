@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   useLiveConsoleSignals,
@@ -77,6 +77,46 @@ export function MonitorSurface({ mode }: Props) {
     onHardware: signals.pushHardwareEvent,
     onTelemetry: signals.pushTelemetryEvent,
   });
+
+  // Surface Pi-REST loop_state changes as `loop` log entries so they show up
+  // in the event log live and get persisted into session captures. Diff by
+  // signature so identical snapshots (re-emitted on reconnect) don't spam.
+  const lastLoopSigRef = useRef<string>("");
+  useEffect(() => {
+    if (mode.kind !== "pi_rest" || !piRest.loopSnapshot) return;
+    const s = piRest.loopSnapshot;
+    const sig = JSON.stringify({
+      tracks: s.tracks.map((t) => `${t.id}:${t.state}:${t.length_ms}:${t.muted ? "M" : ""}`),
+      bpm: s.bpm,
+      active: s.active_track,
+      master: s.master_length_ms,
+    });
+    if (sig !== lastLoopSigRef.current && lastLoopSigRef.current !== "") {
+      const bpmTxt = s.bpm !== null ? `${s.bpm.toFixed(1)}bpm` : "—bpm";
+      const masterTxt = s.master_length_ms > 0
+        ? `${(s.master_length_ms / 1000).toFixed(2)}s`
+        : "—";
+      signals.pushLogEntry(
+        "loop",
+        `active=${s.active_track} · ${bpmTxt} · master=${masterTxt} · ${s.tracks
+          .map((t) => `${t.id}:${t.state}${t.muted ? "(M)" : ""}`)
+          .join(" ")}`
+      );
+    }
+    lastLoopSigRef.current = sig;
+  }, [mode.kind, piRest.loopSnapshot, signals]);
+
+  // teensy_status transitions are rare + load-bearing for debugging, log them.
+  const lastTeensyRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (mode.kind !== "pi_rest") return;
+    const v = piRest.teensyConnected;
+    if (v === null || v === lastTeensyRef.current) return;
+    if (lastTeensyRef.current !== null) {
+      signals.pushLogEntry("misc", `teensy ${v ? "connected" : "disconnected"}`);
+    }
+    lastTeensyRef.current = v;
+  }, [mode.kind, piRest.teensyConnected, signals]);
 
   // Pi-REST sim-key: clicking a virtual Teensy button POSTs the char to the
   // Pi's firmware keyboard simulator. Effect comes back through /events as a
