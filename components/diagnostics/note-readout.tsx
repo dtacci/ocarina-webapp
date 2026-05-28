@@ -6,6 +6,8 @@ export interface NoteSample {
   name: string;
   hz: number;
   confidence?: number;
+  /** 0..1, present when the sample comes from the Pi's mic telemetry. */
+  amplitude?: number;
   ts: number;
 }
 

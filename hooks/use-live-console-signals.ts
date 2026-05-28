@@ -164,6 +164,7 @@ export function useLiveConsoleSignals(
             name: ev.name,
             hz: ev.hz,
             confidence: ev.confidence,
+            amplitude: ev.amplitude,
             ts,
           };
           setCurrentNote(sample);

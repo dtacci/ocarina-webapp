@@ -55,8 +55,14 @@ export function MicActivityStrip({ current, history }: Props) {
         const age = now - s.ts;
         if (age > STRIP_WINDOW_MS) continue;
         const x = cssWidth - (age / STRIP_WINDOW_MS) * cssWidth;
-        const conf = Math.max(0, Math.min(1, s.confidence ?? 0.5));
-        const half = (conf * (cssHeight - 10)) / 2;
+        // Prefer real amplitude when the sample carries it (mic-sourced from
+        // Pi heartbeats). Fall back to confidence for button-sourced notes.
+        // Amplitude is small (often < 0.1); apply a compressive curve so
+        // typical singing levels register as visible bars without saturating.
+        const rawLevel = typeof s.amplitude === "number"
+          ? Math.min(1, Math.sqrt(s.amplitude * 8))
+          : Math.max(0, Math.min(1, s.confidence ?? 0.5));
+        const half = (rawLevel * (cssHeight - 10)) / 2;
         const alpha = 0.25 + 0.75 * (1 - age / STRIP_WINDOW_MS);
         ctx.fillStyle = `rgba(16, 185, 129, ${alpha.toFixed(2)})`;
         ctx.fillRect(x - 1, cssHeight / 2 - half, 2, half * 2);
@@ -77,7 +83,7 @@ export function MicActivityStrip({ current, history }: Props) {
       <div className="mb-2 flex items-baseline justify-between">
         <h2 className="text-sm font-medium">Mic activity</h2>
         <span className="font-mono text-[10px] text-muted-foreground">
-          pitch confidence · last 8s
+          level · last 8s
         </span>
       </div>
       <canvas ref={canvasRef} className="h-20 w-full rounded-md bg-background/60" />
@@ -85,8 +91,12 @@ export function MicActivityStrip({ current, history }: Props) {
         <span className="text-muted-foreground">
           {current ? `${current.name} · ${current.hz.toFixed(1)} Hz` : "—"}
         </span>
-        <span className="text-muted-foreground/70">
-          raw mic level needs a Pi firmware update
+        <span className="font-mono text-muted-foreground/70 tabular-nums">
+          {current?.amplitude !== undefined
+            ? `amp ${current.amplitude.toFixed(3)}`
+            : current?.confidence !== undefined
+              ? `conf ${current.confidence.toFixed(2)}`
+              : ""}
         </span>
       </div>
     </div>

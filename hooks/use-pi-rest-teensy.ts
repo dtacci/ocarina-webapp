@@ -12,6 +12,19 @@ import {
 } from "@/lib/ocarina-api";
 import { NOTE_BUTTONS } from "@/lib/hardware/button-layout";
 
+const NOTE_NAMES = [
+  "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+] as const;
+
+/** Equal-temperament Hz → "A4" / "F#5" / "?". */
+function hzToNoteName(hz: number): string {
+  if (!Number.isFinite(hz) || hz <= 0) return "?";
+  const midi = Math.round(12 * Math.log2(hz / 440) + 69);
+  const idx = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  return `${NOTE_NAMES[idx]}${octave}`;
+}
+
 export type PiRestStatus =
   | "disabled"
   | "connecting"
@@ -111,12 +124,31 @@ export function usePiRestTeensy(
           setStatus("error");
         },
         onHeartbeat: (e) => {
+          const ts = Date.now();
           onTelRef.current?.({
             type: "HEARTBEAT",
             uptime_ms: Math.round(e.uptime_s * 1000),
             teensy: "ok",
-            ts: Date.now(),
+            ts,
           });
+          // The Pi packs live mic data into every heartbeat. Surface it as a
+          // NOTE telemetry sample so the mic activity strip + note readout
+          // come alive whenever the mic is hearing something. Gate on
+          // `enabled` (mic on) and a noise floor on amplitude so we don't
+          // flood the history during silence. `valid` would be tighter but
+          // the Pi's gate is conservative — amplitude > 0.01 gives a useful
+          // signal for level monitoring while the pitch tracker is still
+          // settling.
+          if (e.mic.enabled && e.mic.amplitude > 0.01) {
+            onTelRef.current?.({
+              type: "NOTE",
+              name: hzToNoteName(e.mic.freq_hz),
+              hz: e.mic.freq_hz,
+              confidence: e.mic.probability,
+              amplitude: e.mic.amplitude,
+              ts,
+            });
+          }
         },
         onNoteOn: (e) => {
           onTelRef.current?.({

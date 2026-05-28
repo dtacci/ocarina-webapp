@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export type TelemetryEvent =
-  | { type: "NOTE"; name: string; hz: number; confidence?: number; ts: number }
+  | { type: "NOTE"; name: string; hz: number; confidence?: number; amplitude?: number; ts: number }
   | {
       type: "FX";
       field:
