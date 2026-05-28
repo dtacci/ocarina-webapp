@@ -33,7 +33,9 @@ export type TeensyState = "ok" | "missing" | "busy" | "unknown";
 export type LiveConsoleSource =
   | { kind: "realtime"; deviceId: string | null }
   | { kind: "pi_rest" }
-  | { kind: "webserial" };
+  | { kind: "webserial" }
+  /** Capture replay — events pushed in by useReplayPlayback at original timing. */
+  | { kind: "replay" };
 
 const MAX_HISTORY = 20;
 const MAX_LOG = 200;

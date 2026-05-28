@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Download, FolderArchive } from "lucide-react";
+import { ArrowLeft, Download, FolderArchive, Play } from "lucide-react";
 
 import { listMyCaptures } from "@/lib/db/queries/monitor-captures";
 import { DeleteCaptureButton } from "@/components/monitor/delete-capture-button";
@@ -54,7 +54,7 @@ export default async function CapturesPage() {
               key={c.id}
               className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"
             >
-              <div className="min-w-0 flex-1">
+              <Link href={`/monitor/captures/${c.id}`} className="min-w-0 flex-1 hover:underline">
                 <div className="truncate text-sm font-medium">{c.name}</div>
                 <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
                   <span title={new Date(c.created_at).toISOString()}>
@@ -79,7 +79,14 @@ export default async function CapturesPage() {
                     </span>
                   )}
                 </div>
-              </div>
+              </Link>
+              <Link
+                href={`/monitor/captures/${c.id}`}
+                className="flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/15"
+              >
+                <Play className="size-3" />
+                Replay
+              </Link>
               <a
                 href={c.blob_url}
                 download={`${c.name}.json`}

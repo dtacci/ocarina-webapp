@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, FolderArchive, Loader2 } from "lucide-react";
+import { ArrowRight, Download, FolderArchive, Loader2, Play } from "lucide-react";
 
 import type { MonitorCaptureRow } from "@/lib/db/queries/monitor-captures";
 
@@ -75,7 +75,10 @@ export function RecentCapturesPanel({ refreshNonce }: Props) {
               key={c.id}
               className="flex flex-wrap items-center gap-3 rounded-md border bg-card/60 px-3 py-2"
             >
-              <div className="min-w-0 flex-1">
+              <Link
+                href={`/monitor/captures/${c.id}`}
+                className="min-w-0 flex-1 hover:underline"
+              >
                 <div className="truncate text-sm font-medium">{c.name}</div>
                 <div className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] text-muted-foreground">
                   <span>{relative(c.created_at)}</span>
@@ -83,7 +86,14 @@ export function RecentCapturesPanel({ refreshNonce }: Props) {
                   <span>{Math.round(c.duration_ms / 1000)}s</span>
                   <span className="font-mono">{c.source}</span>
                 </div>
-              </div>
+              </Link>
+              <Link
+                href={`/monitor/captures/${c.id}`}
+                className="flex items-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/10 px-2 py-1 text-[10px] text-violet-300 hover:bg-violet-500/15"
+              >
+                <Play className="size-3" />
+                Replay
+              </Link>
               <a
                 href={c.blob_url}
                 download={`${c.name}.json`}
