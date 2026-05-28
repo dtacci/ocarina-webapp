@@ -16,11 +16,11 @@ For what's already shipped: see [`progress.md`](./progress.md).
 ## Next up
 
 - **Looper Dashboard** — visual representation of Teensy's 4–6 track loop state with waveform rendering
-- **Realtime Bridge** — Supabase Realtime relay: Pi publishes Teensy STATUS → web subscribes (~80–130 ms)
-- **Pi Sync Agent** — Python daemon: FileWatcher + SQLite queue + presigned Blob uploads
+- **Pi Sync Agent (samples-only)** — Python daemon: FileWatcher + SQLite queue + presigned Blob uploads. The original "telemetry relay" purpose was overtaken by the Pi FastAPI + Tailscale Funnel approach; sample sync is still useful for the curate-then-transcode pipeline
 - **Flip `globalAudioPlayer: true`** — the global audio player is merged and feature-flagged; manual-test both modes in a preview deploy, then decide whether to enable by default
+- **Configurator follow-ups** — ask Pi team for a `map_changed` WS event (multi-tab consistency); confirm `/map/reapply` semantics so the button copy is honest; retire `lib/config/{apply-configuration,button-actions}.ts` + `defaultButtonsConfig` from `lib/config/default-config.ts` once nothing references them
 
-Feature flags already declared (disabled) for these: `looperDashboard`, `realtimeBridge`, `mp3Transcoding`, `piSyncAgent`, `globalAudioPlayer`.
+Feature flags already declared (disabled) for these: `looperDashboard`, `mp3Transcoding`, `piSyncAgent`, `globalAudioPlayer`. `realtimeBridge` is now obsolete (superseded by Pi REST).
 
 ---
 

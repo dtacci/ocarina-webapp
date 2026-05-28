@@ -54,6 +54,30 @@ export interface StatusResponse {
   buttons: ButtonState[];
 }
 
+/**
+ * Write endpoints return narrow action-confirmations, not the full status.
+ * Callers wanting current state must refetch via `ocarina.status()`. These
+ * shapes are verified empirically against the running server (the integration
+ * doc claimed StatusResponse for all of them — it was wrong).
+ */
+export interface SetButtonResponse {
+  button: number;
+  note_index: number; // -1 when reset to default
+  note_name: string; // "default" sentinel when reset
+}
+export interface ClearAllResponse { cleared: true }
+export interface ReapplyResponse { reapplied: true; buttons: { button: number; note_name: string }[] }
+export interface ApplyPresetResponse { applied: string; notes: string[] }
+export interface SaveUserPresetResponse { saved: string; notes: string[] }
+export interface DeleteUserPresetResponse { deleted: string }
+
+export interface PresetEntry {
+  name: string;
+  notes: string[]; // length 12, one per button
+}
+
+export type PresetIndex = Record<string, PresetEntry>;
+
 export type TeensyHealth =
   | { connected: true; latency_ms: number }
   | { connected: false; latency_ms?: number; error: string };
@@ -110,23 +134,26 @@ export const ocarina = {
       method: "POST",
       headers: jsonHeaders(),
       body: JSON.stringify({ button, note }),
-    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+    }).then((r) => jsonOrThrow<SetButtonResponse>(r)),
 
   clearAll: () =>
     fetch(`${BASE}/map/clear`, {
       method: "POST",
       headers: authHeaders(),
-    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+    }).then((r) => jsonOrThrow<ClearAllResponse>(r)),
 
   reapplyPersisted: () =>
     fetch(`${BASE}/map/reapply`, {
       method: "POST",
       headers: authHeaders(),
-    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+    }).then((r) => jsonOrThrow<ReapplyResponse>(r)),
 
+  // Built-in + user presets are both returned as a keyed object, NOT the
+  // `{ presets: [...] }` array shape the integration doc described — verified
+  // empirically against the running server.
   listPresets: () =>
     fetch(`${BASE}/presets`, { headers: authHeaders() }).then((r) =>
-      jsonOrThrow<{ presets: { name: string; description?: string }[] }>(r)
+      jsonOrThrow<PresetIndex>(r)
     ),
 
   applyPreset: (name: string) =>
@@ -134,30 +161,30 @@ export const ocarina = {
       method: "POST",
       headers: jsonHeaders(),
       body: JSON.stringify({ name }),
-    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+    }).then((r) => jsonOrThrow<ApplyPresetResponse>(r)),
 
   listUserPresets: () =>
     fetch(`${BASE}/presets/user`, { headers: authHeaders() }).then((r) =>
-      jsonOrThrow<{ presets: string[] }>(r)
+      jsonOrThrow<PresetIndex>(r)
     ),
 
   saveUserPreset: (name: string) =>
     fetch(`${BASE}/presets/user/${encodeURIComponent(name)}`, {
       method: "POST",
       headers: authHeaders(),
-    }).then((r) => jsonOrThrow<{ ok: true; name: string }>(r)),
+    }).then((r) => jsonOrThrow<SaveUserPresetResponse>(r)),
 
   applyUserPreset: (name: string) =>
     fetch(`${BASE}/presets/user/${encodeURIComponent(name)}/apply`, {
       method: "POST",
       headers: authHeaders(),
-    }).then((r) => jsonOrThrow<StatusResponse>(r)),
+    }).then((r) => jsonOrThrow<ApplyPresetResponse>(r)),
 
   deleteUserPreset: (name: string) =>
     fetch(`${BASE}/presets/user/${encodeURIComponent(name)}`, {
       method: "DELETE",
       headers: authHeaders(),
-    }).then((r) => jsonOrThrow<{ ok: true }>(r)),
+    }).then((r) => jsonOrThrow<DeleteUserPresetResponse>(r)),
 };
 
 // ---------- WebSocket ----------

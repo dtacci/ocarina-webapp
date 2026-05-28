@@ -23,6 +23,51 @@ Web companion for the Digital Ocarina (voice-to-instrument synthesizer). Dual pu
 | Audio | WaveSurfer.js 7.12 (waveform + regions + timeline), Tone.js 15.1 (realtime effect chain + `Tone.Offline` render), native Web Audio (`decodeAudioData` + `OfflineAudioContext` for peaks) |
 | Theme | Dark mode, warm amber/gold (oklch), DM Serif Display + DM Sans + JetBrains Mono |
 
+## v0.2 Late (May 2026)
+
+### Direct Pi REST integration — Tailscale Funnel + FastAPI
+
+End-to-end pivot away from the Supabase-relayed Pi flow. The Pi now runs a FastAPI server (in the `digital-ocarina` repo at `pi/api/server.py`) that owns the Teensy serial port and exposes REST + WebSocket endpoints. Tailscale Funnel gives us an HTTPS URL the Vercel-deployed page can hit directly.
+
+- **`lib/ocarina-api.ts`** — typed client over `NEXT_PUBLIC_OCARINA_API` + bearer token. REST surface (`status`, `setButton`, `listPresets`, `applyPreset`, `listUserPresets`, `saveUserPreset`, `applyUserPreset`, `deleteUserPreset`, `reapplyPersisted`, `clearAll`) + `openEventStream()` WebSocket helper. Defensive trim on env values (env paste once shipped with a trailing `\n`)
+- **`hooks/use-pi-rest-teensy.ts`** — WS subscriber with exponential reconnect; translates Pi's `note_on` / `note_off` / `heartbeat` shapes into the same `HardwareEvent` / `TelemetryEvent` types the Supabase Realtime path produces. Same downstream state machine reused
+- **Source discriminator** on `useLiveConsoleSignals`: `{ kind: "realtime" } | { kind: "pi_rest" } | { kind: "webserial" }`. Adding a new transport is now a third union branch + a hook, not a rewrite
+- **Auth model**: `NEXT_PUBLIC_OCARINA_TOKEN` ships in the browser bundle. Acceptable for this hobby project (Tailnet-scoped, no PII); switch to a server-proxy if it ever needs stronger isolation
+
+### Monitor (`/monitor`) — live debug view + session capture
+
+New top-level route. Renders the same virtual keyboard, note readout, FX panel, and loop state that `/diagnostics/live` had, plus two new surfaces.
+
+- **Mic activity strip** — canvas waterfall of recent pitch confidence (8s window). Caption flags that raw mic level needs a Pi MIC_LEVEL telemetry frame (still TODO firmware-side)
+- **Session capture** — Start / Stop / Save with JSON and CSV exports. Buffer is separate from the rolling 200-entry display log, capped at 50k for safety, downloads via `Blob` + `URL.createObjectURL`
+- **Source priority**: `?webserial=1` (dev) → Pi REST (default when `NEXT_PUBLIC_OCARINA_API` is set) → legacy Supabase Realtime via paired device (`?realtime=1` forces) → empty CTA
+- **`PiRestStatusCard`** — auto-connecting banner with reconnect spinner, host name, button-count, error surfacing
+- **`TeensyConnectCard`** — WebSerial connect/disconnect UI, baud picker (115200 / 9600), Chrome/Edge support detection
+- Reuses `useLiveConsoleSignals` extracted from the original `LiveConsole`
+
+### Configurator (`/configurator`) — Pi-REST-only button remapper
+
+Rewrite. The original Supabase-backed version (named profiles + per-button overrides + custom action vocabulary) is replaced with a thin client over the Pi's REST surface — the Pi is now the source of truth for the 12-button mapping.
+
+- **12-tile grid** driven by `GET /status`. Each tile shows button number, current note name, and an amber-dot override indicator when the button is overridden from its firmware default
+- **`NotePickerPopover`** — 4×3 chromatic picker plus "Reset to default" → `POST /map` with the literal `"default"` sentinel
+- **`PresetRow`** — built-in preset dropdown (chromatic, whole-tone, major, …), user-preset dropdown, "Save current as…" inline form, "Reapply saved" (post-reflash recovery via `POST /map/reapply`), "Clear overrides"
+- **Live press flash** — `note_off` events over WebSocket pulse the matching tile briefly. Same hook the monitor uses, just a different consumer
+- Empty state when `NEXT_PUBLIC_OCARINA_API` isn't configured; loading skeleton on first fetch
+- Writes are live — there's no Apply button. Multi-tab edits don't yet broadcast a `map_changed` event; the active tab refetches `/status` after every write
+
+### WebSerial direct-Teensy connection (dev-only)
+
+Built first, then demoted once we realized the Teensy permanently lives on the Pi (ground-loop fix made the laptop USB path unviable for daily use). Kept behind `?webserial=1` for firmware-on-laptop dev workflows.
+
+- **`lib/serial/teensy-protocol.ts`** — pure-function line parser handling both firmware dialects: `main.ino` structured `STATUS:NOTE:…` / `STATUS:HEARTBEAT:…` / `STATUS:FX:…` at 115200, and `pitch_detection_v8` loose `NOTE ON: …` / `MUTE: …` / `REVERB: …` / `OCTAVE: …` at 9600. Emits the same `HardwareEvent` / `TelemetryEvent` shapes the Realtime path produces. `LineSplitter` class handles WebSerial's chunked-read boundaries
+- **`hooks/use-web-serial-teensy.ts`** — connect/disconnect lifecycle, PJRC USB filter, `TextDecoderStream` reader loop, auto-reopen previously-granted ports via `navigator.serial.getPorts()`, hot-unplug handling, single-byte `sendSimKey` writer
+
+### Other v0.2 Late features
+
+- **`lib/hardware/button-layout.ts`** — single source of truth for `ButtonDef[]` + pin/note resolvers. Replaces inline arrays in `virtual-keyboard.tsx`
+- **`useLiveConsoleSignals` extraction** — pulled the ~200 lines of stream wiring out of `LiveConsole` so the new monitor and existing diagnostics page can share the same state machine, capture sink, and event log
+
 ## v0.2 Mid (April 2026)
 
 ### Global Audio Player (feature-flagged)
@@ -138,7 +183,7 @@ Sample editor additions (no new table): `samples.source_sample_id` (FK → `samp
 
 ## Feature flags (lib/features.ts)
 
-**Enabled**: `sampleBrowser`, `aiSearch`, `aiKitBuilder`, `kitBrowser`, `deviceRegistration`, `syncApi`, `activityTimeline`, `embeddablePlayer`, `configManager`, `recordingLibrary`, `karaokeBrowser`, `looperDA`, `drumPatternEditor`, `sampleEditor`, `analyticsDashboard`, `diagnostics`, `liveConsole`.
+**Enabled**: `sampleBrowser`, `aiSearch`, `aiKitBuilder`, `kitBrowser`, `deviceRegistration`, `syncApi`, `activityTimeline`, `embeddablePlayer`, `configManager`, `recordingLibrary`, `karaokeBrowser`, `looperDA`, `drumPatternEditor`, `sampleEditor`, `analyticsDashboard`, `diagnostics`, `liveConsole`, `monitor`, `buttonConfigurator`.
 
 **Disabled (ready to flip)**: `globalAudioPlayer`.
 
@@ -146,7 +191,7 @@ Sample editor additions (no new table): `samples.source_sample_id` (FK → `samp
 
 1. Supabase for auth + DB + realtime; Vercel for everything else (pragmatic split)
 2. Server Actions for browser mutations, REST Route Handlers for device APIs
-3. Supabase Realtime as Pi↔Web relay (~80–130 ms latency, acceptable for visual state)
+3. Pi REST + Tailscale Funnel is the **canonical** Pi↔Web transport for `/monitor` + `/configurator` (May 2026). Supabase Realtime relay is kept for `/diagnostics/live` legacy + as a `?realtime=1` fallback, but the configurator and monitor talk to the Pi's FastAPI directly. Live writes, no Supabase round-trip, sub-50ms perceived latency over the Funnel.
 4. URL-persisted filter state (shareable links, SSR of filtered results)
 5. Pre-computed waveform peaks in DB (samples render without downloading audio)
 6. Parallel route segments for sample browser (`@filters` + `@grid`)
@@ -173,6 +218,13 @@ lib/audio/zero-crossing.ts           Snap-to-zero helper for click-free trims
 lib/features.ts                      Feature flags controlling all route access
 lib/db/queries/                      All Supabase REST queries (+ sample-editor.ts)
 lib/config/default-config.ts         70+ config fields matching pi/config.yaml
+lib/ocarina-api.ts                   Typed client for Pi FastAPI (REST + WS)
+lib/hardware/button-layout.ts        ButtonDef + pin/note resolvers (single source of truth)
+lib/serial/teensy-protocol.ts        Pure-function line parser for the Teensy USB serial
+hooks/use-pi-rest-teensy.ts          Pi REST WebSocket subscriber (auto-reconnect)
+hooks/use-live-console-signals.ts    Transport-agnostic state machine for /monitor + /diagnostics/live
+app/(dashboard)/monitor/             Live debug view + session JSON/CSV capture
+app/(dashboard)/configurator/        12-button Pi-REST mapper with preset save/recall
 lib/ai/provider.ts                   Async provider switching (Anthropic/OpenAI)
 middleware.ts                        Auth + device API key validation
 app/api/sync/                        Pi sync endpoints (5 routes)
