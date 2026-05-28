@@ -21,6 +21,8 @@ import {
   Scissors,
   Wrench,
   Gamepad2,
+  Radar,
+  Sliders,
 } from "lucide-react";
 
 import {
@@ -67,6 +69,7 @@ const navMain: NavItem[] = [
   { title: "Kits", url: "/kits", icon: Layers, feature: "kitBrowser" as const },
   { title: "Recordings", url: "/recordings", icon: Disc3, feature: "syncApi" as const },
   { title: "Activity", url: "/activity", icon: Activity, feature: "activityTimeline" as const },
+  { title: "Monitor", url: "/monitor", icon: Radar, feature: "monitor" as const },
 ];
 
 const navTools: NavItem[] = [
@@ -75,6 +78,7 @@ const navTools: NavItem[] = [
   { title: "Sample Editor", url: "/sample-editor", icon: Scissors, feature: "sampleEditor" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
+  { title: "Configurator", url: "/configurator", icon: Sliders, feature: "buttonConfigurator" as const },
   { title: "Analytics", url: "/analytics", icon: BarChart2, feature: "analyticsDashboard" as const },
 ];
 

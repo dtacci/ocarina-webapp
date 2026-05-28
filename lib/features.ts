@@ -26,6 +26,8 @@ export const features = {
   analyticsDashboard: true,
   diagnostics: true,
   liveConsole: true,
+  monitor: true,
+  buttonConfigurator: true,
   karaokeBrowser: true,
 
   /** v0.3 features — disabled */

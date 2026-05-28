@@ -1,35 +1,48 @@
 "use client";
 
-import { Loader2, AlertTriangle, Usb } from "lucide-react";
+import { useCallback, useRef } from "react";
 
-import {
-  useLiveConsoleSignals,
-  type ConsoleStatus,
-  type TeensyState,
-} from "@/hooks/use-live-console-signals";
+import { useLiveConsoleSignals } from "@/hooks/use-live-console-signals";
+import { useLoopState } from "@/hooks/use-loop-state";
 
 import { DeviceStatusBar } from "@/components/diagnostics/device-status-bar";
 import { VirtualKeyboard } from "@/components/diagnostics/virtual-keyboard";
 import { NoteReadout } from "@/components/diagnostics/note-readout";
 import { FxStatePanel } from "@/components/diagnostics/fx-state-panel";
-import { LiveEventLog } from "@/components/diagnostics/live-event-log";
-import { useLoopState } from "@/hooks/use-loop-state";
+import { LiveEventLog, type LogEntry } from "@/components/diagnostics/live-event-log";
+
+import { MicActivityStrip } from "@/components/monitor/mic-activity-strip";
+import { SessionCapturePanel } from "@/components/monitor/session-capture-panel";
 
 interface Props {
-  deviceId: string | null;
+  deviceId: string;
   deviceName: string | null;
   initialLastSeenAt: string | null;
   initialIsOnline: boolean;
   initialIsRecent: boolean;
 }
 
-export function LiveConsole({
+export function MonitorSurface({
   deviceId,
   deviceName,
   initialLastSeenAt,
   initialIsOnline,
   initialIsRecent,
 }: Props) {
+  // The capture panel registers a sink imperatively. We hold it in a ref so
+  // the hook's onEvent callback stays stable while we swap the underlying
+  // function (start / stop without rebuilding subscriptions).
+  const sinkRef = useRef<((entry: LogEntry) => void) | null>(null);
+  const registerSink = useCallback(
+    (sink: ((entry: LogEntry) => void) | null) => {
+      sinkRef.current = sink;
+    },
+    []
+  );
+  const onEvent = useCallback((entry: LogEntry) => {
+    sinkRef.current?.(entry);
+  }, []);
+
   const {
     status,
     teensyState,
@@ -41,8 +54,9 @@ export function LiveConsole({
     loopState,
     loopStatus,
     log,
-  } = useLiveConsoleSignals(deviceId);
+  } = useLiveConsoleSignals(deviceId, { onEvent });
 
+  const ready = status === "full" || status === "pi_only";
   const isFull = status === "full";
 
   return (
@@ -54,12 +68,9 @@ export function LiveConsole({
         deviceName={deviceName}
       />
 
-      <ConsoleStatusRow status={status} teensy={teensyState} />
+      <StatusRow status={status} teensy={teensyState} />
 
-      {status === "awaiting" && <AwaitingCard />}
-      {status === "agent_stale" && <AgentStaleCard />}
-
-      {status !== "awaiting" && status !== "agent_stale" && (
+      {ready && (
         <>
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <div className="rounded-xl border bg-card p-4">
@@ -73,30 +84,35 @@ export function LiveConsole({
             {isFull ? (
               <NoteReadout current={currentNote} history={noteHistory} />
             ) : (
-              <TeensyBanner teensy={teensyState} />
+              <div className="rounded-xl border border-dashed border-border/70 bg-card/40 p-4 text-xs text-muted-foreground">
+                Pi only — plug the Teensy in for note readout, FX, and loop state.
+              </div>
             )}
           </div>
+
+          <MicActivityStrip current={currentNote} history={noteHistory} />
 
           {isFull && (
             <>
               <FxStatePanel state={fxState} />
-              <LoopStatePanel loopState={loopState} status={loopStatus} />
+              <LoopPanel loopState={loopState} status={loopStatus} />
             </>
           )}
         </>
       )}
 
+      <SessionCapturePanel registerSink={registerSink} deviceName={deviceName} />
       <LiveEventLog entries={log} />
     </div>
   );
 }
 
-function ConsoleStatusRow({
+function StatusRow({
   status,
   teensy,
 }: {
-  status: ConsoleStatus;
-  teensy: TeensyState;
+  status: ReturnType<typeof useLiveConsoleSignals>["status"];
+  teensy: ReturnType<typeof useLiveConsoleSignals>["teensyState"];
 }) {
   const piLabel =
     status === "awaiting" ? "starting…"
@@ -127,64 +143,7 @@ function ConsoleStatusRow({
   );
 }
 
-function AwaitingCard() {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border bg-card p-6">
-      <Loader2 className="size-4 animate-spin text-muted-foreground" />
-      <div>
-        <div className="text-sm font-medium">Asking device to start streaming…</div>
-        <div className="text-xs text-muted-foreground">
-          The webapp is waiting for the Pi to acknowledge and begin sending telemetry.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AgentStaleCard() {
-  return (
-    <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-6">
-      <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 size-5 text-red-400" />
-        <div className="space-y-1">
-          <div className="text-sm font-medium text-red-300">
-            Device agent isn&apos;t responding
-          </div>
-          <div className="text-xs text-muted-foreground">
-            The Pi&apos;s SyncAgent didn&apos;t answer within 10 seconds. Likely running an
-            older version without Live Console support. Update the Pi and restart
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
-              sync_agent.py
-            </code>
-            then reopen this page.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TeensyBanner({ teensy }: { teensy: TeensyState }) {
-  const variant = teensy === "busy" ? "busy" : "missing";
-  const title = variant === "busy" ? "Teensy busy" : "Teensy not connected";
-  const body =
-    variant === "busy"
-      ? "The Teensy is in use by the Ocarina app. Stop main.py on the Pi and reopen the console to debug the Teensy directly."
-      : "Plug the Teensy into the Pi's USB to unlock notes, FX state, and loop tracks here. Pi GPIO buttons still work below.";
-  return (
-    <div className="rounded-xl border border-dashed border-border/70 bg-card/40 p-4">
-      <div className="flex items-start gap-3">
-        <Usb className="mt-0.5 size-5 text-muted-foreground" />
-        <div className="space-y-1">
-          <div className="text-sm font-medium">{title}</div>
-          <div className="text-xs text-muted-foreground">{body}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LoopStatePanel({
+function LoopPanel({
   loopState,
   status,
 }: {
