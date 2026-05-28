@@ -11,6 +11,7 @@ import {
   type HeartbeatEvent,
   type StatusResponse,
   type TeensyHealth,
+  type VersionInfo,
 } from "@/lib/ocarina-api";
 import { NOTE_BUTTONS } from "@/lib/hardware/button-layout";
 
@@ -54,6 +55,8 @@ export interface UsePiRestTeensy {
   lastHeartbeatAt: number | null;
   /** Latest Pi → Teensy round-trip latency in ms, polled every 15s. */
   teensyLatencyMs: number | null;
+  /** Build info — git SHA, branch, firmware build date. Fetched once on connect. */
+  version: VersionInfo | null;
 }
 
 /**
@@ -84,6 +87,7 @@ export function usePiRestTeensy(
   const [pots, setPots] = useState<HeartbeatEvent["pots"] | null>(null);
   const [lastHeartbeatAt, setLastHeartbeatAt] = useState<number | null>(null);
   const [teensyLatencyMs, setTeensyLatencyMs] = useState<number | null>(null);
+  const [version, setVersion] = useState<VersionInfo | null>(null);
 
   const refreshStatus = useCallback(async () => {
     if (!isConfigured) return;
@@ -100,6 +104,21 @@ export function usePiRestTeensy(
     if (!enabled || !isConfigured) return;
     void refreshStatus();
   }, [enabled, isConfigured, refreshStatus]);
+
+  // One-shot version fetch — used to detect Pi rev mismatch / show build info.
+  useEffect(() => {
+    if (!enabled || !isConfigured) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const v = await ocarina.version();
+        if (!cancelled) setVersion(v);
+      } catch {
+        // Silent — `version` stays null and the status card just omits the line.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [enabled, isConfigured]);
 
   // Periodic Teensy latency poll. The Pi reports Funnel + serial round-trip
   // combined here — typically ~0–5ms when healthy, climbs sharply during
@@ -217,5 +236,6 @@ export function usePiRestTeensy(
     pots,
     lastHeartbeatAt,
     teensyLatencyMs,
+    version,
   };
 }

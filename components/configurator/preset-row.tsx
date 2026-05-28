@@ -36,8 +36,8 @@ export function PresetRow({
 
   return (
     <div className="rounded-xl border bg-card p-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1 space-y-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="min-w-0 flex-1 space-y-1 sm:min-w-[14rem]">
           <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
             Built-in preset
           </label>
@@ -50,7 +50,7 @@ export function PresetRow({
           />
         </div>
 
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1 sm:min-w-[14rem]">
           <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
             Your presets
           </label>
@@ -84,7 +84,7 @@ export function PresetRow({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             disabled={isBusy}
@@ -118,7 +118,7 @@ export function PresetRow({
 
       {showSave && (
         <form
-          className="mt-3 flex items-center gap-2"
+          className="mt-3 flex flex-wrap items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             const name = saveDraft.trim();

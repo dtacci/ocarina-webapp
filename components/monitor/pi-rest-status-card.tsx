@@ -22,6 +22,7 @@ export function PiRestStatusCard({ piRest }: Props) {
     buttonStatus,
     lastHeartbeatAt,
     teensyLatencyMs,
+    version,
   } = piRest;
   const base = getOcarinaApiBase();
   const hostLabel = base ? hostFromUrl(base) : "—";
@@ -96,6 +97,15 @@ export function PiRestStatusCard({ piRest }: Props) {
               </>
             )}
           </div>
+          {version && (
+            <p
+              className="mt-0.5 font-mono text-[10px] text-muted-foreground/60"
+              title={`branch ${version.git_branch}${version.git_dirty ? " (dirty)" : ""} · uptime ${Math.round(version.uptime_s)}s`}
+            >
+              Pi v{version.api_version} · {version.git_sha.slice(0, 7)}
+              {version.git_dirty ? "*" : ""} · firmware {version.firmware.build_date}
+            </p>
+          )}
           {errorMessage && (status === "error" || status === "disconnected") && (
             <p className="mt-1 text-xs text-muted-foreground/80">{errorMessage}</p>
           )}

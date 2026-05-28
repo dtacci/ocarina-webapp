@@ -48,7 +48,7 @@ export function NotePickerPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={children as React.ReactElement} />
-      <PopoverContent className="w-64">
+      <PopoverContent className="w-[min(18rem,calc(100vw-2rem))]">
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium">Assign note</p>
