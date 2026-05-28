@@ -25,6 +25,16 @@ Web companion for the Digital Ocarina (voice-to-instrument synthesizer). Dual pu
 
 ## v0.2 Late (May 2026)
 
+### Monitor + Configurator polish — pots, latency, sim-key, preset swatches
+
+Round-two improvements landing after the initial Pi REST cutover.
+
+- **Pots panel** — live readout of the four hardware pots (volume / reverb_mix / filter / pitch_bend) sampled from each Pi heartbeat. New `pots` signal on `usePiRestTeensy`, plus `components/monitor/pots-panel.tsx`
+- **Latency + heartbeat-age in status card** — `Δ Xms` from periodic `/healthz/teensy` poll (every 15s), `hb Ys` continuously ticked while connected, amber when heartbeat is stale (>3s). Useful for catching Tailscale Funnel blips, Pi pauses, or our own WS holding on too long
+- **Sim-key click-to-play** — virtual keyboard clicks on `/monitor` now `POST /sim_key` with the firmware char. `ocarina.simKey(key)` added to the client. Critical safety fix: `F#` was previously mapped to lowercase `i` — that runs a Wire2 I2C scan on the firmware. Now `I` (uppercase) per the firmware contract
+- **Preset swatches** — `components/configurator/preset-swatch-menu.tsx`: replaces the plain `<select>` with a popover showing each preset's 12-button layout as mini-tiles. Hover preview without applying; trailing delete action on user presets reveals on hover
+- **`ocarina.version()` + structured errors** — client now exposes the `/version` endpoint (no auth, returns git SHA + firmware build) and a `parseOcarinaError` helper that pulls `{ detail, retry_after, hint }` from the new 400/503 shapes. `isRetryableOcarinaError` flags 503s as retry-able
+
 ### Direct Pi REST integration — Tailscale Funnel + FastAPI
 
 End-to-end pivot away from the Supabase-relayed Pi flow. The Pi now runs a FastAPI server (in the `digital-ocarina` repo at `pi/api/server.py`) that owns the Teensy serial port and exposes REST + WebSocket endpoints. Tailscale Funnel gives us an HTTPS URL the Vercel-deployed page can hit directly.

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Save, RefreshCw, Trash2, Sparkles } from "lucide-react";
 
 import type { PresetIndex } from "@/lib/ocarina-api";
+import { PresetSwatchMenu } from "@/components/configurator/preset-swatch-menu";
 
 interface Props {
   builtin: PresetIndex;
@@ -31,8 +32,7 @@ export function PresetRow({
   const [saveDraft, setSaveDraft] = useState("");
   const [showSave, setShowSave] = useState(false);
 
-  const builtinNames = Object.keys(builtin).sort();
-  const userNames = Object.keys(user).sort();
+  const userNames = Object.keys(user);
 
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -41,26 +41,13 @@ export function PresetRow({
           <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
             Built-in preset
           </label>
-          <select
-            disabled={isBusy || builtinNames.length === 0}
-            defaultValue=""
-            onChange={(e) => {
-              if (e.target.value) {
-                void onApplyBuiltin(e.target.value);
-                e.target.value = "";
-              }
-            }}
-            className="block w-full rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <option value="" disabled>
-              {builtinNames.length === 0 ? "(none)" : "Apply…"}
-            </option>
-            {builtinNames.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+          <PresetSwatchMenu
+            label="Apply preset…"
+            presets={builtin}
+            source="builtin"
+            disabled={isBusy}
+            onApply={(name) => { void onApplyBuiltin(name); }}
+          />
         </div>
 
         <div className="min-w-0 flex-1 space-y-1">
@@ -68,31 +55,28 @@ export function PresetRow({
             Your presets
           </label>
           {userNames.length > 0 ? (
-            <div className="flex gap-1.5">
-              <select
-                disabled={isBusy}
-                defaultValue=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    void onApplyUser(e.target.value);
-                    e.target.value = "";
-                  }
-                }}
-                className="block flex-1 rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="" disabled>Apply…</option>
-                {userNames.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              <UserDeleteMenu
-                names={userNames}
-                disabled={isBusy}
-                onDelete={onDeleteUser}
-              />
-            </div>
+            <PresetSwatchMenu
+              label="Apply your preset…"
+              presets={user}
+              source="user"
+              disabled={isBusy}
+              onApply={(name) => { void onApplyUser(name); }}
+              trailingAction={(name) => (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`Delete preset "${name}"?`)) {
+                      void onDeleteUser(name);
+                    }
+                  }}
+                  className="rounded-md border border-border bg-card/50 px-2 py-1 text-[10px] text-muted-foreground hover:border-red-400/50 hover:text-red-300"
+                  title="Delete this preset"
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              )}
+            />
           ) : (
             <p className="text-xs text-muted-foreground">
               No saved presets yet — save the current mapping to get started.
@@ -177,36 +161,3 @@ export function PresetRow({
   );
 }
 
-function UserDeleteMenu({
-  names,
-  disabled,
-  onDelete,
-}: {
-  names: string[];
-  disabled: boolean;
-  onDelete: (name: string) => Promise<void>;
-}) {
-  return (
-    <select
-      disabled={disabled}
-      defaultValue=""
-      onChange={(e) => {
-        if (e.target.value && confirm(`Delete preset "${e.target.value}"?`)) {
-          void onDelete(e.target.value);
-        }
-        e.target.value = "";
-      }}
-      className="rounded-md border border-border bg-card/50 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-      title="Delete a saved preset"
-    >
-      <option value="" disabled>
-        <Trash2 className="size-3" />
-      </option>
-      {names.map((n) => (
-        <option key={n} value={n}>
-          Delete {n}
-        </option>
-      ))}
-    </select>
-  );
-}

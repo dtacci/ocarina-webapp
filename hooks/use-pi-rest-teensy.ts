@@ -8,7 +8,9 @@ import {
   isOcarinaApiConfigured,
   ocarina,
   openEventStream,
+  type HeartbeatEvent,
   type StatusResponse,
+  type TeensyHealth,
 } from "@/lib/ocarina-api";
 import { NOTE_BUTTONS } from "@/lib/hardware/button-layout";
 
@@ -46,6 +48,12 @@ export interface UsePiRestTeensy {
   /** Latest button mapping snapshot (also re-fetched on demand). */
   buttonStatus: StatusResponse | null;
   refreshStatus: () => Promise<void>;
+  /** Latest pots snapshot from the most recent heartbeat. */
+  pots: HeartbeatEvent["pots"] | null;
+  /** Wall-clock ms when the last heartbeat was received. */
+  lastHeartbeatAt: number | null;
+  /** Latest Pi → Teensy round-trip latency in ms, polled every 15s. */
+  teensyLatencyMs: number | null;
 }
 
 /**
@@ -73,6 +81,9 @@ export function usePiRestTeensy(
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [buttonStatus, setButtonStatus] = useState<StatusResponse | null>(null);
+  const [pots, setPots] = useState<HeartbeatEvent["pots"] | null>(null);
+  const [lastHeartbeatAt, setLastHeartbeatAt] = useState<number | null>(null);
+  const [teensyLatencyMs, setTeensyLatencyMs] = useState<number | null>(null);
 
   const refreshStatus = useCallback(async () => {
     if (!isConfigured) return;
@@ -89,6 +100,26 @@ export function usePiRestTeensy(
     if (!enabled || !isConfigured) return;
     void refreshStatus();
   }, [enabled, isConfigured, refreshStatus]);
+
+  // Periodic Teensy latency poll. The Pi reports Funnel + serial round-trip
+  // combined here — typically ~0–5ms when healthy, climbs sharply during
+  // Tailscale blips or Teensy reflashes.
+  useEffect(() => {
+    if (!enabled || !isConfigured) return;
+    let cancelled = false;
+    const pollOnce = async () => {
+      try {
+        const h: TeensyHealth = await ocarina.teensyHealth();
+        if (cancelled) return;
+        setTeensyLatencyMs(h.connected ? h.latency_ms : null);
+      } catch {
+        if (!cancelled) setTeensyLatencyMs(null);
+      }
+    };
+    void pollOnce();
+    const iv = setInterval(pollOnce, 15_000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [enabled, isConfigured]);
 
   // WebSocket lifecycle with exponential reconnect.
   useEffect(() => {
@@ -125,6 +156,8 @@ export function usePiRestTeensy(
         },
         onHeartbeat: (e) => {
           const ts = Date.now();
+          setPots(e.pots);
+          setLastHeartbeatAt(ts);
           onTelRef.current?.({
             type: "HEARTBEAT",
             uptime_ms: Math.round(e.uptime_s * 1000),
@@ -181,5 +214,8 @@ export function usePiRestTeensy(
     isConfigured,
     buttonStatus,
     refreshStatus,
+    pots,
+    lastHeartbeatAt,
+    teensyLatencyMs,
   };
 }

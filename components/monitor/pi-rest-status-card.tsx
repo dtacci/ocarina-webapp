@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Wifi, WifiOff, Loader2, AlertTriangle } from "lucide-react";
 
 import type { UsePiRestTeensy } from "@/hooks/use-pi-rest-teensy";
@@ -15,11 +16,33 @@ interface Props {
  * exponential reconnect on close. This card just surfaces the state.
  */
 export function PiRestStatusCard({ piRest }: Props) {
-  const { status, errorMessage, buttonStatus } = piRest;
+  const {
+    status,
+    errorMessage,
+    buttonStatus,
+    lastHeartbeatAt,
+    teensyLatencyMs,
+  } = piRest;
   const base = getOcarinaApiBase();
   const hostLabel = base ? hostFromUrl(base) : "—";
 
   const tone = toneFor(status);
+
+  // Re-tick once per second while connected so the "last hb Ns ago" stays fresh
+  // without forcing the parent hook to re-render. Skip when disconnected — the
+  // number's meaningless then.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (status !== "connected") return;
+    const iv = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, [status]);
+
+  const hbAgeS =
+    lastHeartbeatAt && status === "connected"
+      ? Math.max(0, (nowTick - lastHeartbeatAt) / 1000)
+      : null;
+  const hbStale = hbAgeS !== null && hbAgeS > 3;
 
   return (
     <div className={`rounded-xl border ${tone.border} ${tone.bg} p-4`}>
@@ -42,12 +65,34 @@ export function PiRestStatusCard({ piRest }: Props) {
               {status}
             </span>
           </div>
-          <div className="text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
             <span className="font-mono">{hostLabel}</span>
             {buttonStatus?.buttons && (
               <>
-                <span className="mx-1.5">·</span>
-                <span>{buttonStatus.buttons.length} buttons mapped</span>
+                <span>·</span>
+                <span>{buttonStatus.buttons.length} buttons</span>
+              </>
+            )}
+            {teensyLatencyMs !== null && (
+              <>
+                <span>·</span>
+                <span
+                  className="font-mono tabular-nums"
+                  title="Pi → Teensy round-trip"
+                >
+                  Δ {Math.round(teensyLatencyMs)}ms
+                </span>
+              </>
+            )}
+            {hbAgeS !== null && (
+              <>
+                <span>·</span>
+                <span
+                  className={`font-mono tabular-nums ${hbStale ? "text-amber-400" : ""}`}
+                  title="Time since the last /events heartbeat arrived"
+                >
+                  hb {hbAgeS < 10 ? hbAgeS.toFixed(1) : Math.round(hbAgeS)}s
+                </span>
               </>
             )}
           </div>

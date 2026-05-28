@@ -23,7 +23,10 @@ export const NOTE_BUTTONS: ButtonDef[] = [
   { id: "D#", label: "D#", sublabel: "pin 37", pin: 37, simKey: "t", source: "teensy", group: "notes" },
   { id: "E",  label: "E",  sublabel: "pin 38", pin: 38, simKey: "y", source: "teensy", group: "notes" },
   { id: "F",  label: "F",  sublabel: "pin 39", pin: 39, simKey: "u", source: "teensy", group: "notes" },
-  { id: "F#", label: "F#", sublabel: "pin 40", pin: 40, simKey: "i", source: "teensy", group: "notes" },
+  // F# uses uppercase "I". Lowercase "i" runs a Wire2 I2C scan in the firmware
+  // (per pi/api/NEXTJS_INTEGRATION.md). Do NOT change without coordinating
+  // with the firmware sim-key map.
+  { id: "F#", label: "F#", sublabel: "pin 40", pin: 40, simKey: "I", source: "teensy", group: "notes" },
   { id: "HA", label: "Harmony", sublabel: "pin 41", pin: 41, simKey: "o", source: "teensy", group: "notes", tap: true },
 ];
 

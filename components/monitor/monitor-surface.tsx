@@ -20,6 +20,8 @@ import { MicActivityStrip } from "@/components/monitor/mic-activity-strip";
 import { SessionCapturePanel } from "@/components/monitor/session-capture-panel";
 import { TeensyConnectCard } from "@/components/monitor/teensy-connect-card";
 import { PiRestStatusCard } from "@/components/monitor/pi-rest-status-card";
+import { PotsPanel } from "@/components/monitor/pots-panel";
+import { ocarina } from "@/lib/ocarina-api";
 
 export type MonitorMode =
   | {
@@ -74,6 +76,22 @@ export function MonitorSurface({ mode }: Props) {
     onTelemetry: signals.pushTelemetryEvent,
   });
 
+  // Pi-REST sim-key: clicking a virtual Teensy button POSTs the char to the
+  // Pi's firmware keyboard simulator. Effect comes back through /events as a
+  // normal note_on/note_off, so the UI flashes itself naturally.
+  const piRestSimKey = useCallback(
+    (key: string, _event: "down" | "up" | "tap") => {
+      // The firmware is largely one-shot; ignore "up" events for tap-style
+      // controls (matching the original Pi sim-key contract).
+      void ocarina.simKey(key).catch(() => {
+        // Silent — a 503 here surfaces via PiRestStatusCard's error path on
+        // the next request that runs through a status setter. Per-click
+        // toasts would get noisy during latched-button mashing.
+      });
+    },
+    []
+  );
+
   const isConnected = (() => {
     if (mode.kind === "webserial") return webserial.status === "connected";
     if (mode.kind === "pi_rest") return piRest.status === "connected";
@@ -119,7 +137,11 @@ export function MonitorSurface({ mode }: Props) {
                 deviceId={mode.kind === "realtime" ? mode.deviceId : null}
                 teensyInteractive={isFull}
                 onSimKey={
-                  mode.kind === "webserial" ? webserial.sendSimKey : undefined
+                  mode.kind === "webserial"
+                    ? webserial.sendSimKey
+                    : mode.kind === "pi_rest"
+                      ? piRestSimKey
+                      : undefined
                 }
               />
             </div>
@@ -134,6 +156,8 @@ export function MonitorSurface({ mode }: Props) {
               </div>
             )}
           </div>
+
+          {mode.kind === "pi_rest" && <PotsPanel pots={piRest.pots} />}
 
           <MicActivityStrip
             current={signals.currentNote}

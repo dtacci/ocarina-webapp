@@ -71,6 +71,55 @@ export interface ApplyPresetResponse { applied: string; notes: string[] }
 export interface SaveUserPresetResponse { saved: string; notes: string[] }
 export interface DeleteUserPresetResponse { deleted: string }
 
+export interface SimKeyResponse {
+  sent: string;
+  bytes_written: number;
+}
+
+export interface VersionInfo {
+  api_version: string;
+  git_sha: string;
+  git_branch: string;
+  git_dirty: boolean;
+  firmware: { name: string; build_date: string };
+  started_at: number;
+  uptime_s: number;
+}
+
+/**
+ * Structured shape for the Pi's 4xx/5xx responses, per the integration doc.
+ * 503 is the retry-able shape — hint is operator-facing and safe to show
+ * verbatim. 400's detail is also user-safe. Other statuses (422 / 502) are
+ * intentionally not parsed into a user message — the caller picks a
+ * UX-appropriate fallback.
+ */
+export interface OcarinaApiError {
+  status: number;
+  detail?: string;
+  hint?: string;
+  retryAfter?: number;
+}
+
+export async function parseOcarinaError(r: Response): Promise<OcarinaApiError> {
+  try {
+    const body = (await r.json()) as Record<string, unknown>;
+    return {
+      status: r.status,
+      detail: typeof body.detail === "string" ? body.detail : undefined,
+      hint: typeof body.hint === "string" ? body.hint : undefined,
+      retryAfter:
+        typeof body.retry_after === "number" ? body.retry_after : undefined,
+    };
+  } catch {
+    return { status: r.status };
+  }
+}
+
+/** True for 503 — caller should retry after `retryAfter` seconds. */
+export function isRetryableOcarinaError(e: OcarinaApiError): boolean {
+  return e.status === 503;
+}
+
 export interface PresetEntry {
   name: string;
   notes: string[]; // length 12, one per button
@@ -119,10 +168,27 @@ export const ocarina = {
   health: () =>
     fetch(`${BASE}/health`).then((r) => jsonOrThrow<{ status: string }>(r)),
 
+  /** No-auth boot info — git SHA, branch, firmware build, uptime. */
+  version: () =>
+    fetch(`${BASE}/version`).then((r) => jsonOrThrow<VersionInfo>(r)),
+
   teensyHealth: () =>
     fetch(`${BASE}/healthz/teensy`, { headers: authHeaders() }).then((r) =>
       jsonOrThrow<TeensyHealth>(r)
     ),
+
+  /**
+   * Feed raw char(s) to the firmware's keyboard simulator.
+   *   Notes:        w=C e=C# r=D t=D# y=E u=F I=F#(uppercase!) o=G p=G# [=A ]=A# \=B
+   *   Action keys:  ' '=all-off, '1'-'4'=track, 'a'=mute, 'b'=tap-tempo, 'l'=record
+   * Lowercase 'i' is a Wire2 I2C scan — DO NOT send when meaning F#.
+   */
+  simKey: (key: string) =>
+    fetch(`${BASE}/sim_key`, {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ key }),
+    }).then((r) => jsonOrThrow<SimKeyResponse>(r)),
 
   status: () =>
     fetch(`${BASE}/status`, { headers: authHeaders() }).then((r) =>
