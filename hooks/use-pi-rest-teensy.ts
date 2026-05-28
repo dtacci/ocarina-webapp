@@ -217,6 +217,25 @@ export function usePiRestTeensy(
           const pin = def?.pin ?? e.button;
           onHwRef.current?.({ button: pin, event: "release", ts: Date.now() });
         },
+        // Pi GPIO row (Inst 1-4, Voice). resolveButtonIdByPin(pin, "pi") on
+        // the consuming side maps pin → tile, so press/release flashes flow
+        // through the existing virtual-keyboard pipeline with no extra UI.
+        // Buttons aren't physically wired yet — these handlers fire when
+        // they get built.
+        onGpioPress: (e) => {
+          onHwRef.current?.({
+            button: e.pin,
+            event: "press",
+            ts: e.ts_ms ?? Date.now(),
+          });
+        },
+        onGpioRelease: (e) => {
+          onHwRef.current?.({
+            button: e.pin,
+            event: "release",
+            ts: e.ts_ms ?? Date.now(),
+          });
+        },
       });
     };
     connect();

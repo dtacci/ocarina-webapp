@@ -40,12 +40,15 @@ export const LATCHING_BUTTONS: ButtonDef[] = [
   { id: "Rc", label: "Record",   sublabel: "pin 32", pin: 32, simKey: "l", source: "teensy", group: "latching", tap: true },
 ];
 
+// BCM pins are canonical from pi/src/controls/pi_button_reader.py:52 — match
+// the Pi side exactly so resolveButtonIdByPin lookups land. Don't touch
+// without coordinating with the Pi reader's PINS tuple.
 export const PI_BUTTONS: ButtonDef[] = [
   { id: "INST1", label: "Inst 1", sublabel: "GPIO 17", pin: 17, source: "pi", group: "pi" },
-  { id: "INST2", label: "Inst 2", sublabel: "GPIO 22", pin: 22, source: "pi", group: "pi" },
-  { id: "INST3", label: "Inst 3", sublabel: "GPIO 23", pin: 23, source: "pi", group: "pi" },
-  { id: "INST4", label: "Inst 4", sublabel: "GPIO 24", pin: 24, source: "pi", group: "pi" },
-  { id: "VOICE", label: "Voice",  sublabel: "GPIO 25", pin: 25, source: "pi", group: "pi" },
+  { id: "INST2", label: "Inst 2", sublabel: "GPIO 27", pin: 27, source: "pi", group: "pi" },
+  { id: "INST3", label: "Inst 3", sublabel: "GPIO 22", pin: 22, source: "pi", group: "pi" },
+  { id: "INST4", label: "Inst 4", sublabel: "GPIO 23", pin: 23, source: "pi", group: "pi" },
+  { id: "VOICE", label: "Voice",  sublabel: "GPIO 24", pin: 24, source: "pi", group: "pi" },
 ];
 
 export const ALL_BUTTONS: ButtonDef[] = [

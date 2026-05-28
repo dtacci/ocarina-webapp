@@ -160,7 +160,33 @@ export interface NoteOffEvent {
   button: number;
 }
 
-export type EventMessage = HeartbeatEvent | NoteOnEvent | NoteOffEvent;
+/**
+ * Stable webapp-facing names for the 5 Pi GPIO buttons. The wire format uses
+ * `name` (not `pin`) as the canonical identifier so future board revs can
+ * move pins without breaking the protocol.
+ */
+export type PiGpioName = "inst_1" | "inst_2" | "inst_3" | "inst_4" | "voice";
+
+export interface GpioPressEvent {
+  type: "gpio_press";
+  name: string; // PiGpioName today; left as `string` so unknown names don't crash older clients
+  pin: number;  // BCM pin
+  ts_ms?: number;
+}
+
+export interface GpioReleaseEvent {
+  type: "gpio_release";
+  name: string;
+  pin: number;
+  ts_ms?: number;
+}
+
+export type EventMessage =
+  | HeartbeatEvent
+  | NoteOnEvent
+  | NoteOffEvent
+  | GpioPressEvent
+  | GpioReleaseEvent;
 
 // ---------- REST ----------
 
@@ -259,6 +285,8 @@ export interface EventStreamHandlers {
   onHeartbeat?: (e: HeartbeatEvent) => void;
   onNoteOn?: (e: NoteOnEvent) => void;
   onNoteOff?: (e: NoteOffEvent) => void;
+  onGpioPress?: (e: GpioPressEvent) => void;
+  onGpioRelease?: (e: GpioReleaseEvent) => void;
   onOpen?: () => void;
   onClose?: (reason: string) => void;
   onError?: (err: Event) => void;
@@ -283,6 +311,8 @@ export function openEventStream(handlers: EventStreamHandlers): WebSocket {
       if (e.type === "heartbeat") handlers.onHeartbeat?.(e);
       else if (e.type === "note_on") handlers.onNoteOn?.(e);
       else if (e.type === "note_off") handlers.onNoteOff?.(e);
+      else if (e.type === "gpio_press") handlers.onGpioPress?.(e);
+      else if (e.type === "gpio_release") handlers.onGpioRelease?.(e);
     } catch {
       // Malformed payload — log and continue. The Pi shouldn't be sending
       // these but defensive parsing keeps the stream alive if it does.
