@@ -5,6 +5,7 @@ import { Wifi, WifiOff, Loader2, AlertTriangle } from "lucide-react";
 
 import type { UsePiRestTeensy } from "@/hooks/use-pi-rest-teensy";
 import { getOcarinaApiBase } from "@/lib/ocarina-api";
+import { LatencySparkline } from "@/components/monitor/latency-sparkline";
 
 interface Props {
   piRest: UsePiRestTeensy;
@@ -22,6 +23,7 @@ export function PiRestStatusCard({ piRest }: Props) {
     buttonStatus,
     lastHeartbeatAt,
     teensyLatencyMs,
+    teensyLatencyHistory,
     version,
   } = piRest;
   const base = getOcarinaApiBase();
@@ -78,10 +80,13 @@ export function PiRestStatusCard({ piRest }: Props) {
               <>
                 <span>·</span>
                 <span
-                  className="font-mono tabular-nums"
-                  title="Pi → Teensy round-trip"
+                  className="inline-flex items-center gap-1.5 font-mono tabular-nums"
+                  title={`Pi → Teensy round-trip (last ${teensyLatencyHistory.length} samples, polled every 15s)`}
                 >
                   Δ {Math.round(teensyLatencyMs)}ms
+                  {teensyLatencyHistory.length >= 2 && (
+                    <LatencySparkline samples={teensyLatencyHistory} />
+                  )}
                 </span>
               </>
             )}

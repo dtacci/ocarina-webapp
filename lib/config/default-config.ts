@@ -3,84 +3,6 @@
  * Used as template for the config manager UI.
  */
 
-import type { ButtonAction } from "@/lib/config/button-actions";
-
-export interface ButtonProfile {
-  /** Human label shown in the configurator. */
-  name: string;
-  /** Map from ButtonDef.id → action for every button in this profile. */
-  mapping: Record<string, ButtonAction>;
-}
-
-export interface ButtonsConfig {
-  activeProfileId: string;
-  profiles: Record<string, ButtonProfile>;
-  /** Per-button overrides on top of the active profile. Keyed by ButtonDef.id. */
-  overrides: Record<string, ButtonAction>;
-}
-
-const NOTE_IDS = ["C", "C#", "D", "D#", "E", "F", "F#", "HA"] as const;
-
-/**
- * The Teensy firmware today treats the 8 note pins as a chromatic row. Treat
- * that as the canonical "chromatic" profile so the configurator starts from a
- * faithful representation of current hardware behavior.
- */
-const chromaticMapping: Record<string, ButtonAction> = Object.fromEntries(
-  NOTE_IDS.map((id) => [
-    id,
-    id === "HA"
-      ? ({ action: "expression", param: "harmony" } as ButtonAction)
-      : ({ action: "note", note: id as string } as ButtonAction),
-  ])
-);
-
-const tracksLeftMapping: Record<string, ButtonAction> = {
-  C: { action: "track_select", track: 1 },
-  "C#": { action: "track_select", track: 2 },
-  D: { action: "track_select", track: 3 },
-  "D#": { action: "track_select", track: 4 },
-  E: { action: "note", note: "E" },
-  F: { action: "note", note: "F" },
-  "F#": { action: "note", note: "F#" },
-  HA: { action: "expression", param: "harmony" },
-};
-
-const expressionRightMapping: Record<string, ButtonAction> = {
-  C: { action: "note", note: "C" },
-  "C#": { action: "note", note: "C#" },
-  D: { action: "note", note: "D" },
-  "D#": { action: "note", note: "D#" },
-  E: { action: "expression", param: "volume_up" },
-  F: { action: "expression", param: "volume_down" },
-  "F#": { action: "expression", param: "octave_up" },
-  HA: { action: "expression", param: "harmony" },
-};
-
-export const defaultButtonsConfig: ButtonsConfig = {
-  activeProfileId: "chromatic",
-  profiles: {
-    chromatic: { name: "Chromatic", mapping: chromaticMapping },
-    tracks_left: { name: "Tracks (left)", mapping: tracksLeftMapping },
-    expression_right: { name: "Expression (right)", mapping: expressionRightMapping },
-  },
-  overrides: {},
-};
-
-/**
- * Curated subset of existing dot-notation config keys that the live
- * configurator surfaces as "tunables". Anchored to real Pi settings so changes
- * round-trip through the existing PATCH /api/sync/config pipeline without any
- * new keys needing firmware support.
- */
-export const CONTROL_KEYS = [
-  "vad.silence_duration",
-  "vad.aggressiveness",
-  "vad.min_speech_duration",
-  "tts.ducking.duck_level",
-  "audio.ding.frequency",
-] as const;
-
 export interface ConfigField {
   key: string;
   label: string;
@@ -267,7 +189,6 @@ export const defaultConfig: Record<string, unknown> = {
   "madlibs.llm_stories": true,
   "madlibs.require_confirmation": true,
   "logging.level": "INFO",
-  buttons: defaultButtonsConfig,
 };
 
 /** Convert flat dot-notation config to nested YAML-compatible object */

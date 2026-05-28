@@ -55,6 +55,8 @@ export interface UsePiRestTeensy {
   lastHeartbeatAt: number | null;
   /** Latest Pi → Teensy round-trip latency in ms, polled every 15s. */
   teensyLatencyMs: number | null;
+  /** Rolling window of the most recent latency samples (oldest first). null = poll failed. */
+  teensyLatencyHistory: (number | null)[];
   /** Build info — git SHA, branch, firmware build date. Fetched once on connect. */
   version: VersionInfo | null;
 }
@@ -87,6 +89,7 @@ export function usePiRestTeensy(
   const [pots, setPots] = useState<HeartbeatEvent["pots"] | null>(null);
   const [lastHeartbeatAt, setLastHeartbeatAt] = useState<number | null>(null);
   const [teensyLatencyMs, setTeensyLatencyMs] = useState<number | null>(null);
+  const [teensyLatencyHistory, setTeensyLatencyHistory] = useState<(number | null)[]>([]);
   const [version, setVersion] = useState<VersionInfo | null>(null);
 
   const refreshStatus = useCallback(async () => {
@@ -126,13 +129,23 @@ export function usePiRestTeensy(
   useEffect(() => {
     if (!enabled || !isConfigured) return;
     let cancelled = false;
+    const HISTORY_MAX = 30;
+    const pushSample = (v: number | null) => {
+      setTeensyLatencyMs(v);
+      setTeensyLatencyHistory((prev) => {
+        const next = prev.length >= HISTORY_MAX
+          ? [...prev.slice(prev.length - HISTORY_MAX + 1), v]
+          : [...prev, v];
+        return next;
+      });
+    };
     const pollOnce = async () => {
       try {
         const h: TeensyHealth = await ocarina.teensyHealth();
         if (cancelled) return;
-        setTeensyLatencyMs(h.connected ? h.latency_ms : null);
+        pushSample(h.connected ? h.latency_ms : null);
       } catch {
-        if (!cancelled) setTeensyLatencyMs(null);
+        if (!cancelled) pushSample(null);
       }
     };
     void pollOnce();
@@ -255,6 +268,7 @@ export function usePiRestTeensy(
     pots,
     lastHeartbeatAt,
     teensyLatencyMs,
+    teensyLatencyHistory,
     version,
   };
 }

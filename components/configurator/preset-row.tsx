@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { Loader2, Save, RefreshCw, Trash2, Sparkles } from "lucide-react";
 
-import type { PresetIndex } from "@/lib/ocarina-api";
+import type { ButtonState, PresetIndex } from "@/lib/ocarina-api";
 import { PresetSwatchMenu } from "@/components/configurator/preset-swatch-menu";
+import { PresetDiffPopover } from "@/components/configurator/preset-diff-popover";
 
 interface Props {
   builtin: PresetIndex;
   user: PresetIndex;
   isBusy: boolean;
+  currentButtons: ButtonState[];
   onApplyBuiltin: (name: string) => Promise<void>;
   onApplyUser: (name: string) => Promise<void>;
   onSaveUser: (name: string) => Promise<void>;
@@ -22,6 +24,7 @@ export function PresetRow({
   builtin,
   user,
   isBusy,
+  currentButtons,
   onApplyBuiltin,
   onApplyUser,
   onSaveUser,
@@ -85,6 +88,12 @@ export function PresetRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          <PresetDiffPopover
+            builtin={builtin}
+            user={user}
+            currentButtons={currentButtons}
+            disabled={isBusy || currentButtons.length === 0}
+          />
           <button
             type="button"
             disabled={isBusy}

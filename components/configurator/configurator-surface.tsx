@@ -195,6 +195,7 @@ export function ConfiguratorSurface() {
         builtin={builtin}
         user={user}
         isBusy={busy}
+        currentButtons={status?.buttons ?? []}
         onApplyBuiltin={handleApplyBuiltin}
         onApplyUser={handleApplyUser}
         onSaveUser={handleSaveUser}
