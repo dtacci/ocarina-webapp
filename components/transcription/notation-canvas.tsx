@@ -82,6 +82,7 @@ export default function NotationCanvas({
   const readyRef = useRef(false);
   const highlightedRef = useRef<Element[]>([]);
   const lastScrollRef = useRef(0);
+  const userScrollUntilRef = useRef(0);
   const noteFreqRef = useRef<Map<Element, number>>(new Map());
   const clickSynthRef = useRef<MiniSynth | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,11 +109,42 @@ export default function NotationCanvas({
   }
 
   function handleClick(e: ReactMouseEvent) {
+    // Rebuild the map on demand if it came up empty (e.g. built just before
+    // OSMD finished settling after render).
+    if (noteFreqRef.current.size === 0 && osmdRef.current && readyRef.current) {
+      noteFreqRef.current = buildNoteFreqMap(osmdRef.current);
+    }
     const map = noteFreqRef.current;
     if (map.size === 0) return;
-    let el: Element | null = e.target as Element;
-    while (el && !map.has(el)) el = el.parentElement;
-    if (el) void playFrequency(map.get(el)!, el);
+    const x = e.clientX;
+    const y = e.clientY;
+    // Hit-test by bounding box (robust to OSMD's SVG grouping): the smallest
+    // note box containing the click, else the nearest note center within ~24px.
+    let best: Element | null = null;
+    let bestArea = Infinity;
+    let nearest: Element | null = null;
+    let nearestDist = 24 * 24;
+    for (const el of map.keys()) {
+      const r = (el as Element).getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        const area = r.width * r.height;
+        if (area < bestArea) {
+          bestArea = area;
+          best = el;
+        }
+      } else {
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const d = (cx - x) ** 2 + (cy - y) ** 2;
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearest = el;
+        }
+      }
+    }
+    const hit = best ?? nearest;
+    if (hit) void playFrequency(map.get(hit)!, hit);
   }
 
   const clearHighlight = () => {
@@ -155,7 +187,10 @@ export default function NotationCanvas({
         readyRef.current = true;
         noteFreqRef.current = buildNoteFreqMap(osmd);
         if (process.env.NODE_ENV !== "production") {
-          console.debug(`[OSMD] layout ${(performance.now() - started).toFixed(0)}ms`);
+          console.debug(
+            `[OSMD] layout ${(performance.now() - started).toFixed(0)}ms, ` +
+              `${noteFreqRef.current.size} clickable notes`,
+          );
         }
         setLoading(false);
       })
@@ -228,8 +263,10 @@ export default function NotationCanvas({
         const rect = els[0].getBoundingClientRect();
         const offTop = rect.top < 140;
         const offBottom = rect.bottom > window.innerHeight - 80;
-        if ((offTop || offBottom) && now - lastScrollRef.current > 600) {
-          els[0].scrollIntoView({ block: "center", behavior: "auto" });
+        // Don't fight the user: pause auto-scroll for 4s after a manual scroll.
+        const userScrolling = now < userScrollUntilRef.current;
+        if ((offTop || offBottom) && now - lastScrollRef.current > 600 && !userScrolling) {
+          els[0].scrollIntoView({ block: "center", behavior: "smooth" });
           lastScrollRef.current = now;
         }
       }
@@ -237,6 +274,19 @@ export default function NotationCanvas({
       /* highlight is best-effort */
     }
   }, [playheadSec, isPlaying, tempoBpm]);
+
+  // Track manual scrolling so playback auto-scroll can yield to the user.
+  useEffect(() => {
+    const onUserScroll = () => {
+      userScrollUntilRef.current = performance.now() + 4000;
+    };
+    window.addEventListener("wheel", onUserScroll, { passive: true });
+    window.addEventListener("touchmove", onUserScroll, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", onUserScroll);
+      window.removeEventListener("touchmove", onUserScroll);
+    };
+  }, []);
 
   // Dispose OSMD on unmount.
   useEffect(() => {
