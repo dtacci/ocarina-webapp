@@ -46,23 +46,14 @@ interface MiniSynth {
  * <g> element to its frequency in Hz (from OSMD's own pitch model — no MIDI/
  * octave conversion). Used for click-to-hear. Best-effort + guarded.
  */
-function buildNoteFreqMap(osmd: OpenSheetMusicDisplay): Map<Element, number> {
-  const map = new Map<Element, number>();
+/** Collect note frequencies (Hz) in score order from OSMD's pitch model. */
+function collectFrequencies(osmd: OpenSheetMusicDisplay): number[] {
+  const freqs: number[] = [];
   const add = (gn: unknown) => {
-    try {
-      const g = gn as {
-        getSVGGElement?: () => SVGGElement | null;
-        sourceNote?: { Pitch?: { Frequency?: number } };
-      };
-      const el = g.getSVGGElement?.();
-      const freq = g.sourceNote?.Pitch?.Frequency;
-      if (el && typeof freq === "number" && freq > 0) map.set(el, freq);
-    } catch {
-      /* skip */
-    }
+    const f = (gn as { sourceNote?: { Pitch?: { Frequency?: number } } })
+      ?.sourceNote?.Pitch?.Frequency;
+    if (typeof f === "number" && f > 0) freqs.push(f);
   };
-
-  // 1. Sweep the (hidden) cursor across the score.
   try {
     const cursor = osmd.cursor;
     if (cursor) {
@@ -77,21 +68,17 @@ function buildNoteFreqMap(osmd: OpenSheetMusicDisplay): Map<Element, number> {
   } catch {
     /* best-effort */
   }
-
-  // 2. Fallback: walk the graphical sheet directly if the cursor sweep was empty.
-  if (map.size === 0) {
+  if (freqs.length === 0) {
+    // Fallback: traverse the graphical sheet directly.
     try {
       const rows =
         (osmd as unknown as { GraphicSheet?: { MeasureList?: unknown[][] } })
           .GraphicSheet?.MeasureList ?? [];
       for (const row of rows) {
         for (const measure of row ?? []) {
-          const m = measure as { staffEntries?: unknown[] };
-          for (const se of m?.staffEntries ?? []) {
-            const s = se as { graphicalVoiceEntries?: unknown[] };
-            for (const gve of s?.graphicalVoiceEntries ?? []) {
-              const v = gve as { notes?: unknown[] };
-              for (const gn of v?.notes ?? []) add(gn);
+          for (const se of (measure as { staffEntries?: unknown[] })?.staffEntries ?? []) {
+            for (const gve of (se as { graphicalVoiceEntries?: unknown[] })?.graphicalVoiceEntries ?? []) {
+              for (const gn of (gve as { notes?: unknown[] })?.notes ?? []) add(gn);
             }
           }
         }
@@ -100,7 +87,67 @@ function buildNoteFreqMap(osmd: OpenSheetMusicDisplay): Map<Element, number> {
       /* best-effort */
     }
   }
-  return map;
+  return freqs;
+}
+
+/**
+ * Map each *visible* notehead SVG element to its frequency. We grab VexFlow's
+ * actual notehead elements from the DOM (`.vf-notehead`) and pair them, in score
+ * order, with the pitches from the model — because OSMD's getSVGGElement() was
+ * not reliably returning the clicked element. Falls back to getSVGGElement.
+ * Returns the map plus diagnostic counts.
+ */
+function buildNoteFreqMap(
+  osmd: OpenSheetMusicDisplay,
+  container: HTMLElement | null,
+): { map: Map<Element, number>; modelNotes: number; domHeads: number } {
+  const map = new Map<Element, number>();
+  const freqs = collectFrequencies(osmd);
+
+  // VexFlow renders each notehead with class "vf-notehead" — the real clickable
+  // element. Try a few selectors for robustness across versions.
+  let heads: Element[] = [];
+  if (container) {
+    for (const sel of [".vf-notehead", "g.vf-notehead", ".vf-stavenote .vf-notehead"]) {
+      heads = Array.from(container.querySelectorAll(sel));
+      if (heads.length) break;
+    }
+  }
+
+  if (heads.length > 0 && heads.length === freqs.length) {
+    heads.forEach((el, i) => map.set(el, freqs[i]));
+  } else {
+    // Fallback: getSVGGElement (works if OSMD returns the right element).
+    const addG = (gn: unknown) => {
+      try {
+        const g = gn as {
+          getSVGGElement?: () => SVGGElement | null;
+          sourceNote?: { Pitch?: { Frequency?: number } };
+        };
+        const el = g.getSVGGElement?.();
+        const f = g.sourceNote?.Pitch?.Frequency;
+        if (el && typeof f === "number" && f > 0) map.set(el, f);
+      } catch {
+        /* skip */
+      }
+    };
+    try {
+      const cursor = osmd.cursor;
+      if (cursor) {
+        cursor.reset();
+        let guard = 0;
+        while (!cursor.iterator?.EndReached && guard++ < 20000) {
+          for (const gn of cursor.GNotesUnderCursor?.() ?? []) addG(gn);
+          cursor.next();
+        }
+        cursor.reset();
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  return { map, modelNotes: freqs.length, domHeads: heads.length };
 }
 
 export default function NotationCanvas({
@@ -169,8 +216,9 @@ export default function NotationCanvas({
     // Rebuild the map on demand if it came up empty (e.g. built just before
     // OSMD finished settling after render).
     if (noteFreqRef.current.size === 0 && osmdRef.current && readyRef.current) {
-      noteFreqRef.current = buildNoteFreqMap(osmdRef.current);
-      onClickableCount?.(wireClicks(noteFreqRef.current));
+      const built = buildNoteFreqMap(osmdRef.current, containerRef.current);
+      noteFreqRef.current = built.map;
+      onClickableCount?.(wireClicks(built.map));
     }
     const map = noteFreqRef.current;
     if (map.size === 0) return;
@@ -246,9 +294,14 @@ export default function NotationCanvas({
         osmd.zoom = zoom;
         osmd.render();
         readyRef.current = true;
-        noteFreqRef.current = buildNoteFreqMap(osmd);
-        const count = wireClicks(noteFreqRef.current);
+        const built = buildNoteFreqMap(osmd, container);
+        noteFreqRef.current = built.map;
+        const count = wireClicks(built.map);
         onClickableCount?.(count);
+        console.log(
+          `[OSMD] click-to-hear → model notes: ${built.modelNotes}, ` +
+            `DOM noteheads: ${built.domHeads}, wired: ${count}`,
+        );
         setLoading(false);
       })
       .catch((e: unknown) => {
@@ -271,8 +324,9 @@ export default function NotationCanvas({
       highlightedRef.current = [];
       osmd.zoom = zoom;
       osmd.render();
-      noteFreqRef.current = buildNoteFreqMap(osmd);
-      onClickableCount?.(wireClicks(noteFreqRef.current));
+      const built = buildNoteFreqMap(osmd, containerRef.current);
+      noteFreqRef.current = built.map;
+      onClickableCount?.(wireClicks(built.map));
     } catch {
       /* ignore */
     }
