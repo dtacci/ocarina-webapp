@@ -112,8 +112,10 @@ const COMPONENT_CSS = `
     0 10px 30px -10px rgba(0, 0, 0, 0.55),
     inset 0 0 0 1px rgba(120, 90, 40, 0.08);
 }
-/* The currently-sounding notes flash amber during synth playback. */
-.osmd-note-active, .osmd-note-active * {
+/* The currently-sounding notes flash amber during synth playback; a clicked
+   note flashes briefly the same way. */
+.osmd-note-active, .osmd-note-active *,
+.osmd-note-clicked, .osmd-note-clicked * {
   fill: #ea7a1c !important;
   stroke: #ea7a1c !important;
   transition: fill 60ms ease, stroke 60ms ease;
@@ -158,6 +160,8 @@ export function TranscriptionDetail({
   // Synth playback → cursor follow.
   const [playheadSec, setPlayheadSec] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
 
   // Inline title editing (owner only).
   const [title, setTitle] = useState(recording.title ?? "Untitled transcription");
@@ -460,7 +464,23 @@ export function TranscriptionDetail({
 
         {showSynth ? (
           <div data-print-hide className="rounded-lg border bg-card p-2">
-            <div className="flex justify-end px-2 pt-1">
+            <div className="flex items-center justify-between gap-2 px-2 pt-1">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="mr-1">Speed</span>
+                {SPEEDS.map((sp) => (
+                  <button
+                    key={sp}
+                    type="button"
+                    onClick={() => setSpeed(sp)}
+                    aria-pressed={speed === sp}
+                    className={`rounded px-1.5 py-0.5 tabular-nums transition-colors ${
+                      speed === sp ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                    }`}
+                  >
+                    {sp}×
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -477,6 +497,7 @@ export function TranscriptionDetail({
             <ToneMidiPlayer
               midiBlobUrl={`${exportBase}?format=midi`}
               duration={recording.duration_sec}
+              playbackRate={speed}
               onTimeUpdate={handlePlayhead}
               onBpmChange={() => {}}
               onStateChange={(playing) => setIsPlaying(playing)}
@@ -576,7 +597,7 @@ export function TranscriptionDetail({
                     zoom={zoom}
                     playheadSec={showSynth ? playheadSec : null}
                     isPlaying={showSynth && isPlaying}
-                    tempoBpm={params.tempo_bpm}
+                    tempoBpm={params.tempo_bpm * speed}
                   />
                 </div>
               </div>

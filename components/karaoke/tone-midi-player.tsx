@@ -16,6 +16,12 @@ interface Props {
   onTimeUpdate: (time: number) => void;
   onBpmChange: (bpm: number) => void;
   onStateChange: (playing: boolean) => void;
+  /**
+   * Playback speed multiplier (default 1). Time-stretches the schedule so pitch
+   * is preserved (the synth retriggers the same notes, just spaced out). Karaoke
+   * passes nothing → 1 → identical to before.
+   */
+  playbackRate?: number;
 }
 
 export default function ToneMidiPlayer({
@@ -24,6 +30,7 @@ export default function ToneMidiPlayer({
   onTimeUpdate,
   onBpmChange,
   onStateChange,
+  playbackRate = 1,
 }: Props) {
   const [state, setState] = useState<PlayerState>("loading");
   const [currentTime, setCurrentTime] = useState(0);
@@ -60,7 +67,7 @@ export default function ToneMidiPlayer({
         const dur = midi.duration;
 
         setBpm(Math.round(mBpm));
-        setTotalDuration(dur || duration);
+        setTotalDuration((dur || duration) / playbackRate);
         onBpmChange(Math.round(mBpm));
 
         // Build synth
@@ -87,9 +94,9 @@ export default function ToneMidiPlayer({
               synth.triggerAttackRelease(noteWithOffset, note.duration + "s", time, note.velocity);
             },
             track.notes.map((n) => ({
-              time: n.time + "s",
+              time: n.time / playbackRate + "s",
               midi: n.midi,
-              duration: n.duration,
+              duration: n.duration / playbackRate,
               velocity: n.velocity,
             }))
           );
@@ -115,7 +122,7 @@ export default function ToneMidiPlayer({
       synthRef.current = null;
       cancelAnimationFrame(animRef.current);
     };
-  }, [midiBlobUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [midiBlobUrl, playbackRate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Volume changes
   useEffect(() => {

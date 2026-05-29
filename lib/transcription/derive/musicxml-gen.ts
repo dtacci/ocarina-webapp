@@ -78,6 +78,11 @@ interface Piece {
   tieStop: boolean; // continues a note from the previous piece
   tieStart: boolean; // continues into the next piece
   confidence?: number;
+  /** Index into the source notes array (for glissando pairing). */
+  noteIndex: number;
+  /** First / last piece of its source note (a note may span barlines). */
+  isNoteStart: boolean;
+  isNoteEnd: boolean;
 }
 
 function splitIntoMeasures(
@@ -85,10 +90,11 @@ function splitIntoMeasures(
   divsPerMeasure: number,
 ): Piece[] {
   const pieces: Piece[] = [];
-  for (const n of notes) {
+  notes.forEach((n, noteIndex) => {
     let startDiv = roundDiv(n.startBeats * DIVISIONS);
     let remaining = roundDiv(n.durationBeats * DIVISIONS);
     let continuing = false;
+    const firstIdx = pieces.length;
     while (remaining > 0) {
       const measure = Math.floor(startDiv / divsPerMeasure);
       const measureEnd = (measure + 1) * divsPerMeasure;
@@ -102,12 +108,17 @@ function splitIntoMeasures(
         tieStop: !n.isRest && continuing,
         tieStart: !n.isRest && crosses,
         confidence: n.confidence,
+        noteIndex,
+        isNoteStart: !continuing,
+        isNoteEnd: false,
       });
       startDiv += take;
       remaining -= take;
       continuing = true;
     }
-  }
+    // Mark the last emitted piece as the note's end.
+    if (pieces.length > firstIdx) pieces[pieces.length - 1].isNoteEnd = true;
+  });
   return pieces;
 }
 
@@ -117,6 +128,8 @@ function noteXml(
   fifths: number,
   tieStop: boolean,
   tieStart: boolean,
+  glissStop = false,
+  glissStart = false,
 ): string {
   const dots = "<dot/>".repeat(comp.dots);
   if (piece.isRest) {
@@ -144,8 +157,13 @@ function noteXml(
     tiedNotations.push(`<tied type="start"/>`);
   }
   const tieXml = ties.length ? `\n        ${ties.join("\n        ")}` : "";
-  const notationsXml = tiedNotations.length
-    ? `\n        <notations>${tiedNotations.join("")}</notations>`
+
+  // Glissando: stop before start (close the prior span, then open the next).
+  const notationParts = [...tiedNotations];
+  if (glissStop) notationParts.push(`<glissando type="stop" number="1" line-type="wavy"/>`);
+  if (glissStart) notationParts.push(`<glissando type="start" number="1" line-type="wavy"/>`);
+  const notationsXml = notationParts.length
+    ? `\n        <notations>${notationParts.join("")}</notations>`
     : "";
 
   // Low-confidence notes render faint (overlay of detector uncertainty).
@@ -186,6 +204,21 @@ export function generateMusicXml(
   const median = pitched.length ? pitched[Math.floor(pitched.length / 2)] : MIDDLE_C + 7;
   const useBass = median < MIDDLE_C;
 
+  // Glissando pairing: a note flagged with a pitch bend slides into the
+  // immediately-following pitched note (start on the bent note, stop on the next).
+  const slideStart = new Set<number>();
+  const slideStop = new Set<number>();
+  for (let i = 0; i < notes.length; i++) {
+    const n = notes[i];
+    if (!n.isRest && n.hasPitchBend) {
+      const next = notes[i + 1];
+      if (next && !next.isRest) {
+        slideStart.add(i);
+        slideStop.add(i + 1);
+      }
+    }
+  }
+
   const pieces = splitIntoMeasures(notes, divsPerMeasure);
   const lastMeasure = pieces.length ? pieces[pieces.length - 1].measure : 0;
 
@@ -199,6 +232,9 @@ export function generateMusicXml(
       comps.forEach((comp, idx) => {
         const isFirst = idx === 0;
         const isLast = idx === comps.length - 1;
+        // Gliss markers go on the note's outermost components only.
+        const glissStop = piece.isNoteStart && isFirst && slideStop.has(piece.noteIndex);
+        const glissStart = piece.isNoteEnd && isLast && slideStart.has(piece.noteIndex);
         body.push(
           noteXml(
             piece,
@@ -206,6 +242,8 @@ export function generateMusicXml(
             fifths,
             piece.tieStop && isFirst ? true : !isFirst, // stop on inner joins
             piece.tieStart && isLast ? true : !isLast, // start on inner joins
+            glissStop,
+            glissStart,
           ),
         );
       });

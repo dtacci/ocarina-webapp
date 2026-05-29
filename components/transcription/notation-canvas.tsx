@@ -18,7 +18,7 @@
  * highlight" rather than blanking the score.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,6 +32,42 @@ export interface NotationCanvasProps {
 }
 
 const ACTIVE_CLASS = "osmd-note-active";
+const CLICK_CLASS = "osmd-note-clicked";
+
+interface MiniSynth {
+  triggerAttackRelease: (note: number | string, dur: string) => void;
+  dispose: () => void;
+}
+
+/**
+ * Walk the (hidden) cursor across the whole score once, mapping each note's SVG
+ * <g> element to its frequency in Hz (from OSMD's own pitch model — no MIDI/
+ * octave conversion). Used for click-to-hear. Best-effort + guarded.
+ */
+function buildNoteFreqMap(osmd: OpenSheetMusicDisplay): Map<Element, number> {
+  const map = new Map<Element, number>();
+  try {
+    const cursor = osmd.cursor;
+    if (!cursor) return map;
+    cursor.reset();
+    let guard = 0;
+    while (!cursor.iterator?.EndReached && guard++ < 20000) {
+      const gnotes = cursor.GNotesUnderCursor?.() ?? [];
+      for (const gn of gnotes) {
+        const el = (gn as unknown as {
+          getSVGGElement?: () => SVGGElement | null;
+        }).getSVGGElement?.();
+        const freq = gn.sourceNote?.Pitch?.Frequency;
+        if (el && typeof freq === "number" && freq > 0) map.set(el, freq);
+      }
+      cursor.next();
+    }
+    cursor.reset();
+  } catch {
+    /* best-effort */
+  }
+  return map;
+}
 
 export default function NotationCanvas({
   musicxml,
@@ -46,8 +82,38 @@ export default function NotationCanvas({
   const readyRef = useRef(false);
   const highlightedRef = useRef<Element[]>([]);
   const lastScrollRef = useRef(0);
+  const noteFreqRef = useRef<Map<Element, number>>(new Map());
+  const clickSynthRef = useRef<MiniSynth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Click a notehead to hear its pitch (lazy-loads Tone on first use).
+  async function playFrequency(freq: number, el: Element) {
+    try {
+      const Tone = await import("tone");
+      await Tone.start();
+      if (!clickSynthRef.current) {
+        clickSynthRef.current = new Tone.Synth({
+          oscillator: { type: "triangle" },
+          envelope: { attack: 0.005, decay: 0.1, sustain: 0.2, release: 0.4 },
+        }).toDestination() as unknown as MiniSynth;
+      }
+      clickSynthRef.current.triggerAttackRelease(freq, "8n");
+      // Brief visual confirmation.
+      el.classList.add(CLICK_CLASS);
+      setTimeout(() => el.classList.remove(CLICK_CLASS), 240);
+    } catch {
+      /* audio is best-effort */
+    }
+  }
+
+  function handleClick(e: ReactMouseEvent) {
+    const map = noteFreqRef.current;
+    if (map.size === 0) return;
+    let el: Element | null = e.target as Element;
+    while (el && !map.has(el)) el = el.parentElement;
+    if (el) void playFrequency(map.get(el)!, el);
+  }
 
   const clearHighlight = () => {
     for (const el of highlightedRef.current) el.classList.remove(ACTIVE_CLASS);
@@ -87,6 +153,7 @@ export default function NotationCanvas({
         osmd.zoom = zoom;
         osmd.render();
         readyRef.current = true;
+        noteFreqRef.current = buildNoteFreqMap(osmd);
         if (process.env.NODE_ENV !== "production") {
           console.debug(`[OSMD] layout ${(performance.now() - started).toFixed(0)}ms`);
         }
@@ -112,6 +179,7 @@ export default function NotationCanvas({
       highlightedRef.current = [];
       osmd.zoom = zoom;
       osmd.render();
+      noteFreqRef.current = buildNoteFreqMap(osmd);
     } catch {
       /* ignore */
     }
@@ -181,6 +249,13 @@ export default function NotationCanvas({
       osmdRef.current = null;
       readyRef.current = false;
       highlightedRef.current = [];
+      noteFreqRef.current = new Map();
+      try {
+        clickSynthRef.current?.dispose();
+      } catch {
+        /* noop */
+      }
+      clickSynthRef.current = null;
     };
   }, []);
 
@@ -194,9 +269,10 @@ export default function NotationCanvas({
       {loading ? <Skeleton className="h-40 w-full rounded-md" /> : null}
       <div
         ref={containerRef}
+        onClick={handleClick}
         aria-busy={loading}
-        aria-label="Sheet music notation"
-        className={loading ? "sr-only" : "w-full"}
+        aria-label="Sheet music notation — click a note to hear it"
+        className={loading ? "sr-only" : "w-full cursor-pointer"}
       />
     </div>
   );
