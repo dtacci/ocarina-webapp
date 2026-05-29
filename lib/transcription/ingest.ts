@@ -21,7 +21,7 @@ import { put } from "@vercel/blob";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseOcrec } from "./parse-jsonl";
 import { derive } from "./derive";
-import { DEFAULT_PARAMS } from "./types";
+import { DEFAULT_PARAMS, type DeriveParams } from "./types";
 import { canonicalizeParams, paramsHash } from "./params-hash";
 import { PARSER_VERSION } from "./index";
 
@@ -35,6 +35,13 @@ export interface IngestOptions {
    * pass its URL to skip re-uploading. Omit for the dev path, which uploads.
    */
   existingBlobUrl?: string;
+  /**
+   * Override the default-render parameters (merged over DEFAULT_PARAMS). Use when
+   * tempo/meter is known up front (e.g. a metronome clicktrack, or a MIDI import)
+   * so the first render isn't a guess. When omitted, defaults are used and the
+   * render is flagged as tempo-guessed.
+   */
+  params?: Partial<DeriveParams>;
 }
 
 export interface IngestResult {
@@ -117,13 +124,12 @@ export async function ingestSession(
   if (evError) throw new Error(`Failed to insert events: ${evError.message}`);
 
   // 5. Compute and cache the default render.
-  const params = {
-    ...DEFAULT_PARAMS,
-    // The fake/device header doesn't carry tempo; defaults stand and we flag it.
-  };
+  // Known tempo/meter (e.g. MIDI import) overrides defaults; otherwise defaults
+  // stand and we flag the render as tempo-guessed (doc §3.7).
+  const params: DeriveParams = { ...DEFAULT_PARAMS, ...opts.params };
   const result = derive(events, header, params, {
     title,
-    tempoGuessed: true,
+    tempoGuessed: !opts.params?.tempo_bpm,
   });
   const hash = await paramsHash(params);
 
