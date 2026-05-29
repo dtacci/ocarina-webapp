@@ -310,6 +310,10 @@ export const monitorCaptures = pgTable("monitor_captures", {
   miscEventCount: integer("misc_event_count").notNull().default(0),
   /** Free-text annotation the user attaches after the fact. */
   notes: text("notes"),
+  /** When true, anyone with `shareToken` can replay the capture read-only. */
+  isPublic: boolean("is_public").notNull().default(false),
+  /** URL-safe random string. Unique when present (partial unique index). */
+  shareToken: text("share_token"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

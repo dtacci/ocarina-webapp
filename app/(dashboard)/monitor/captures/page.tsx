@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Download, FolderArchive, Play } from "lucide-react";
+import { ArrowLeft, Download, FolderArchive, Play, Share2 } from "lucide-react";
 
 import { listMyCaptures } from "@/lib/db/queries/monitor-captures";
 import { DeleteCaptureButton } from "@/components/monitor/delete-capture-button";
@@ -55,7 +55,18 @@ export default async function CapturesPage() {
               className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"
             >
               <Link href={`/monitor/captures/${c.id}`} className="min-w-0 flex-1 hover:underline">
-                <div className="truncate text-sm font-medium">{c.name}</div>
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium">{c.name}</span>
+                  {c.is_public && (
+                    <span
+                      className="flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-emerald-300"
+                      title="Publicly shared"
+                    >
+                      <Share2 className="size-2.5" />
+                      public
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
                   <span title={new Date(c.created_at).toISOString()}>
                     {new Date(c.created_at).toLocaleString()}

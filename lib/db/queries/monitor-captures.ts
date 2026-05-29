@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface MonitorCaptureRow {
   id: string;
@@ -20,6 +21,8 @@ export interface MonitorCaptureRow {
   gpio_event_count: number;
   misc_event_count: number;
   notes: string | null;
+  is_public: boolean;
+  share_token: string | null;
   created_at: string;
 }
 
@@ -43,6 +46,25 @@ export async function listMyCaptures(limit = 50): Promise<MonitorCaptureRow[]> {
     return [];
   }
   return (data ?? []) as MonitorCaptureRow[];
+}
+
+/**
+ * Looks up a publicly-shared capture by its share token. Bypasses RLS via the
+ * admin client and double-checks `is_public` server-side — even if a token
+ * leaks, owners can revoke access by toggling the share off.
+ */
+export async function getPublicCaptureByToken(
+  token: string
+): Promise<MonitorCaptureRow | null> {
+  if (!token) return null;
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("monitor_captures")
+    .select("*")
+    .eq("share_token", token)
+    .eq("is_public", true)
+    .maybeSingle();
+  return (data ?? null) as MonitorCaptureRow | null;
 }
 
 export async function getMyCapture(id: string): Promise<MonitorCaptureRow | null> {

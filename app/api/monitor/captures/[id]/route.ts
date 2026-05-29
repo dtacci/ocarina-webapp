@@ -6,9 +6,27 @@ import { createClient } from "@/lib/supabase/server";
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   notes: z.string().max(8000).nullable().optional(),
-}).refine((v) => v.name !== undefined || v.notes !== undefined, {
-  message: "Provide name or notes",
-});
+  isPublic: z.boolean().optional(),
+  /** Set true to mint a fresh share_token (invalidates any existing share link). */
+  rotateToken: z.boolean().optional(),
+}).refine(
+  (v) =>
+    v.name !== undefined ||
+    v.notes !== undefined ||
+    v.isPublic !== undefined ||
+    v.rotateToken !== undefined,
+  { message: "Provide at least one field to update" }
+);
+
+function generateShareToken(): string {
+  // 16 random bytes → 22-char base64url. URL-safe, unguessable, plenty short.
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -31,6 +49,26 @@ export async function PATCH(request: Request, { params }: Params) {
   const patch: Record<string, unknown> = {};
   if (parsed.data.name !== undefined) patch.name = parsed.data.name;
   if (parsed.data.notes !== undefined) patch.notes = parsed.data.notes;
+
+  // Share toggle: enabling needs a token (mint one if missing); disabling
+  // leaves the token in place so re-enabling resumes the same link unless
+  // rotate is requested. Rotating mints a fresh token regardless of state.
+  if (parsed.data.isPublic !== undefined || parsed.data.rotateToken) {
+    const { data: current } = await supabase
+      .from("monitor_captures")
+      .select("share_token, is_public")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!current) return Response.json({ error: "Not found" }, { status: 404 });
+
+    if (parsed.data.isPublic !== undefined) patch.is_public = parsed.data.isPublic;
+    if (parsed.data.rotateToken) {
+      patch.share_token = generateShareToken();
+    } else if (parsed.data.isPublic === true && !current.share_token) {
+      patch.share_token = generateShareToken();
+    }
+  }
 
   const { data, error } = await supabase
     .from("monitor_captures")

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { getMyCapture } from "@/lib/db/queries/monitor-captures";
 import { ReplaySurface } from "@/components/monitor/replay-surface";
 import { CaptureNotesEditor } from "@/components/monitor/capture-notes-editor";
+import { CaptureShareCard } from "@/components/monitor/capture-share-card";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -57,10 +58,17 @@ export default async function CapturePage({ params }: PageProps) {
         </div>
       </div>
 
-      <CaptureNotesEditor
-        captureId={capture.id}
-        initialNotes={capture.notes}
-      />
+      <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
+        <CaptureNotesEditor
+          captureId={capture.id}
+          initialNotes={capture.notes}
+        />
+        <CaptureShareCard
+          captureId={capture.id}
+          initialIsPublic={capture.is_public}
+          initialShareToken={capture.share_token}
+        />
+      </div>
 
       <ReplaySurface
         capture={{
