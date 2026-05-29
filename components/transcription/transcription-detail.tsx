@@ -67,15 +67,31 @@ function formatDuration(sec: number): string {
 }
 
 /**
- * Print stylesheet (doc §4.2 stand-in): isolate the engraved notation so the
- * browser "Print" button produces clean vector sheet music. Scoped here rather
- * than in globals.css so the feature stays self-contained.
+ * Component-scoped styles (kept out of globals.css so the feature is
+ * self-contained):
+ *  - `.notation-paper` renders OSMD's black ink on a warm paper surface so the
+ *    notation is readable over the app's dark theme — and looks like real sheet
+ *    music. On print, browsers drop background colors by default, so it falls
+ *    back to clean black-on-white automatically.
+ *  - The print block isolates the notation for the "Print" button (doc §4.2).
  */
-const PRINT_CSS = `
+const COMPONENT_CSS = `
+.notation-paper {
+  background-color: #faf6ec;
+  background-image: linear-gradient(180deg, #fdfaf3 0%, #f5efe1 100%);
+  color: #1b1b1b;
+  padding: 2rem 1.75rem;
+  border-radius: 0.5rem;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 10px 30px -10px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(120, 90, 40, 0.08);
+}
 @media print {
   body * { visibility: hidden; }
   #notation-print, #notation-print * { visibility: visible; }
-  #notation-print { position: absolute; inset: 0; border: none; padding: 0; }
+  #notation-print { position: absolute; inset: 0; border: none; padding: 0; box-shadow: none; }
+  .notation-paper { box-shadow: none; background: #fff; }
   [data-print-hide] { display: none !important; }
 }`;
 
@@ -158,7 +174,7 @@ export function TranscriptionDetail({
 
   return (
     <div className="min-h-screen bg-background">
-      <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: COMPONENT_CSS }} />
       <div data-print-hide className="border-b px-4 sm:px-6 py-3 flex items-center justify-between">
         <Link
           href="/transcriptions"
@@ -286,9 +302,11 @@ export function TranscriptionDetail({
             />
           ) : null}
 
-          <section id="notation-print" className="rounded-lg border bg-card p-4 sm:p-6 overflow-x-auto">
+          <section id="notation-print" className="rounded-lg border bg-card p-3 sm:p-4 overflow-x-auto">
             {musicxml ? (
-              <div className={busy ? "opacity-50 transition-opacity" : "transition-opacity"}>
+              <div
+                className={`notation-paper ${busy ? "opacity-50" : ""} transition-opacity`}
+              >
                 <NotationCanvas musicxml={musicxml} />
               </div>
             ) : (
