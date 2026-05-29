@@ -30,6 +30,11 @@ export interface IngestOptions {
   deviceId?: string | null;
   /** Override the session title; defaults to the device/header-derived name. */
   title?: string;
+  /**
+   * When the raw file is already in Blob (device sync path via /api/sync/confirm),
+   * pass its URL to skip re-uploading. Omit for the dev path, which uploads.
+   */
+  existingBlobUrl?: string;
 }
 
 export interface IngestResult {
@@ -62,15 +67,20 @@ export async function ingestSession(
   );
   const title = opts.title ?? "Sung transcription";
 
-  // 2. Store the raw .ocrec.jsonl in Blob. A string body is the simplest valid
+  // 2. Store the raw .ocrec.jsonl in Blob — unless the device already uploaded it
+  // (sync/confirm passes the existing URL). A string body is the simplest valid
   // PutBody; gzipped (Uint8Array) device payloads become a Node Buffer.
-  const body: string | Buffer =
-    typeof payload === "string" ? payload : Buffer.from(payload);
-  const blob = await put(
-    `${opts.userId}/transcriptions/${header.session_uuid}.ocrec.jsonl`,
-    body,
-    { access: "public", contentType: "application/x-ocrec+jsonl", addRandomSuffix: true },
-  );
+  let blobUrl = opts.existingBlobUrl;
+  if (!blobUrl) {
+    const body: string | Buffer =
+      typeof payload === "string" ? payload : Buffer.from(payload);
+    const blob = await put(
+      `${opts.userId}/transcriptions/${header.session_uuid}.ocrec.jsonl`,
+      body,
+      { access: "public", contentType: "application/x-ocrec+jsonl", addRandomSuffix: true },
+    );
+    blobUrl = blob.url;
+  }
 
   // 3. Insert the parent recordings row.
   const { data: recording, error: recError } = await admin
@@ -79,7 +89,7 @@ export async function ingestSession(
       user_id: opts.userId,
       device_id: opts.deviceId ?? null,
       title,
-      blob_url: blob.url,
+      blob_url: blobUrl,
       duration_sec: durationSec,
       sample_rate: 44100,
       recording_type: "transcription_session",

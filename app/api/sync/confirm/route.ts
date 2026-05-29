@@ -1,5 +1,9 @@
 import { authenticateDevice } from "@/lib/api/auth-device";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ingestSession } from "@/lib/transcription/ingest";
+
+// Transcription parse + default render runs inline (Pattern A); bounded and small.
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   const device = await authenticateDevice(request);
@@ -15,6 +19,35 @@ export async function POST(request: Request) {
   }
 
   const supabase = createAdminClient();
+
+  // Transcription session: the device uploaded a .ocrec.jsonl to Blob; run the
+  // same parse + default-render pipeline the dev ingest route uses. The file is
+  // already in Blob, so ingestSession reuses that URL rather than re-uploading.
+  const isTranscription =
+    fileType === "transcription" ||
+    metadata?.recording_type === "transcription_session";
+  if (isTranscription) {
+    try {
+      const res = await fetch(blobUrl);
+      if (!res.ok) throw new Error(`Could not fetch ${blobUrl}`);
+      const payload = new Uint8Array(await res.arrayBuffer());
+      const result = await ingestSession(payload, {
+        userId: device.userId,
+        deviceId: device.id,
+        title: metadata?.title,
+        existingBlobUrl: blobUrl,
+      });
+      await supabase
+        .from("devices")
+        .update({ last_sync_at: new Date().toISOString() })
+        .eq("id", device.id);
+      return Response.json({ recordingId: result.recordingId, transcription: result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Ingestion failed";
+      console.error("[sync/confirm] transcription ingest failed:", message);
+      return Response.json({ error: message }, { status: 500 });
+    }
+  }
 
   if (fileType === "recording") {
     const { title, duration_sec, sample_rate, bpm, kit_id, waveform_peaks, session_id, recording_type } = metadata ?? {};
