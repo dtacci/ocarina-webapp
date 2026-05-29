@@ -110,10 +110,8 @@ const COMPONENT_CSS = `
     0 10px 30px -10px rgba(0, 0, 0, 0.55),
     inset 0 0 0 1px rgba(120, 90, 40, 0.08);
 }
-/* The currently-sounding notes flash amber during synth playback; a clicked
-   note flashes briefly the same way. */
-.osmd-note-active, .osmd-note-active *,
-.osmd-note-clicked, .osmd-note-clicked * {
+/* The currently-sounding notes flash amber during synth playback. */
+.osmd-note-active, .osmd-note-active * {
   fill: #ea7a1c !important;
   stroke: #ea7a1c !important;
   transition: fill 60ms ease, stroke 60ms ease;
@@ -146,9 +144,6 @@ export function TranscriptionDetail({
   const [keyCandidates, setKeyCandidates] = useState<KeyCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [warningsOpen, setWarningsOpen] = useState(false);
-
-  // Click-to-hear: how many noteheads are wired (also an on-screen hint).
-  const [clickableCount, setClickableCount] = useState<number | null>(null);
 
   // Score zoom (re-renders OSMD without reloading).
   const [zoom, setZoom] = useState(1);
@@ -558,13 +553,6 @@ export function TranscriptionDetail({
           ) : null}
 
           <section id="notation-print" className="rounded-lg border bg-card p-3 sm:p-4 overflow-x-auto">
-            {musicxml && clickableCount !== null ? (
-              <p data-print-hide className="mb-2 text-center text-xs text-muted-foreground">
-                {clickableCount > 0
-                  ? `🔊 Click any note to hear it · ${clickableCount} notes`
-                  : "Click-to-hear isn’t available for this score"}
-              </p>
-            ) : null}
             {musicxml ? (
               <div className="relative mx-auto max-w-4xl">
                 {busy ? (
@@ -582,7 +570,6 @@ export function TranscriptionDetail({
                     playheadSec={playheadSec}
                     isPlaying={isPlaying}
                     tempoBpm={params.tempo_bpm * speed}
-                    onClickableCount={setClickableCount}
                   />
                 </div>
               </div>
