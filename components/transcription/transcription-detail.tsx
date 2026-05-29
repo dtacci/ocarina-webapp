@@ -21,8 +21,6 @@ import {
   ChevronDown,
   Download,
   Printer,
-  Play,
-  X,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -148,7 +146,6 @@ export function TranscriptionDetail({
   const [keyCandidates, setKeyCandidates] = useState<KeyCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [warningsOpen, setWarningsOpen] = useState(false);
-  const [showSynth, setShowSynth] = useState(false);
 
   // Score zoom (re-renders OSMD without reloading).
   const [zoom, setZoom] = useState(1);
@@ -383,15 +380,8 @@ export function TranscriptionDetail({
           </p>
         </header>
 
-        {/* Toolbar: export + print + synth playback (hidden when printing). */}
+        {/* Toolbar: export + print + share + zoom (hidden when printing). */}
         <div data-print-hide className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowSynth((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-          >
-            <Play className="size-4" /> {showSynth ? "Hide player" : "Play synth"}
-          </button>
           <a
             href={`${exportBase}?format=musicxml`}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
@@ -462,48 +452,32 @@ export function TranscriptionDetail({
           </div>
         </div>
 
-        {showSynth ? (
-          <div data-print-hide className="rounded-lg border bg-card p-2">
-            <div className="flex items-center justify-between gap-2 px-2 pt-1">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span className="mr-1">Speed</span>
-                {SPEEDS.map((sp) => (
-                  <button
-                    key={sp}
-                    type="button"
-                    onClick={() => setSpeed(sp)}
-                    aria-pressed={speed === sp}
-                    className={`rounded px-1.5 py-0.5 tabular-nums transition-colors ${
-                      speed === sp ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                    }`}
-                  >
-                    {sp}×
-                  </button>
-                ))}
-              </div>
+        <div data-print-hide className="rounded-lg border bg-card p-2">
+          <div className="flex items-center gap-1 px-2 pt-1 text-xs text-muted-foreground">
+            <span className="mr-1">Speed</span>
+            {SPEEDS.map((sp) => (
               <button
+                key={sp}
                 type="button"
-                onClick={() => {
-                  setShowSynth(false);
-                  setIsPlaying(false);
-                  setPlayheadSec(null);
-                }}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="Close player"
+                onClick={() => setSpeed(sp)}
+                aria-pressed={speed === sp}
+                className={`rounded px-1.5 py-0.5 tabular-nums transition-colors ${
+                  speed === sp ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                }`}
               >
-                <X className="size-4" />
+                {sp}×
               </button>
-            </div>
-            <ToneMidiPlayer
-              midiBlobUrl={`${exportBase}?format=midi`}
-              duration={recording.duration_sec}
-              playbackRate={speed}
-              onTimeUpdate={handlePlayhead}
-              onBpmChange={() => {}}
-              onStateChange={(playing) => setIsPlaying(playing)}
-            />
+            ))}
           </div>
-        ) : null}
+          <ToneMidiPlayer
+            midiBlobUrl={`${exportBase}?format=midi`}
+            duration={recording.duration_sec}
+            playbackRate={speed}
+            onTimeUpdate={handlePlayhead}
+            onBpmChange={() => {}}
+            onStateChange={(playing) => setIsPlaying(playing)}
+          />
+        </div>
 
         {canEdit && shareOpen ? (
           <div data-print-hide className="space-y-3 rounded-lg border bg-card p-4">
@@ -595,8 +569,8 @@ export function TranscriptionDetail({
                   <NotationCanvas
                     musicxml={musicxml}
                     zoom={zoom}
-                    playheadSec={showSynth ? playheadSec : null}
-                    isPlaying={showSynth && isPlaying}
+                    playheadSec={playheadSec}
+                    isPlaying={isPlaying}
                     tempoBpm={params.tempo_bpm * speed}
                   />
                 </div>
