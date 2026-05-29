@@ -55,7 +55,10 @@ export default function ToneMidiPlayer({
 
     (async () => {
       try {
-        await Tone.start(); // unlock AudioContext
+        // NOTE: don't call Tone.start() here — it only resolves after a user
+        // gesture, so awaiting it at mount (e.g. when the player auto-appears)
+        // would hang the loader forever. The audio context is unlocked in
+        // handlePlay() instead, which runs from the play-button click.
         const resp = await fetch(midiBlobUrl);
         if (!resp.ok) throw new Error("fetch failed");
         const buf = await resp.arrayBuffer();
