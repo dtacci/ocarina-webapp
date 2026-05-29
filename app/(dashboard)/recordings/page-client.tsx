@@ -16,6 +16,7 @@ interface Props {
   userId: string | null;
   sort: string;
   sessionId: string | null;
+  type: "upload" | "stem" | "master" | null;
 }
 
 // ── Sort helpers ─────────────────────────────────────────────────────────────
@@ -213,6 +214,7 @@ export function RecordingsClient({
   userId,
   sort,
   sessionId,
+  type,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -257,6 +259,17 @@ export function RecordingsClient({
     const params = new URLSearchParams(searchParams.toString());
     params.set("sort", value);
     params.delete("page"); // reset to page 1 on sort change
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    });
+  }
+
+  // ── Type filter ─────────────────────────────────────────────────────────────
+
+  function handleType(value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) { params.set("type", value); } else { params.delete("type"); }
+    params.delete("page");
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     });
@@ -319,6 +332,18 @@ export function RecordingsClient({
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
           )}
         </div>
+
+        <select
+          value={type ?? ""}
+          onChange={(e) => handleType(e.target.value)}
+          className="rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring text-foreground shrink-0"
+          title="Filter by recording type"
+        >
+          <option value="">All types</option>
+          <option value="upload">Uploads</option>
+          <option value="stem">Stems</option>
+          <option value="master">Masters</option>
+        </select>
 
         <select
           value={sort}

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface RecordingRow {
   id: string;
@@ -26,13 +27,23 @@ const SORT_MAP: Record<SortOption, { column: string; ascending: boolean; nullsFi
   "bpm-desc":      { column: "bpm", ascending: false, nullsFirst: false },
 };
 
+export type RecordingType = "upload" | "stem" | "master";
+
 export async function getRecordings({
   limit = 12,
   page = 1,
   query = "",
   sort = "date-desc",
   sessionId,
-}: { limit?: number; page?: number; query?: string; sort?: SortOption; sessionId?: string } = {}): Promise<RecordingRow[]> {
+  type,
+}: {
+  limit?: number;
+  page?: number;
+  query?: string;
+  sort?: SortOption;
+  sessionId?: string;
+  type?: RecordingType;
+} = {}): Promise<RecordingRow[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -54,9 +65,68 @@ export async function getRecordings({
     q = q.eq("session_id", sessionId);
   }
 
+  if (type) {
+    q = q.eq("recording_type", type);
+  }
+
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
+}
+
+export interface RecordingStats {
+  totalCount: number;
+  totalMinutes: number;
+  byType: Record<RecordingType, number>;
+}
+
+/**
+ * Totals + per-type breakdown for the recordings hub header. RLS scopes to
+ * the caller; one query in, summarized client-side rather than three DB hits.
+ */
+export async function getRecordingStats(): Promise<RecordingStats> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { totalCount: 0, totalMinutes: 0, byType: { upload: 0, stem: 0, master: 0 } };
+
+  const { data } = await supabase
+    .from("recordings")
+    .select("recording_type, duration_sec")
+    .eq("user_id", user.id);
+  const rows = (data ?? []) as { recording_type: RecordingType; duration_sec: number }[];
+
+  const byType: Record<RecordingType, number> = { upload: 0, stem: 0, master: 0 };
+  let totalSec = 0;
+  for (const r of rows) {
+    if (r.recording_type in byType) byType[r.recording_type] += 1;
+    totalSec += r.duration_sec ?? 0;
+  }
+  return {
+    totalCount: rows.length,
+    totalMinutes: Math.round(totalSec / 60),
+    byType,
+  };
+}
+
+/**
+ * Lists publicly-shared recordings across users. Like /captures/explore — goes
+ * through the admin client because RLS scopes the authenticated view to the
+ * caller's own rows.
+ */
+export async function listPublicRecordings(opts: {
+  limit?: number;
+  offset?: number;
+} = {}): Promise<RecordingRow[]> {
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 30));
+  const offset = Math.max(0, opts.offset ?? 0);
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("recordings")
+    .select("*")
+    .eq("is_public", true)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  return (data ?? []) as RecordingRow[];
 }
 
 export async function getPublicRecording(id: string): Promise<RecordingRow | null> {
