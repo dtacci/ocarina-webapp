@@ -29,6 +29,9 @@ import {
   Pencil,
   Check,
   Loader2,
+  Share2,
+  Copy,
+  Globe,
 } from "lucide-react";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
 import { derive } from "@/lib/transcription/derive";
@@ -160,6 +163,34 @@ export function TranscriptionDetail({
   const [title, setTitle] = useState(recording.title ?? "Untitled transcription");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(title);
+
+  // Share (owner only): public link toggle.
+  const [isPublic, setIsPublic] = useState(recording.is_public);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function togglePublic() {
+    const next = !isPublic;
+    setIsPublic(next); // optimistic
+    try {
+      const res = await fetch(`/api/recordings/${recording.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ isPublic: next }),
+      });
+      if (!res.ok) throw new Error("failed");
+    } catch {
+      setIsPublic(!next); // revert
+    }
+  }
+
+  function copyShareLink() {
+    const url = `${window.location.origin}/transcriptions/${recording.id}`;
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
 
   // "This looks wrong" feedback (owner only).
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -376,6 +407,15 @@ export function TranscriptionDetail({
           >
             <Printer className="size-4" /> Print
           </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => setShareOpen((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted ${isPublic ? "border-primary/50 text-primary" : ""}`}
+            >
+              <Share2 className="size-4" /> Share
+            </button>
+          ) : null}
 
           {/* Zoom */}
           <div className="ml-auto flex items-center gap-1 rounded-md border px-1 py-0.5">
@@ -441,6 +481,38 @@ export function TranscriptionDetail({
               onBpmChange={() => {}}
               onStateChange={(playing) => setIsPlaying(playing)}
             />
+          </div>
+        ) : null}
+
+        {canEdit && shareOpen ? (
+          <div data-print-hide className="space-y-3 rounded-lg border bg-card p-4">
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex items-center gap-2">
+                <Globe className="size-4 text-muted-foreground" />
+                Anyone with the link can view this sheet music
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isPublic}
+                onClick={() => void togglePublic()}
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isPublic ? "bg-primary" : "bg-muted-foreground/30"}`}
+              >
+                <span
+                  className={`absolute top-0.5 size-4 rounded-full bg-white transition-transform ${isPublic ? "translate-x-4" : "translate-x-0.5"}`}
+                />
+              </button>
+            </label>
+            {isPublic ? (
+              <button
+                type="button"
+                onClick={copyShareLink}
+                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+              >
+                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                {copied ? "Copied!" : "Copy link"}
+              </button>
+            ) : null}
           </div>
         ) : null}
 
