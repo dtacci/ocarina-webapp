@@ -23,6 +23,12 @@ import {
   Printer,
   Play,
   X,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Pencil,
+  Check,
+  Loader2,
 } from "lucide-react";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
 import { derive } from "@/lib/transcription/derive";
@@ -114,9 +120,43 @@ export function TranscriptionDetail({
   const [warningsOpen, setWarningsOpen] = useState(false);
   const [showSynth, setShowSynth] = useState(false);
 
+  // Score zoom (re-renders OSMD without reloading).
+  const [zoom, setZoom] = useState(1);
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 2;
+  const adjustZoom = (delta: number) =>
+    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((z + delta) * 100) / 100)));
+
+  // Synth playback → cursor follow.
+  const [playheadSec, setPlayheadSec] = useState<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Inline title editing (owner only).
+  const [title, setTitle] = useState(recording.title ?? "Untitled transcription");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(title);
+
   const exportBase = `/api/transcription/${recording.id}/export`;
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function saveTitle() {
+    const next = titleDraft.trim() || "Untitled transcription";
+    setEditingTitle(false);
+    if (next === title) return;
+    const prev = title;
+    setTitle(next); // optimistic
+    try {
+      const res = await fetch(`/api/recordings/${recording.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: next }),
+      });
+      if (!res.ok) throw new Error("save failed");
+    } catch {
+      setTitle(prev); // revert on failure
+    }
+  }
 
   async function recompute(next: DeriveParams) {
     if (!events || !header) return;
@@ -194,9 +234,45 @@ export function TranscriptionDetail({
               Sheet music
             </span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {recording.title ?? "Untitled transcription"}
-          </h1>
+          {editingTitle ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveTitle();
+                  if (e.key === "Escape") setEditingTitle(false);
+                }}
+                className="w-full max-w-md rounded-md border bg-background px-2 py-1 text-2xl font-semibold tracking-tight focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={() => void saveTitle()}
+                className="rounded-md border p-1.5 hover:bg-muted"
+                aria-label="Save title"
+              >
+                <Check className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <h1 className="group flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              {title}
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTitleDraft(title);
+                    setEditingTitle(true);
+                  }}
+                  className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                  aria-label="Edit title"
+                >
+                  <Pencil className="size-4" />
+                </button>
+              ) : null}
+            </h1>
+          )}
           <p className="text-sm text-muted-foreground tabular-nums">
             {created} · {formatDuration(recording.duration_sec)}
             {recording.event_count != null ? ` · ${recording.event_count} events` : ""}
@@ -235,6 +311,46 @@ export function TranscriptionDetail({
           >
             <Printer className="size-4" /> Print
           </button>
+
+          {/* Zoom */}
+          <div className="ml-auto flex items-center gap-1 rounded-md border px-1 py-0.5">
+            <button
+              type="button"
+              onClick={() => adjustZoom(-0.25)}
+              disabled={zoom <= ZOOM_MIN}
+              className="rounded p-1.5 hover:bg-muted disabled:opacity-40"
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(1)}
+              className="min-w-12 rounded px-1 py-1 text-xs tabular-nums hover:bg-muted"
+              aria-label="Reset zoom"
+              title="Reset zoom"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => adjustZoom(0.25)}
+              disabled={zoom >= ZOOM_MAX}
+              className="rounded p-1.5 hover:bg-muted disabled:opacity-40"
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(1)}
+              className="rounded p-1.5 hover:bg-muted"
+              aria-label="Fit"
+              title="Reset to 100%"
+            >
+              <RotateCcw className="size-3.5" />
+            </button>
+          </div>
         </div>
 
         {showSynth ? (
@@ -242,7 +358,11 @@ export function TranscriptionDetail({
             <div className="flex justify-end px-2 pt-1">
               <button
                 type="button"
-                onClick={() => setShowSynth(false)}
+                onClick={() => {
+                  setShowSynth(false);
+                  setIsPlaying(false);
+                  setPlayheadSec(null);
+                }}
                 className="text-muted-foreground hover:text-foreground"
                 aria-label="Close player"
               >
@@ -252,9 +372,12 @@ export function TranscriptionDetail({
             <ToneMidiPlayer
               midiBlobUrl={`${exportBase}?format=midi`}
               duration={recording.duration_sec}
-              onTimeUpdate={() => {}}
+              onTimeUpdate={(t) => setPlayheadSec(t)}
               onBpmChange={() => {}}
-              onStateChange={() => {}}
+              onStateChange={(playing) => {
+                setIsPlaying(playing);
+                if (!playing) setPlayheadSec((p) => p); // keep position on pause
+              }}
             />
           </div>
         ) : null}
@@ -304,10 +427,24 @@ export function TranscriptionDetail({
 
           <section id="notation-print" className="rounded-lg border bg-card p-3 sm:p-4 overflow-x-auto">
             {musicxml ? (
-              <div
-                className={`notation-paper ${busy ? "opacity-50" : ""} transition-opacity`}
-              >
-                <NotationCanvas musicxml={musicxml} />
+              <div className="relative mx-auto max-w-4xl">
+                {busy ? (
+                  <div
+                    data-print-hide
+                    className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-background/80 px-2.5 py-1 text-xs text-muted-foreground shadow"
+                  >
+                    <Loader2 className="size-3.5 animate-spin" /> re-engraving…
+                  </div>
+                ) : null}
+                <div className={`notation-paper transition-opacity ${busy ? "opacity-50" : ""}`}>
+                  <NotationCanvas
+                    musicxml={musicxml}
+                    zoom={zoom}
+                    playheadSec={showSynth ? playheadSec : null}
+                    isPlaying={showSynth && isPlaying}
+                    tempoBpm={params.tempo_bpm}
+                  />
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
