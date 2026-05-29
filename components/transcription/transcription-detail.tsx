@@ -147,6 +147,9 @@ export function TranscriptionDetail({
   const [busy, setBusy] = useState(false);
   const [warningsOpen, setWarningsOpen] = useState(false);
 
+  // Click-to-hear: how many noteheads are wired (also an on-screen hint).
+  const [clickableCount, setClickableCount] = useState<number | null>(null);
+
   // Score zoom (re-renders OSMD without reloading).
   const [zoom, setZoom] = useState(1);
   const ZOOM_MIN = 0.5;
@@ -555,6 +558,13 @@ export function TranscriptionDetail({
           ) : null}
 
           <section id="notation-print" className="rounded-lg border bg-card p-3 sm:p-4 overflow-x-auto">
+            {musicxml && clickableCount !== null ? (
+              <p data-print-hide className="mb-2 text-center text-xs text-muted-foreground">
+                {clickableCount > 0
+                  ? `🔊 Click any note to hear it · ${clickableCount} notes`
+                  : "Click-to-hear isn’t available for this score"}
+              </p>
+            ) : null}
             {musicxml ? (
               <div className="relative mx-auto max-w-4xl">
                 {busy ? (
@@ -572,6 +582,7 @@ export function TranscriptionDetail({
                     playheadSec={playheadSec}
                     isPlaying={isPlaying}
                     tempoBpm={params.tempo_bpm * speed}
+                    onClickableCount={setClickableCount}
                   />
                 </div>
               </div>

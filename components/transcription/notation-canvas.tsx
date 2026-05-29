@@ -29,6 +29,8 @@ export interface NotationCanvasProps {
   isPlaying?: boolean;
   tempoBpm?: number;
   className?: string;
+  /** Reports how many noteheads became clickable (for an on-screen hint). */
+  onClickableCount?: (count: number) => void;
 }
 
 const ACTIVE_CLASS = "osmd-note-active";
@@ -108,6 +110,7 @@ export default function NotationCanvas({
   isPlaying = false,
   tempoBpm = 120,
   className,
+  onClickableCount,
 }: NotationCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
@@ -143,17 +146,34 @@ export default function NotationCanvas({
     })();
   }
 
+  /**
+   * Attach a click listener directly to each note's SVG element (the most
+   * reliable path — fires on the real DOM click regardless of layout-box
+   * geometry). Guarded so an element is only wired once. Returns the count.
+   */
+  function wireClicks(map: Map<Element, number>): number {
+    for (const [el, freq] of map) {
+      const e = el as SVGElement;
+      if (e.getAttribute("data-osmd-wired")) continue;
+      e.setAttribute("data-osmd-wired", "1");
+      e.style.cursor = "pointer";
+      e.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        playFrequency(freq, el);
+      });
+    }
+    return map.size;
+  }
+
   function handleClick(e: ReactMouseEvent) {
     // Rebuild the map on demand if it came up empty (e.g. built just before
     // OSMD finished settling after render).
     if (noteFreqRef.current.size === 0 && osmdRef.current && readyRef.current) {
       noteFreqRef.current = buildNoteFreqMap(osmdRef.current);
+      onClickableCount?.(wireClicks(noteFreqRef.current));
     }
     const map = noteFreqRef.current;
-    if (map.size === 0) {
-      console.warn("[OSMD] click: note map is empty");
-      return;
-    }
+    if (map.size === 0) return;
     const x = e.clientX;
     const y = e.clientY;
     // Find the note whose box contains the click; else the nearest note center.
@@ -227,13 +247,8 @@ export default function NotationCanvas({
         osmd.render();
         readyRef.current = true;
         noteFreqRef.current = buildNoteFreqMap(osmd);
-        // Visible diagnostic (temporary) — count, cursor presence, sample box.
-        const firstEl = noteFreqRef.current.keys().next().value as Element | undefined;
-        const box = firstEl?.getBoundingClientRect();
-        console.warn(
-          `[OSMD] ${noteFreqRef.current.size} clickable notes; cursor=${!!osmd.cursor}` +
-            (box ? `; sample box ${Math.round(box.width)}×${Math.round(box.height)}` : ""),
-        );
+        const count = wireClicks(noteFreqRef.current);
+        onClickableCount?.(count);
         setLoading(false);
       })
       .catch((e: unknown) => {
@@ -257,9 +272,11 @@ export default function NotationCanvas({
       osmd.zoom = zoom;
       osmd.render();
       noteFreqRef.current = buildNoteFreqMap(osmd);
+      onClickableCount?.(wireClicks(noteFreqRef.current));
     } catch {
       /* ignore */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom]);
 
   // Highlight the sounding notes from the synth playhead.
