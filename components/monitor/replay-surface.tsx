@@ -13,6 +13,8 @@ import { LiveEventLog, type LogEntry } from "@/components/diagnostics/live-event
 
 import { MicActivityStrip } from "@/components/monitor/mic-activity-strip";
 import { ReplayControls } from "@/components/monitor/replay-controls";
+import { LoopStatePanel } from "@/components/looper/loop-state-panel";
+import type { LoopSnapshot } from "@/lib/ocarina-api";
 
 interface CaptureMeta {
   id: string;
@@ -34,6 +36,7 @@ interface CapturePayload {
   endedAt: string;
   eventCount: number;
   events: LogEntry[];
+  loopSnapshots?: { ts: number; snapshot: LoopSnapshot }[];
 }
 
 interface Props {
@@ -60,6 +63,7 @@ export function ReplaySurface({ capture }: Props) {
   }, [capture.blobUrl]);
 
   const signals = useLiveConsoleSignals({ kind: "replay" });
+  const [currentLoop, setCurrentLoop] = useState<LoopSnapshot | null>(null);
 
   // Reset signals state when the capture changes by remounting via key. Inside
   // the same capture, the scheduler just keeps pushing.
@@ -70,16 +74,28 @@ export function ReplaySurface({ capture }: Props) {
     void entry;
   }, []);
 
+  const onLoopSnapshot = useCallback((snapshot: LoopSnapshot) => {
+    setCurrentLoop(snapshot);
+  }, []);
+
+  // Reset loop state when the capture itself changes (different blobUrl).
+  useEffect(() => {
+    setCurrentLoop(null);
+  }, [capture.blobUrl]);
+
   const startMs = payload ? new Date(payload.startedAt).getTime() : 0;
   const endMs = payload ? new Date(payload.endedAt).getTime() : 0;
+  const hasLoopSnapshots = (payload?.loopSnapshots?.length ?? 0) > 0;
 
   const playback = useReplayPlayback({
     events: payload?.events ?? [],
+    loopSnapshots: payload?.loopSnapshots,
     startMs,
     endMs,
     onHardware: signals.pushHardwareEvent,
     onTelemetry: signals.pushTelemetryEvent,
     onLog,
+    onLoopSnapshot,
   });
 
   if (error) {
@@ -130,6 +146,14 @@ export function ReplaySurface({ capture }: Props) {
       />
 
       <FxStatePanel state={signals.fxState} />
+
+      {hasLoopSnapshots && (
+        <LoopStatePanel
+          snapshot={currentLoop}
+          progress={null}
+          teensyConnected={true}
+        />
+      )}
 
       <LiveEventLog entries={signals.log} />
     </div>

@@ -5,11 +5,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HardwareEvent } from "@/hooks/use-hardware-input";
 import type { TelemetryEvent } from "@/hooks/use-device-telemetry";
 import type { LogEntry } from "@/components/diagnostics/live-event-log";
+import type { LoopSnapshot } from "@/lib/ocarina-api";
 import { parseLogEntry } from "@/lib/replay/log-entry-parser";
+
+export interface ReplayLoopSnapshot {
+  ts: number;
+  snapshot: LoopSnapshot;
+}
 
 export interface UseReplayPlaybackOptions {
   /** Captured log entries, sorted ascending by ts. */
   events: LogEntry[];
+  /**
+   * Structured loop snapshots captured at original timing. Optional — replays
+   * of older captures (pre-loopSnapshots persistence) just won't drive the
+   * LoopStatePanel.
+   */
+  loopSnapshots?: ReplayLoopSnapshot[];
   /** Wall-clock ms of the first event — used as origin for `position`. */
   startMs: number;
   /** Wall-clock ms of the last event — used to compute total duration. */
@@ -18,6 +30,8 @@ export interface UseReplayPlaybackOptions {
   onTelemetry?: (e: TelemetryEvent) => void;
   /** Also fires for unparseable entries (they go straight to the log). */
   onLog?: (entry: LogEntry) => void;
+  /** Fired when a captured loop snapshot's relative ts has been crossed. */
+  onLoopSnapshot?: (snapshot: LoopSnapshot, ts: number) => void;
 }
 
 export interface UseReplayPlayback {
@@ -46,16 +60,27 @@ export interface UseReplayPlayback {
 export function useReplayPlayback(
   options: UseReplayPlaybackOptions
 ): UseReplayPlayback {
-  const { events, startMs, endMs, onHardware, onTelemetry, onLog } = options;
+  const {
+    events,
+    loopSnapshots,
+    startMs,
+    endMs,
+    onHardware,
+    onTelemetry,
+    onLog,
+    onLoopSnapshot,
+  } = options;
 
   const totalMs = Math.max(0, endMs - startMs);
 
   const onHwRef = useRef(onHardware);
   const onTelRef = useRef(onTelemetry);
   const onLogRef = useRef(onLog);
+  const onLoopRef = useRef(onLoopSnapshot);
   useEffect(() => { onHwRef.current = onHardware; }, [onHardware]);
   useEffect(() => { onTelRef.current = onTelemetry; }, [onTelemetry]);
   useEffect(() => { onLogRef.current = onLog; }, [onLog]);
+  useEffect(() => { onLoopRef.current = onLoopSnapshot; }, [onLoopSnapshot]);
 
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -68,6 +93,7 @@ export function useReplayPlayback(
   const speedRef = useRef(1);
   const positionRef = useRef(0);
   const nextIdxRef = useRef(0);
+  const nextLoopIdxRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
 
@@ -81,6 +107,12 @@ export function useReplayPlayback(
       .sort((a, b) => a.rel - b.rel);
     return arr;
   }, [events, startMs]);
+
+  const sortedLoops = useMemo(() => {
+    return (loopSnapshots ?? [])
+      .map((e) => ({ entry: e, rel: e.ts - startMs }))
+      .sort((a, b) => a.rel - b.rel);
+  }, [loopSnapshots, startMs]);
 
   const emit = useCallback((entry: LogEntry) => {
     onLogRef.current?.(entry);
@@ -98,8 +130,18 @@ export function useReplayPlayback(
         i++;
       }
       nextIdxRef.current = i;
+
+      let j = nextLoopIdxRef.current;
+      while (j < sortedLoops.length && sortedLoops[j].rel <= pos) {
+        onLoopRef.current?.(
+          sortedLoops[j].entry.snapshot,
+          sortedLoops[j].entry.ts
+        );
+        j++;
+      }
+      nextLoopIdxRef.current = j;
     },
-    [sorted, emit]
+    [sorted, sortedLoops, emit]
   );
 
   const seekTo = useCallback(
@@ -112,9 +154,12 @@ export function useReplayPlayback(
       let i = 0;
       while (i < sorted.length && sorted[i].rel <= clamped) i++;
       nextIdxRef.current = i;
+      let j = 0;
+      while (j < sortedLoops.length && sortedLoops[j].rel <= clamped) j++;
+      nextLoopIdxRef.current = j;
       setEnded(clamped >= totalMs && totalMs > 0);
     },
-    [sorted, totalMs]
+    [sorted, sortedLoops, totalMs]
   );
 
   // rAF loop

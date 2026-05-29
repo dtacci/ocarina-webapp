@@ -3,6 +3,7 @@ import { ArrowLeft, Download, FolderArchive, Play, Share2 } from "lucide-react";
 
 import { listMyCaptures } from "@/lib/db/queries/monitor-captures";
 import { DeleteCaptureButton } from "@/components/monitor/delete-capture-button";
+import { MarkCommentsSeen } from "@/components/monitor/mark-comments-seen";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export default async function CapturesPage() {
 
   return (
     <div className="space-y-4 max-w-4xl">
+      <MarkCommentsSeen />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Captures</h1>

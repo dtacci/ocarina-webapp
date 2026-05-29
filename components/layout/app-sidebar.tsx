@@ -47,6 +47,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { isEnabled, type FeatureFlag } from "@/lib/features";
+import { CapturesUnreadBadge } from "@/components/layout/captures-unread-badge";
 
 type NavItem = {
   title: string;
@@ -55,6 +56,8 @@ type NavItem = {
   feature: FeatureFlag;
   /** If set, item is active only when this query param matches on the library path */
   matchQuery?: { key: string; value: string };
+  /** Optional client-side badge slot rendered to the right of the title. */
+  badge?: React.ComponentType;
 };
 
 const navMain: NavItem[] = [
@@ -70,7 +73,7 @@ const navMain: NavItem[] = [
   { title: "Recordings", url: "/recordings", icon: Disc3, feature: "syncApi" as const },
   { title: "Activity", url: "/activity", icon: Activity, feature: "activityTimeline" as const },
   { title: "Monitor", url: "/monitor", icon: Radar, feature: "monitor" as const },
-  { title: "Captures", url: "/monitor/captures", icon: FolderArchive, feature: "monitor" as const },
+  { title: "Captures", url: "/monitor/captures", icon: FolderArchive, feature: "monitor" as const, badge: CapturesUnreadBadge },
 ];
 
 const navTools: NavItem[] = [
@@ -139,6 +142,7 @@ function NavSection({
                   >
                     <item.icon className="size-4" />
                     <span>{item.title}</span>
+                    {item.badge && <item.badge />}
                   </SidebarMenuButton>
                 ) : (
                   <SidebarMenuButton disabled isActive={false}>

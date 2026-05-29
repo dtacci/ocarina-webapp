@@ -36,6 +36,52 @@ export async function listCommentsForCapture(
   }));
 }
 
+export interface RecentCommentRow extends CaptureCommentRow {
+  capture_name: string;
+}
+
+/**
+ * Comments left on the current user's captures by anyone — used by /activity
+ * "Recent Comments" + the sidebar notification badge. Skips the user's own
+ * comments so the feed only shows external activity.
+ */
+export async function listRecentCommentsOnMyCaptures(
+  limit = 30
+): Promise<RecentCommentRow[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: ownedCaptures } = await supabase
+    .from("monitor_captures")
+    .select("id, name")
+    .eq("user_id", user.id);
+  const captures = (ownedCaptures ?? []) as { id: string; name: string }[];
+  if (captures.length === 0) return [];
+
+  const captureIds = captures.map((c) => c.id);
+  const nameById = new Map(captures.map((c) => [c.id, c.name]));
+
+  const { data } = await supabase
+    .from("capture_comments")
+    .select("id, capture_id, author_id, body, created_at, users:author_id(display_name)")
+    .in("capture_id", captureIds)
+    .neq("author_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    capture_id: row.capture_id as string,
+    capture_name: nameById.get(row.capture_id as string) ?? "",
+    author_id: row.author_id as string,
+    body: row.body as string,
+    created_at: row.created_at as string,
+    author_display_name:
+      (row.users as { display_name?: string | null } | null)?.display_name ?? null,
+  }));
+}
+
 /**
  * Anonymous-readable comment list for a publicly-shared capture, looked up by
  * token. Bypasses RLS via the admin client after a server-side `is_public`

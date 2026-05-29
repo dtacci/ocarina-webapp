@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, FolderArchive, Play } from "lucide-react";
+import { Activity, FolderArchive, MessageSquare, Play } from "lucide-react";
 
 import {
   getRecentSessionsWithRecordings,
@@ -11,6 +11,7 @@ import {
   getCapturesHeatmap,
   getCapturesCount,
 } from "@/lib/db/queries/monitor-captures";
+import { listRecentCommentsOnMyCaptures } from "@/lib/db/queries/capture-comments";
 import { ActivityHeatmap } from "@/components/activity/activity-heatmap";
 import { SessionCard } from "@/components/activity/session-card";
 import { StatsCards } from "@/components/activity/stats-cards";
@@ -23,6 +24,7 @@ export default async function ActivityPage() {
     captureHeatmap,
     capturesCount,
     recentCaptures,
+    recentComments,
   ] = await Promise.all([
     getRecentSessionsWithRecordings(20),
     getActivityHeatmap(),
@@ -30,6 +32,7 @@ export default async function ActivityPage() {
     getCapturesHeatmap(),
     getCapturesCount(),
     listMyCaptures(10),
+    listRecentCommentsOnMyCaptures(10),
   ]);
 
   const mergedHeatmap = mergeHeatmaps(sessionHeatmap, captureHeatmap);
@@ -108,6 +111,41 @@ export default async function ActivityPage() {
                   Replay
                 </Link>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recentComments.length > 0 && (
+        <div>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            <MessageSquare className="size-3.5" />
+            Recent Comments
+          </h2>
+          <div className="space-y-2">
+            {recentComments.map((c) => (
+              <Link
+                key={c.id}
+                href={`/monitor/captures/${c.capture_id}`}
+                className="flex flex-wrap items-start gap-3 rounded-xl border bg-card px-4 py-3 hover:border-foreground/40"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-muted-foreground">
+                    <span className="font-medium text-foreground/90">
+                      {c.author_display_name ?? `user ${c.author_id.slice(0, 6)}`}
+                    </span>
+                    <span>on</span>
+                    <span className="font-medium text-foreground/90">
+                      {c.capture_name || "(unnamed)"}
+                    </span>
+                    <span>·</span>
+                    <span>{new Date(c.created_at).toLocaleString()}</span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-foreground/90">
+                    {c.body}
+                  </p>
+                </div>
+              </Link>
             ))}
           </div>
         </div>
