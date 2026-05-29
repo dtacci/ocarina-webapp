@@ -11,6 +11,7 @@ import { SafeMarkdown } from "@/components/monitor/safe-markdown";
 
 interface PageProps {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ t?: string }>;
 }
 
 export const dynamic = "force-dynamic";
@@ -20,10 +21,13 @@ export const dynamic = "force-dynamic";
  * the admin client + a server-side is_public check so revoking sharing
  * immediately closes access even if the token has leaked.
  */
-export default async function SharedCapturePage({ params }: PageProps) {
-  const { token } = await params;
+export default async function SharedCapturePage({ params, searchParams }: PageProps) {
+  const [{ token }, sp] = await Promise.all([params, searchParams]);
   const capture = await getPublicCaptureByToken(token);
   if (!capture) notFound();
+  const tParam = Number(sp.t);
+  const initialPositionMs =
+    Number.isFinite(tParam) && tParam > 0 ? tParam : undefined;
 
   const [comments, supabase] = await Promise.all([
     listPublicCommentsByToken(token),
@@ -89,6 +93,7 @@ export default async function SharedCapturePage({ params }: PageProps) {
           durationMs: capture.duration_ms,
           eventCount: capture.event_count,
         }}
+        initialPositionMs={initialPositionMs}
       />
 
       <CaptureComments

@@ -29,6 +29,7 @@ export interface MonitorCaptureRow {
 
 export interface ListMyCapturesOptions {
   limit?: number;
+  offset?: number;
   search?: string;
   source?: "pi_rest" | "realtime" | "webserial";
 }
@@ -40,6 +41,7 @@ export async function listMyCaptures(
   const opts: ListMyCapturesOptions =
     typeof limitOrOpts === "number" ? { limit: limitOrOpts } : limitOrOpts;
   const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
+  const offset = Math.max(0, opts.offset ?? 0);
 
   const supabase = await createClient();
   const {
@@ -52,7 +54,7 @@ export async function listMyCaptures(
     .select("*")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (opts.source) q = q.eq("source", opts.source);
   if (opts.search && opts.search.trim().length > 0) {

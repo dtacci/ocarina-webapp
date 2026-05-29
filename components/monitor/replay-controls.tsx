@@ -1,6 +1,7 @@
 "use client";
 
-import { Play, Pause, SkipBack, Repeat } from "lucide-react";
+import { useState } from "react";
+import { Play, Pause, SkipBack, Repeat, Link2, Check } from "lucide-react";
 
 import type { UseReplayPlayback } from "@/hooks/use-replay-playback";
 
@@ -15,6 +16,20 @@ interface Props {
 export function ReplayControls({ playback, label }: Props) {
   const { position, totalMs, playing, speed, setPlaying, setSpeed, seekTo, ended } =
     playback;
+  const [copied, setCopied] = useState(false);
+
+  async function copyTimestampLink() {
+    if (typeof window === "undefined") return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("t", String(Math.round(position)));
+      await navigator.clipboard.writeText(url.toString());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Older browsers — user can manually share the URL.
+    }
+  }
 
   return (
     <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
@@ -27,7 +42,20 @@ export function ReplayControls({ playback, label }: Props) {
             <span className="text-xs text-muted-foreground">{label}</span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground tabular-nums">
+        <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground tabular-nums">
+          <button
+            type="button"
+            onClick={() => { void copyTimestampLink(); }}
+            className="flex items-center gap-1 rounded-md border border-border bg-card/60 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+            title="Copy a deep link to the current position"
+          >
+            {copied ? (
+              <Check className="size-3 text-emerald-400" />
+            ) : (
+              <Link2 className="size-3" />
+            )}
+            {copied ? "Copied" : "Link"}
+          </button>
           <span className="text-foreground/90">{formatMs(position)}</span>
           <span>/</span>
           <span>{formatMs(totalMs)}</span>

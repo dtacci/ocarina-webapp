@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Download, FolderArchive, Play, Share2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, FolderArchive, Play, Share2 } from "lucide-react";
 
 import { listMyCaptures } from "@/lib/db/queries/monitor-captures";
 import { DeleteCaptureButton } from "@/components/monitor/delete-capture-button";
@@ -11,8 +11,10 @@ import { SafeMarkdown } from "@/components/monitor/safe-markdown";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams: Promise<{ q?: string; source?: string }>;
+  searchParams: Promise<{ q?: string; source?: string; page?: string }>;
 }
+
+const PAGE_SIZE = 30;
 
 export default async function CapturesPage({ searchParams }: PageProps) {
   const sp = await searchParams;
@@ -21,8 +23,27 @@ export default async function CapturesPage({ searchParams }: PageProps) {
       ? sp.source
       : undefined;
   const search = sp.q?.trim() || undefined;
+  const page = Math.max(1, Number(sp.page ?? "1") || 1);
+  const offset = (page - 1) * PAGE_SIZE;
   const hasFilter = Boolean(search || source);
-  const captures = await listMyCaptures({ limit: 200, search, source });
+  // Fetch one extra so we know whether there's a "next" page.
+  const fetched = await listMyCaptures({
+    limit: PAGE_SIZE + 1,
+    offset,
+    search,
+    source,
+  });
+  const hasMore = fetched.length > PAGE_SIZE;
+  const captures = fetched.slice(0, PAGE_SIZE);
+
+  function pageUrl(targetPage: number): string {
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    if (source) params.set("source", source);
+    if (targetPage > 1) params.set("page", String(targetPage));
+    const qs = params.toString();
+    return qs ? `/monitor/captures?${qs}` : "/monitor/captures";
+  }
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -179,6 +200,34 @@ export default async function CapturesPage({ searchParams }: PageProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {(page > 1 || hasMore) && (
+        <nav className="flex items-center justify-between gap-2 pt-2 text-xs">
+          {page > 1 ? (
+            <Link
+              href={pageUrl(page - 1)}
+              className="flex items-center gap-1 rounded-md border border-border bg-card/60 px-3 py-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeft className="size-3" />
+              Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="font-mono text-muted-foreground/70">page {page}</span>
+          {hasMore ? (
+            <Link
+              href={pageUrl(page + 1)}
+              className="flex items-center gap-1 rounded-md border border-border bg-card/60 px-3 py-1.5 text-muted-foreground hover:text-foreground"
+            >
+              Next
+              <ChevronRight className="size-3" />
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
       )}
     </div>
   );

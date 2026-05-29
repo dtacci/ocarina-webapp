@@ -13,12 +13,16 @@ import { CaptureThumbnail } from "@/components/monitor/capture-thumbnail";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ t?: string }>;
 }
 
-export default async function CapturePage({ params }: PageProps) {
-  const { id } = await params;
+export default async function CapturePage({ params, searchParams }: PageProps) {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const capture = await getMyCapture(id);
   if (!capture) notFound();
+  const tParam = Number(sp.t);
+  const initialPositionMs =
+    Number.isFinite(tParam) && tParam > 0 ? tParam : undefined;
 
   const [comments, supabase] = await Promise.all([
     listCommentsForCapture(id),
@@ -98,6 +102,7 @@ export default async function CapturePage({ params }: PageProps) {
           durationMs: capture.duration_ms,
           eventCount: capture.event_count,
         }}
+        initialPositionMs={initialPositionMs}
       />
 
       <CaptureComments

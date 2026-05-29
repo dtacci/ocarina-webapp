@@ -41,9 +41,15 @@ interface CapturePayload {
 
 interface Props {
   capture: CaptureMeta;
+  /**
+   * Optional starting offset in ms — when set, the scheduler seeks to this
+   * position after the payload loads. Used by ?t= deep links so shared URLs
+   * can drop you straight into a moment.
+   */
+  initialPositionMs?: number;
 }
 
-export function ReplaySurface({ capture }: Props) {
+export function ReplaySurface({ capture, initialPositionMs }: Props) {
   const [payload, setPayload] = useState<CapturePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +103,19 @@ export function ReplaySurface({ capture }: Props) {
     onLog,
     onLoopSnapshot,
   });
+
+  // Apply ?t= deep link once the payload's loaded and we know totalMs.
+  const seekTo = playback.seekTo;
+  const totalMs = playback.totalMs;
+  useEffect(() => {
+    if (!payload || initialPositionMs === undefined) return;
+    if (totalMs <= 0) return;
+    const clamped = Math.max(0, Math.min(totalMs, initialPositionMs));
+    seekTo(clamped);
+    // Only fire once per payload — re-renders from playback state changes
+    // shouldn't keep snapping back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload, initialPositionMs, totalMs]);
 
   if (error) {
     return (
