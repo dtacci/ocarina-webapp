@@ -46,25 +46,57 @@ interface MiniSynth {
  */
 function buildNoteFreqMap(osmd: OpenSheetMusicDisplay): Map<Element, number> {
   const map = new Map<Element, number>();
+  const add = (gn: unknown) => {
+    try {
+      const g = gn as {
+        getSVGGElement?: () => SVGGElement | null;
+        sourceNote?: { Pitch?: { Frequency?: number } };
+      };
+      const el = g.getSVGGElement?.();
+      const freq = g.sourceNote?.Pitch?.Frequency;
+      if (el && typeof freq === "number" && freq > 0) map.set(el, freq);
+    } catch {
+      /* skip */
+    }
+  };
+
+  // 1. Sweep the (hidden) cursor across the score.
   try {
     const cursor = osmd.cursor;
-    if (!cursor) return map;
-    cursor.reset();
-    let guard = 0;
-    while (!cursor.iterator?.EndReached && guard++ < 20000) {
-      const gnotes = cursor.GNotesUnderCursor?.() ?? [];
-      for (const gn of gnotes) {
-        const el = (gn as unknown as {
-          getSVGGElement?: () => SVGGElement | null;
-        }).getSVGGElement?.();
-        const freq = gn.sourceNote?.Pitch?.Frequency;
-        if (el && typeof freq === "number" && freq > 0) map.set(el, freq);
+    if (cursor) {
+      cursor.reset();
+      let guard = 0;
+      while (!cursor.iterator?.EndReached && guard++ < 20000) {
+        for (const gn of cursor.GNotesUnderCursor?.() ?? []) add(gn);
+        cursor.next();
       }
-      cursor.next();
+      cursor.reset();
     }
-    cursor.reset();
   } catch {
     /* best-effort */
+  }
+
+  // 2. Fallback: walk the graphical sheet directly if the cursor sweep was empty.
+  if (map.size === 0) {
+    try {
+      const rows =
+        (osmd as unknown as { GraphicSheet?: { MeasureList?: unknown[][] } })
+          .GraphicSheet?.MeasureList ?? [];
+      for (const row of rows) {
+        for (const measure of row ?? []) {
+          const m = measure as { staffEntries?: unknown[] };
+          for (const se of m?.staffEntries ?? []) {
+            const s = se as { graphicalVoiceEntries?: unknown[] };
+            for (const gve of s?.graphicalVoiceEntries ?? []) {
+              const v = gve as { notes?: unknown[] };
+              for (const gn of v?.notes ?? []) add(gn);
+            }
+          }
+        }
+      }
+    } catch {
+      /* best-effort */
+    }
   }
   return map;
 }
@@ -89,23 +121,26 @@ export default function NotationCanvas({
   const [error, setError] = useState<string | null>(null);
 
   // Click a notehead to hear its pitch (lazy-loads Tone on first use).
-  async function playFrequency(freq: number, el: Element) {
-    try {
-      const Tone = await import("tone");
-      await Tone.start();
-      if (!clickSynthRef.current) {
-        clickSynthRef.current = new Tone.Synth({
-          oscillator: { type: "triangle" },
-          envelope: { attack: 0.005, decay: 0.1, sustain: 0.2, release: 0.4 },
-        }).toDestination() as unknown as MiniSynth;
+  // Flash first (visual confirmation that we found the note) — audio is separate
+  // and best-effort, so a found note still lights up even if audio fails.
+  function playFrequency(freq: number, el: Element) {
+    el.classList.add(CLICK_CLASS);
+    setTimeout(() => el.classList.remove(CLICK_CLASS), 240);
+    void (async () => {
+      try {
+        const Tone = await import("tone");
+        await Tone.start();
+        if (!clickSynthRef.current) {
+          clickSynthRef.current = new Tone.Synth({
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.005, decay: 0.1, sustain: 0.2, release: 0.4 },
+          }).toDestination() as unknown as MiniSynth;
+        }
+        clickSynthRef.current.triggerAttackRelease(freq, "8n");
+      } catch {
+        /* audio is best-effort */
       }
-      clickSynthRef.current.triggerAttackRelease(freq, "8n");
-      // Brief visual confirmation.
-      el.classList.add(CLICK_CLASS);
-      setTimeout(() => el.classList.remove(CLICK_CLASS), 240);
-    } catch {
-      /* audio is best-effort */
-    }
+    })();
   }
 
   function handleClick(e: ReactMouseEvent) {
@@ -115,36 +150,42 @@ export default function NotationCanvas({
       noteFreqRef.current = buildNoteFreqMap(osmdRef.current);
     }
     const map = noteFreqRef.current;
-    if (map.size === 0) return;
+    if (map.size === 0) {
+      console.warn("[OSMD] click: note map is empty");
+      return;
+    }
     const x = e.clientX;
     const y = e.clientY;
-    // Hit-test by bounding box (robust to OSMD's SVG grouping): the smallest
-    // note box containing the click, else the nearest note center within ~24px.
+    // Find the note whose box contains the click; else the nearest note center.
+    // We do NOT skip zero-size boxes — OSMD can report degenerate widths, so we
+    // fall back to nearest-center with a generous radius.
     let best: Element | null = null;
     let bestArea = Infinity;
     let nearest: Element | null = null;
-    let nearestDist = 24 * 24;
+    let nearestDist = 40 * 40;
     for (const el of map.keys()) {
       const r = (el as Element).getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) continue;
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-        const area = r.width * r.height;
+        const area = Math.max(1, r.width * r.height);
         if (area < bestArea) {
           bestArea = area;
           best = el;
         }
-      } else {
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        const d = (cx - x) ** 2 + (cy - y) ** 2;
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearest = el;
-        }
+      }
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = (cx - x) ** 2 + (cy - y) ** 2;
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = el;
       }
     }
     const hit = best ?? nearest;
-    if (hit) void playFrequency(map.get(hit)!, hit);
+    if (hit) {
+      playFrequency(map.get(hit)!, hit);
+    } else {
+      console.warn(`[OSMD] click: no note within range (map has ${map.size})`);
+    }
   }
 
   const clearHighlight = () => {
@@ -186,12 +227,13 @@ export default function NotationCanvas({
         osmd.render();
         readyRef.current = true;
         noteFreqRef.current = buildNoteFreqMap(osmd);
-        if (process.env.NODE_ENV !== "production") {
-          console.debug(
-            `[OSMD] layout ${(performance.now() - started).toFixed(0)}ms, ` +
-              `${noteFreqRef.current.size} clickable notes`,
-          );
-        }
+        // Visible diagnostic (temporary) — count, cursor presence, sample box.
+        const firstEl = noteFreqRef.current.keys().next().value as Element | undefined;
+        const box = firstEl?.getBoundingClientRect();
+        console.warn(
+          `[OSMD] ${noteFreqRef.current.size} clickable notes; cursor=${!!osmd.cursor}` +
+            (box ? `; sample box ${Math.round(box.width)}×${Math.round(box.height)}` : ""),
+        );
         setLoading(false);
       })
       .catch((e: unknown) => {
