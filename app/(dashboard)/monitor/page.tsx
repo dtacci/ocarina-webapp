@@ -2,8 +2,20 @@ import Link from "next/link";
 import { MonitorSmartphone } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import { MonitorSurface, type MonitorMode } from "@/components/monitor/monitor-surface";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  MonitorSurface,
+  type MonitorMode,
+  type TunablesProps,
+} from "@/components/monitor/monitor-surface";
 import { isOcarinaApiConfigured } from "@/lib/ocarina-api";
+import { defaultConfig } from "@/lib/config/default-config";
+
+const TUNABLE_KEYS = [
+  "vad.silence_duration",
+  "vad.aggressiveness",
+  "tts.ducking.duck_level",
+] as const;
 
 interface PageProps {
   searchParams: Promise<{ webserial?: string; realtime?: string }>;
@@ -29,6 +41,17 @@ export default async function MonitorPage({ searchParams }: PageProps) {
 
   const piRestAvailable = isOcarinaApiConfigured();
 
+  // Always look up the user's primary device — used for realtime mode AND for
+  // the tunables panel (which PATCHes /api/sync/config and needs a deviceId
+  // regardless of whether the live transport is pi_rest or realtime).
+  const { data: deviceRows } = await supabase
+    .from("devices")
+    .select("id, name, last_seen_at")
+    .eq("user_id", user.id)
+    .neq("device_type", "web_browser")
+    .order("last_seen_at", { ascending: false, nullsFirst: false });
+  const primaryDevice = deviceRows?.[0] ?? null;
+
   // Source priority:
   //   ?webserial=1 → WebSerial (dev / local firmware loop, escape hatch)
   //   Pi REST configured AND not ?realtime=1 → Pi REST (preferred)
@@ -40,29 +63,47 @@ export default async function MonitorPage({ searchParams }: PageProps) {
     mode = { kind: "webserial" };
   } else if (piRestAvailable && !realtimeForced) {
     mode = { kind: "pi_rest" };
-  } else {
-    const { data: deviceRows } = await supabase
-      .from("devices")
-      .select("id, name, last_seen_at")
-      .eq("user_id", user.id)
-      .neq("device_type", "web_browser")
-      .order("last_seen_at", { ascending: false, nullsFirst: false });
+  } else if (primaryDevice) {
+    const now = Date.now();
+    const lastSeenMs = primaryDevice.last_seen_at
+      ? new Date(primaryDevice.last_seen_at).getTime()
+      : 0;
+    mode = {
+      kind: "realtime",
+      deviceId: primaryDevice.id,
+      deviceName: primaryDevice.name ?? null,
+      initialLastSeenAt: primaryDevice.last_seen_at ?? null,
+      initialIsOnline: lastSeenMs > now - 2 * 60 * 1000,
+      initialIsRecent: lastSeenMs > now - 10 * 60 * 1000,
+    };
+  }
 
-    const primaryDevice = deviceRows?.[0] ?? null;
-    if (primaryDevice) {
-      const now = Date.now();
-      const lastSeenMs = primaryDevice.last_seen_at
-        ? new Date(primaryDevice.last_seen_at).getTime()
-        : 0;
-      mode = {
-        kind: "realtime",
-        deviceId: primaryDevice.id,
-        deviceName: primaryDevice.name ?? null,
-        initialLastSeenAt: primaryDevice.last_seen_at ?? null,
-        initialIsOnline: lastSeenMs > now - 2 * 60 * 1000,
-        initialIsRecent: lastSeenMs > now - 10 * 60 * 1000,
-      };
-    }
+  // Tunables — independent of mode. Available whenever a paired Pi exists,
+  // since the PATCH /api/sync/config path writes through device_configs
+  // (sync_agent.py / Pi pull is the legacy consumer; future Pi REST owns
+  // its own settings but this stays usable as the bridge).
+  let tunables: TunablesProps | null = null;
+  if (primaryDevice) {
+    const admin = createAdminClient();
+    const { data: cfgRow } = await admin
+      .from("device_configs")
+      .select("config_json, version, source")
+      .eq("device_id", primaryDevice.id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .single();
+    const merged: Record<string, unknown> = {
+      ...defaultConfig,
+      ...((cfgRow?.config_json as Record<string, unknown>) ?? {}),
+    };
+    const values: Record<string, unknown> = {};
+    for (const k of TUNABLE_KEYS) values[k] = merged[k];
+    tunables = {
+      deviceId: primaryDevice.id,
+      deviceName: primaryDevice.name ?? null,
+      values,
+      configVersion: cfgRow?.version ?? 0,
+    };
   }
 
   if (!mode) {
@@ -113,7 +154,7 @@ export default async function MonitorPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      <MonitorSurface mode={mode} />
+      <MonitorSurface mode={mode} tunables={tunables} />
     </div>
   );
 }

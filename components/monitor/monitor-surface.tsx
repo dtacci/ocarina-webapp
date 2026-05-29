@@ -22,6 +22,7 @@ import { RecentCapturesPanel } from "@/components/monitor/recent-captures-panel"
 import { TeensyConnectCard } from "@/components/monitor/teensy-connect-card";
 import { PiRestStatusCard } from "@/components/monitor/pi-rest-status-card";
 import { PotsPanel } from "@/components/monitor/pots-panel";
+import { TunablesPanel } from "@/components/monitor/tunables-panel";
 import { ocarina } from "@/lib/ocarina-api";
 
 export type MonitorMode =
@@ -36,11 +37,20 @@ export type MonitorMode =
   | { kind: "pi_rest" }
   | { kind: "webserial" };
 
-interface Props {
-  mode: MonitorMode;
+export interface TunablesProps {
+  deviceId: string;
+  deviceName: string | null;
+  values: Record<string, unknown>;
+  configVersion: number;
 }
 
-export function MonitorSurface({ mode }: Props) {
+interface Props {
+  mode: MonitorMode;
+  /** Optional: only renders when a paired Pi device exists. */
+  tunables?: TunablesProps | null;
+}
+
+export function MonitorSurface({ mode, tunables = null }: Props) {
   const sinkRef = useRef<((entry: LogEntry) => void) | null>(null);
   const loopSinkRef = useRef<
     | ((snapshot: NonNullable<ReturnType<typeof usePiRestTeensy>["loopSnapshot"]>, ts: number) => void)
@@ -251,6 +261,15 @@ export function MonitorSurface({ mode }: Props) {
         deviceId={mode.kind === "realtime" ? mode.deviceId : null}
         onSaved={() => setRefreshNonce((n) => n + 1)}
       />
+
+      {tunables && (
+        <TunablesPanel
+          deviceId={tunables.deviceId}
+          deviceName={tunables.deviceName}
+          initialValues={tunables.values}
+          initialConfigVersion={tunables.configVersion}
+        />
+      )}
 
       <RecentCapturesPanel refreshNonce={refreshNonce} />
 

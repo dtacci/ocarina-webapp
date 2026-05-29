@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { Disc3, Waves } from "lucide-react";
 
 import { getPublicCaptureByToken } from "@/lib/db/queries/monitor-captures";
+import { listPublicCommentsByToken } from "@/lib/db/queries/capture-comments";
+import { createClient } from "@/lib/supabase/server";
 import { ReplaySurface } from "@/components/monitor/replay-surface";
+import { CaptureComments } from "@/components/monitor/capture-comments";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -20,6 +23,12 @@ export default async function SharedCapturePage({ params }: PageProps) {
   const { token } = await params;
   const capture = await getPublicCaptureByToken(token);
   if (!capture) notFound();
+
+  const [comments, supabase] = await Promise.all([
+    listPublicCommentsByToken(token),
+    createClient(),
+  ]);
+  const { data: { user } } = await supabase.auth.getUser();
 
   return (
     <main className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
@@ -79,6 +88,13 @@ export default async function SharedCapturePage({ params }: PageProps) {
           durationMs: capture.duration_ms,
           eventCount: capture.event_count,
         }}
+      />
+
+      <CaptureComments
+        captureId={capture.id}
+        initialComments={comments ?? []}
+        viewerId={user?.id ?? null}
+        captureOwnerId={capture.user_id}
       />
 
       <footer className="pt-4 text-center text-[11px] text-muted-foreground/60">

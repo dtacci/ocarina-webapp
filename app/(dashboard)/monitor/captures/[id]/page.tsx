@@ -3,9 +3,12 @@ import { ArrowLeft, Download } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { getMyCapture } from "@/lib/db/queries/monitor-captures";
+import { listCommentsForCapture } from "@/lib/db/queries/capture-comments";
+import { createClient } from "@/lib/supabase/server";
 import { ReplaySurface } from "@/components/monitor/replay-surface";
 import { CaptureNotesEditor } from "@/components/monitor/capture-notes-editor";
 import { CaptureShareCard } from "@/components/monitor/capture-share-card";
+import { CaptureComments } from "@/components/monitor/capture-comments";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -15,6 +18,12 @@ export default async function CapturePage({ params }: PageProps) {
   const { id } = await params;
   const capture = await getMyCapture(id);
   if (!capture) notFound();
+
+  const [comments, supabase] = await Promise.all([
+    listCommentsForCapture(id),
+    createClient(),
+  ]);
+  const { data: { user } } = await supabase.auth.getUser();
 
   return (
     <div className="space-y-4 max-w-6xl">
@@ -81,6 +90,13 @@ export default async function CapturePage({ params }: PageProps) {
           durationMs: capture.duration_ms,
           eventCount: capture.event_count,
         }}
+      />
+
+      <CaptureComments
+        captureId={capture.id}
+        initialComments={comments}
+        viewerId={user?.id ?? null}
+        captureOwnerId={capture.user_id}
       />
     </div>
   );

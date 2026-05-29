@@ -319,6 +319,21 @@ export const monitorCaptures = pgTable("monitor_captures", {
     .defaultNow(),
 });
 
+/** One row per comment on a capture. RLS: read on owned + public; write requires auth. */
+export const captureComments = pgTable("capture_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  captureId: uuid("capture_id")
+    .notNull()
+    .references(() => monitorCaptures.id, { onDelete: "cascade" }),
+  authorId: uuid("author_id")
+    .notNull()
+    .references(() => users.id),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // ============================================================================
 // KARAOKE DOMAIN
 // ============================================================================
