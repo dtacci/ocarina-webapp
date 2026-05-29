@@ -94,6 +94,7 @@ export function quantize(raw: RawNote[], params: DeriveParams): DerivedNote[] {
       rawStartMs: n.startMs,
       rawEndMs: n.endMs,
       hasPitchBend: n.hasPitchBend || undefined,
+      confidence: n.conf,
     });
     cursor = n.startQ + durationBeats;
   }

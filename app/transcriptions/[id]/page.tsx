@@ -10,7 +10,12 @@ import {
   getTranscriptionEvents,
 } from "@/lib/db/queries/transcription";
 import { TranscriptionDetail } from "@/components/transcription/transcription-detail";
-import { DEFAULT_PARAMS, type DeriveParams, type Warning } from "@/lib/transcription/types";
+import {
+  DEFAULT_PARAMS,
+  type DeriveParams,
+  type DerivedNote,
+  type Warning,
+} from "@/lib/transcription/types";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -34,6 +39,17 @@ function extractWarnings(notation: unknown): Warning[] {
     Array.isArray((notation as { warnings?: unknown }).warnings)
   ) {
     return (notation as { warnings: Warning[] }).warnings;
+  }
+  return [];
+}
+
+function extractNotes(notation: unknown): DerivedNote[] {
+  if (
+    notation &&
+    typeof notation === "object" &&
+    Array.isArray((notation as { notes?: unknown }).notes)
+  ) {
+    return (notation as { notes: DerivedNote[] }).notes;
   }
   return [];
 }
@@ -75,6 +91,7 @@ export default async function TranscriptionDetailPage({ params }: Props) {
       recording={recording}
       musicxml={render?.musicxml ?? null}
       warnings={extractWarnings(render?.notation_jsonb)}
+      notes={extractNotes(render?.notation_jsonb)}
       isOwner={isOwner}
       isAuthenticated={!!user}
       events={eventsRow?.events_jsonb ?? null}

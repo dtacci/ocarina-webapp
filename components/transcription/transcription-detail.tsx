@@ -36,6 +36,7 @@ import { paramsHash } from "@/lib/transcription/params-hash";
 import {
   DEFAULT_PARAMS,
   type DeriveParams,
+  type DerivedNote,
   type KeyCandidate,
   type OcarinaEvent,
   type OcarinaHeader,
@@ -58,12 +59,27 @@ export interface TranscriptionDetailProps {
   recording: RecordingRow;
   musicxml: string | null;
   warnings: Warning[];
+  notes?: DerivedNote[];
   isOwner: boolean;
   isAuthenticated: boolean;
   /** Owner-only: raw events + header enable in-browser re-derivation. */
   events?: OcarinaEvent[] | null;
   header?: OcarinaHeader | null;
   initialParams?: DeriveParams | null;
+}
+
+/** Average detector confidence → a friendly quality summary (doc §6.7). */
+function qualityFromNotes(
+  notes: DerivedNote[],
+): { label: string; tone: string } | null {
+  const confs = notes
+    .filter((n) => !n.isRest && typeof n.confidence === "number")
+    .map((n) => n.confidence as number);
+  if (confs.length === 0) return null;
+  const avg = confs.reduce((s, c) => s + c, 0) / confs.length;
+  if (avg >= 0.85) return { label: "High-confidence read", tone: "text-emerald-600" };
+  if (avg >= 0.65) return { label: "Good read", tone: "text-amber-600" };
+  return { label: "Rough read — worth a close look", tone: "text-orange-600" };
 }
 
 function formatDuration(sec: number): string {
@@ -111,6 +127,7 @@ export function TranscriptionDetail({
   recording,
   musicxml: initialMusicxml,
   warnings: initialWarnings,
+  notes: initialNotes,
   isOwner,
   events,
   header,
@@ -121,6 +138,8 @@ export function TranscriptionDetail({
   const [params, setParams] = useState<DeriveParams>(initialParams ?? DEFAULT_PARAMS);
   const [musicxml, setMusicxml] = useState<string | null>(initialMusicxml);
   const [warnings, setWarnings] = useState<Warning[]>(initialWarnings);
+  const [notes, setNotes] = useState<DerivedNote[]>(initialNotes ?? []);
+  const quality = qualityFromNotes(notes);
   const [keyCandidates, setKeyCandidates] = useState<KeyCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [warningsOpen, setWarningsOpen] = useState(false);
@@ -206,6 +225,7 @@ export function TranscriptionDetail({
         if (data.hit && data.musicxml) {
           setMusicxml(data.musicxml);
           if (data.notation?.warnings) setWarnings(data.notation.warnings);
+          if (data.notation?.notes) setNotes(data.notation.notes);
           setBusy(false);
           return;
         }
@@ -214,6 +234,7 @@ export function TranscriptionDetail({
       const result = derive(events, header, next, { title: recording.title ?? undefined });
       setMusicxml(result.musicxml);
       setWarnings(result.warnings);
+      setNotes(result.notes);
       setKeyCandidates(result.keyCandidates);
       void fetch(`/api/transcription/${recording.id}/render`, {
         method: "POST",
@@ -307,10 +328,20 @@ export function TranscriptionDetail({
               ) : null}
             </h1>
           )}
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {created} · {formatDuration(recording.duration_sec)}
-            {recording.event_count != null ? ` · ${recording.event_count} events` : ""}
-          </p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground tabular-nums">
+            <span>
+              {created} · {formatDuration(recording.duration_sec)}
+              {recording.event_count != null ? ` · ${recording.event_count} events` : ""}
+            </span>
+            {quality ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${quality.tone}`}
+                title="How confident the pitch detector was, on average"
+              >
+                {quality.label}
+              </span>
+            ) : null}
+          </div>
           <p className="text-sm text-muted-foreground">
             Here&apos;s our best read of what you sang. It won&apos;t always be
             perfect — tweak the tempo, key, and timing to taste.

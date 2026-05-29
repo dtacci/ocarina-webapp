@@ -167,6 +167,8 @@ export interface DerivedNote {
   rawEndMs: number;
   /** Pitch swung > a semitone within the note (render as glissando). */
   hasPitchBend?: boolean;
+  /** Detector confidence 0–1 for this note (undefined for rests). */
+  confidence?: number;
 }
 
 /** Long sessions split into chapters at the longest silences (doc §4.3). */

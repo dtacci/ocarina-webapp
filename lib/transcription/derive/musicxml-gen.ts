@@ -64,6 +64,11 @@ function escapeXml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Notes below this confidence render faint, flagging the detector's uncertainty. */
+const CONF_LOW = 0.75;
+/** Faint ink for low-confidence notes (muted brown-grey, readable on paper). */
+const LOW_CONF_COLOR = "#9a8f7a";
+
 /** A measure-aligned segment after splitting at bar lines. */
 interface Piece {
   measure: number;
@@ -72,6 +77,7 @@ interface Piece {
   div: number;
   tieStop: boolean; // continues a note from the previous piece
   tieStart: boolean; // continues into the next piece
+  confidence?: number;
 }
 
 function splitIntoMeasures(
@@ -95,6 +101,7 @@ function splitIntoMeasures(
         div: take,
         tieStop: !n.isRest && continuing,
         tieStart: !n.isRest && crosses,
+        confidence: n.confidence,
       });
       startDiv += take;
       remaining -= take;
@@ -141,7 +148,13 @@ function noteXml(
     ? `\n        <notations>${tiedNotations.join("")}</notations>`
     : "";
 
-  return `      <note>
+  // Low-confidence notes render faint (overlay of detector uncertainty).
+  const colorAttr =
+    piece.confidence !== undefined && piece.confidence < CONF_LOW
+      ? ` color="${LOW_CONF_COLOR}"`
+      : "";
+
+  return `      <note${colorAttr}>
         <pitch>
           <step>${step}</step>${alterXml}
           <octave>${octave}</octave>

@@ -13,7 +13,13 @@ import assert from "node:assert/strict";
 import { generateOcrec, noteNameToMidi } from "./fake-events";
 import { parseOcrec } from "./parse-jsonl";
 import { derive } from "./derive";
-import { DEFAULT_PARAMS, type DeriveParams, type DerivedNote } from "./types";
+import {
+  DEFAULT_PARAMS,
+  type DeriveParams,
+  type DerivedNote,
+  type OcarinaEvent,
+  type OcarinaHeader,
+} from "./types";
 import { getSong } from "./songs";
 
 function deriveSong(name: string, overrides: Partial<DeriveParams> = {}) {
@@ -166,6 +172,33 @@ test("user-pinned key overrides detection (no candidates returned)", () => {
   const { result } = deriveSong("twinkle", { key_signature: "G major" });
   assert.equal(result.keyCandidates.length, 0);
   assert.match(result.musicxml, /<fifths>1<\/fifths>/);
+});
+
+test("confidence is carried onto notes; low-confidence notes render faint", () => {
+  const header: OcarinaHeader = {
+    type: "header",
+    format_version: 1,
+    firmware_version: "t",
+    device_id: "d",
+    session_uuid: "s",
+    wall_clock_iso: "2026-01-01T00:00:00.000Z",
+    detector_latency_ms: 0,
+  };
+  const events: OcarinaEvent[] = [
+    { type: "session_start", t_ms: 0 },
+    { type: "note_on", t_ms: 0, midi: 60, vel: 90, hz_raw: 261.63, conf: 0.6 },
+    { type: "note_off", t_ms: 480, midi: 60 },
+    { type: "note_on", t_ms: 500, midi: 62, vel: 90, hz_raw: 293.66, conf: 0.95 },
+    { type: "note_off", t_ms: 980, midi: 62 },
+    { type: "session_end", t_ms: 1000 },
+  ];
+  const result = derive(events, header, { ...DEFAULT_PARAMS, key_signature: "C major" });
+  const notes = pitched(result.notes);
+  assert.equal(notes[0].confidence, 0.6);
+  assert.equal(notes[1].confidence, 0.95);
+  // The 0.6 note is faint; the 0.95 note is not.
+  const colorCount = (result.musicxml.match(/color="#9a8f7a"/g) ?? []).length;
+  assert.equal(colorCount, 1);
 });
 
 test("emitted MusicXML is well-formed-ish: balanced score-partwise + parts", () => {
