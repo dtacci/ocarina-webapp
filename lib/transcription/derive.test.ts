@@ -151,6 +151,17 @@ test("missing latency calibration warns and uses the default", () => {
   assert.ok(warningKinds(result).includes("missing_latency_calibration"));
 });
 
+test("transpose shifts every pitch by the given semitones", () => {
+  const base = deriveSong("twinkle");
+  const up = deriveSong("twinkle", { transpose: 12 });
+  const basePitched = pitched(base.result.notes);
+  const upPitched = pitched(up.result.notes);
+  assert.equal(basePitched.length, upPitched.length);
+  for (let i = 0; i < basePitched.length; i++) {
+    assert.equal(upPitched[i].midi, basePitched[i].midi + 12);
+  }
+});
+
 test("user-pinned key overrides detection (no candidates returned)", () => {
   const { result } = deriveSong("twinkle", { key_signature: "G major" });
   assert.equal(result.keyCandidates.length, 0);

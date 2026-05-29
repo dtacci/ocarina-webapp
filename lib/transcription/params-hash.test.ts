@@ -37,6 +37,13 @@ test("canonicalization is key-order independent", () => {
     key_signature: "auto",
     snap_threshold: 0.5,
     quantize_grid: "1/16",
+    transpose: 0,
   };
   assert.equal(canonicalizeParams(reordered), canonicalizeParams(DEFAULT_PARAMS));
+});
+
+test("transpose changes the hash", async () => {
+  const a = await paramsHash(DEFAULT_PARAMS);
+  const b = await paramsHash({ ...DEFAULT_PARAMS, transpose: 12 });
+  assert.notEqual(a, b);
 });

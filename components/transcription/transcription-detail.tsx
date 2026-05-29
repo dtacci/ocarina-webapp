@@ -136,6 +136,24 @@ export function TranscriptionDetail({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(title);
 
+  // "This looks wrong" feedback (owner only).
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
+  async function submitFeedback() {
+    const message = feedbackText.trim();
+    if (!message) return;
+    setFeedbackSent(true);
+    setFeedbackOpen(false);
+    setFeedbackText("");
+    await fetch(`/api/transcription/${recording.id}/feedback`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message, params }),
+    }).catch(() => {/* best-effort */});
+  }
+
   const exportBase = `/api/transcription/${recording.id}/export`;
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -453,6 +471,57 @@ export function TranscriptionDetail({
             )}
           </section>
         </div>
+
+        {/* "This looks wrong" — friendly feedback (doc §6.7), owner only. */}
+        {canEdit ? (
+          <div data-print-hide className="text-sm">
+            {feedbackSent ? (
+              <p className="text-muted-foreground">
+                Thanks — that helps us improve future transcriptions. 🙏
+              </p>
+            ) : feedbackOpen ? (
+              <div className="space-y-2 rounded-lg border bg-card p-4">
+                <label htmlFor="feedback" className="text-xs font-medium text-muted-foreground">
+                  What did you mean to play? (a bar number, the right notes, anything)
+                </label>
+                <textarea
+                  id="feedback"
+                  autoFocus
+                  rows={3}
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  className="w-full rounded-md border bg-background px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="e.g. bars 3–4 should be a steady quarter-note run, not dotted…"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void submitFeedback()}
+                    disabled={!feedbackText.trim()}
+                    className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-40"
+                  >
+                    Send feedback
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackOpen(false)}
+                    className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setFeedbackOpen(true)}
+                className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                This doesn&apos;t look right?
+              </button>
+            )}
+          </div>
+        ) : null}
       </main>
     </div>
   );

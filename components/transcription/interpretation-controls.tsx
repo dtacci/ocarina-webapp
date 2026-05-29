@@ -158,6 +158,48 @@ export function InterpretationControls({
         ) : null}
       </div>
 
+      {/* Transpose */}
+      <div className="space-y-1.5">
+        <label className={labelCls} htmlFor="transpose">Transpose</label>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onChange({ transpose: Math.max(-24, (params.transpose ?? 0) - 12) })}
+            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+            title="Down an octave"
+          >
+            −8va
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ transpose: Math.max(-24, (params.transpose ?? 0) - 1) })}
+            className="rounded-md border px-2.5 py-1 text-sm hover:bg-muted"
+            aria-label="Down a semitone"
+          >
+            −
+          </button>
+          <span id="transpose" className="min-w-12 text-center text-sm tabular-nums">
+            {(params.transpose ?? 0) > 0 ? `+${params.transpose}` : params.transpose ?? 0} st
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange({ transpose: Math.min(24, (params.transpose ?? 0) + 1) })}
+            className="rounded-md border px-2.5 py-1 text-sm hover:bg-muted"
+            aria-label="Up a semitone"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ transpose: Math.min(24, (params.transpose ?? 0) + 12) })}
+            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+            title="Up an octave"
+          >
+            +8va
+          </button>
+        </div>
+      </div>
+
       {/* Quantize grid */}
       <div className="space-y-1.5">
         <span className={labelCls}>Quantize grid</span>

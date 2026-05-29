@@ -132,6 +132,8 @@ export interface DeriveParams {
   /** Notes shorter than this (ms) are treated as artifacts (default 60). */
   min_note_ms: number;
   rests_vs_ties: RestsVsTies;
+  /** Semitones to shift every pitch (e.g. fix a wrong-octave performance). */
+  transpose: number;
 }
 
 /** Sensible defaults applied to a fresh session's first ("default") render. */
@@ -143,6 +145,7 @@ export const DEFAULT_PARAMS: DeriveParams = {
   snap_threshold: 0.5,
   min_note_ms: 60,
   rests_vs_ties: "rests",
+  transpose: 0,
 };
 
 // ---------------------------------------------------------------------------

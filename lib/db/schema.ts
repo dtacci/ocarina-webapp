@@ -315,6 +315,26 @@ export const transcriptionRenders = pgTable(
   ],
 );
 
+/**
+ * "This looks wrong" feedback on a transcription (doc §6.1/§6.7). Freeform user
+ * note + a snapshot of the params at report time — support, debugging, and
+ * training data for a future AI cleanup pass.
+ */
+export const transcriptionFeedback = pgTable(
+  "transcription_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => recordings.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull(),
+    message: text("message").notNull(),
+    paramsJsonb: jsonb("params_jsonb"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("transcription_feedback_session_idx").on(t.sessionId)],
+);
+
 // ============================================================================
 // ACTIVITY DOMAIN
 // ============================================================================

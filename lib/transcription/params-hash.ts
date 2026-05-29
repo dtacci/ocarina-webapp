@@ -22,6 +22,7 @@ export function canonicalizeParams(params: DeriveParams): string {
     snap_threshold: Math.round(params.snap_threshold * 100) / 100,
     tempo_bpm: Math.round(params.tempo_bpm * 10) / 10,
     time_signature: params.time_signature,
+    transpose: Math.round(params.transpose ?? 0),
   };
   return JSON.stringify(canonical, Object.keys(canonical).sort());
 }

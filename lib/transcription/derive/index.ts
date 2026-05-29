@@ -51,7 +51,17 @@ export function derive(
   warnings.push(...assemblyWarnings);
 
   // Stage 3 — quantization (stage 2 tempo is folded in via params).
-  const notes = quantize(rawNotes, params);
+  const quantized = quantize(rawNotes, params);
+
+  // Transpose: shift every pitch before key detection + spelling so the displayed
+  // key and accidentals match the transposed notation (doc §10.1).
+  const transpose = params.transpose ?? 0;
+  const notes =
+    transpose === 0
+      ? quantized
+      : quantized.map((n) =>
+          n.isRest ? n : { ...n, midi: n.midi + transpose },
+        );
 
   // Stage 4 — key signature: detect candidates, resolve the concrete key.
   let keyCandidates: KeyCandidate[] = [];
