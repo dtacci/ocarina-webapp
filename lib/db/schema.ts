@@ -10,6 +10,8 @@ import {
   jsonb,
   pgEnum,
   primaryKey,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ============================================================================
@@ -230,8 +232,15 @@ export const recordings = pgTable("recordings", {
   bpm: integer("bpm"),
   kitId: text("kit_id").references(() => kits.id),
   waveformPeaks: jsonb("waveform_peaks"), // 200-point peak array for WaveSurfer
-  recordingType: text("recording_type").notNull().default("upload"), // 'upload' | 'stem' | 'master'
+  // Groups stems + master from one looper session (also reused by transcription).
+  sessionId: uuid("session_id"),
+  recordingType: text("recording_type").notNull().default("upload"), // 'upload' | 'stem' | 'master' | 'transcription_session'
   isPublic: boolean("is_public").notNull().default(false),
+  // Transcription-session fields (null for non-transcription recordings).
+  parserVersion: integer("parser_version"),
+  eventCount: integer("event_count"),
+  firmwareVersion: text("firmware_version"),
+  transcriptionStatus: text("transcription_status"), // 'parsing' | 'parsed' | 'rendered' | 'partial' | 'failed'
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -253,6 +262,58 @@ export const loopTracks = pgTable("loop_tracks", {
     .notNull()
     .defaultNow(),
 });
+
+// ============================================================================
+// TRANSCRIPTION DOMAIN (Ocarina → Sheet Music)
+// ============================================================================
+
+/**
+ * Raw event stream for a transcription session — one row per session, events as
+ * a JSONB array. Written once and read as a batch by the derivation function, so
+ * a single blob beats row-per-event (~18k rows/session for a query pattern that
+ * doesn't exist). `session_id` is the parent `recordings.id`.
+ */
+export const transcriptionEvents = pgTable("transcription_events", {
+  sessionId: uuid("session_id")
+    .primaryKey()
+    .references(() => recordings.id, { onDelete: "cascade" }),
+  eventsJsonb: jsonb("events_jsonb").notNull(), // OcarinaEvent[]
+  headerJsonb: jsonb("header_jsonb").notNull(), // OcarinaHeader
+  parserVersion: integer("parser_version").notNull(),
+  parsedAt: timestamp("parsed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Cached derivations. Keyed by a hash of the canonicalized interpretation
+ * params + parser version, so a parser bump invalidates stale renders. One row
+ * per session is flagged `is_default` (the server-computed render on ingest).
+ */
+export const transcriptionRenders = pgTable(
+  "transcription_renders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => recordings.id, { onDelete: "cascade" }),
+    paramsHash: text("params_hash").notNull(), // sha256 of canonicalized params
+    paramsJsonb: jsonb("params_jsonb").notNull(), // DeriveParams
+    parserVersion: integer("parser_version").notNull(),
+    notationJsonb: jsonb("notation_jsonb"), // DerivedNote[] + chapters
+    musicxml: text("musicxml"),
+    midiBlobUrl: text("midi_blob_url"), // lazy on first export
+    pdfBlobUrl: text("pdf_blob_url"), // reserved; server PDF deferred past v1
+    isDefault: boolean("is_default").notNull().default(false),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("transcription_renders_session_hash_parser_idx").on(
+      t.sessionId,
+      t.paramsHash,
+      t.parserVersion,
+    ),
+    index("transcription_renders_session_default_idx").on(t.sessionId, t.isDefault),
+  ],
+);
 
 // ============================================================================
 // ACTIVITY DOMAIN

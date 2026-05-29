@@ -24,6 +24,7 @@ import {
   Sliders,
   FolderArchive,
   Repeat,
+  Music4,
 } from "lucide-react";
 
 import {
@@ -72,6 +73,7 @@ const navMain: NavItem[] = [
   },
   { title: "Kits", url: "/kits", icon: Layers, feature: "kitBrowser" as const },
   { title: "Recordings", url: "/recordings", icon: Disc3, feature: "syncApi" as const },
+  { title: "Transcriptions", url: "/transcriptions", icon: Music4, feature: "transcription" as const },
   { title: "Activity", url: "/activity", icon: Activity, feature: "activityTimeline" as const },
   { title: "Monitor", url: "/monitor", icon: Radar, feature: "monitor" as const },
   { title: "Captures", url: "/monitor/captures", icon: FolderArchive, feature: "monitor" as const, badge: CapturesUnreadBadge },

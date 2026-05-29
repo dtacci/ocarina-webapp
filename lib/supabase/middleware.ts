@@ -40,6 +40,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname === "/" ||
     // /recordings/[id] is public (detail page); /recordings without trailing slash stays protected
     request.nextUrl.pathname.startsWith("/recordings/") ||
+    // /transcriptions/[id] is public (shared sheet music); /transcriptions list stays protected
+    request.nextUrl.pathname.startsWith("/transcriptions/") ||
     // Publicly-shared monitor captures — token-gated, served outside the dashboard layout
     request.nextUrl.pathname.startsWith("/captures/share/") ||
     // Public discovery feed of shared captures

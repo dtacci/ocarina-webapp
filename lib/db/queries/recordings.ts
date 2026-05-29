@@ -13,8 +13,13 @@ export interface RecordingRow {
   kit_id: string | null;
   waveform_peaks: number[] | null;
   session_id: string | null;
-  recording_type: "upload" | "stem" | "master";
+  recording_type: "upload" | "stem" | "master" | "transcription_session";
   is_public: boolean;
+  // Transcription-session fields (null for audio recordings).
+  parser_version?: number | null;
+  event_count?: number | null;
+  firmware_version?: string | null;
+  transcription_status?: string | null;
   created_at: string;
 }
 

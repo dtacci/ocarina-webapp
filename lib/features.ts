@@ -34,6 +34,7 @@ export const features = {
   sampleDragDrop: false,
   drumPatternEditor: true,
   looperDashboard: true,
+  transcription: true,
   karaokeDisplay: false,
   lyricsEditor: false,
   shareLinks: false,
