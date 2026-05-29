@@ -49,6 +49,28 @@ export async function listMyCaptures(limit = 50): Promise<MonitorCaptureRow[]> {
 }
 
 /**
+ * Lists every publicly-shared capture across users — feeds the /captures/
+ * explore page. Goes through the admin client because RLS scopes the
+ * authenticated view to the caller's own rows.
+ */
+export async function listPublicCaptures(opts: {
+  limit?: number;
+  offset?: number;
+} = {}): Promise<MonitorCaptureRow[]> {
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 30));
+  const offset = Math.max(0, opts.offset ?? 0);
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("monitor_captures")
+    .select("*")
+    .eq("is_public", true)
+    .not("share_token", "is", null)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  return (data ?? []) as MonitorCaptureRow[];
+}
+
+/**
  * Looks up a publicly-shared capture by its share token. Bypasses RLS via the
  * admin client and double-checks `is_public` server-side — even if a token
  * leaks, owners can revoke access by toggling the share off.

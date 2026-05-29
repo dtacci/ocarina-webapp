@@ -25,6 +25,23 @@ const logEntrySchema = z.object({
   ts: z.number(),
 });
 
+// Structured loop snapshots persisted alongside the LogEntries — lets a
+// future replay drive the LoopStatePanel rather than just the event log.
+const loopSnapshotSchema = z.object({
+  ts: z.number(),
+  snapshot: z.object({
+    bpm: z.number().nullable(),
+    master_length_ms: z.number(),
+    active_track: z.number(),
+    tracks: z.array(z.object({
+      id: z.number(),
+      state: z.enum(["empty", "recording", "playing", "muted"]),
+      length_ms: z.number(),
+      muted: z.boolean(),
+    })),
+  }),
+});
+
 const postSchema = z.object({
   name: z.string().min(1).max(120),
   source: z.enum(["pi_rest", "realtime", "webserial"]),
@@ -33,6 +50,7 @@ const postSchema = z.object({
   startedAt: z.number(),
   endedAt: z.number(),
   events: z.array(logEntrySchema).max(MAX_EVENTS),
+  loopSnapshots: z.array(loopSnapshotSchema).max(MAX_EVENTS).optional(),
 });
 
 export async function GET() {
@@ -58,7 +76,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, source, deviceId, deviceName, startedAt, endedAt, events } =
+  const { name, source, deviceId, deviceName, startedAt, endedAt, events, loopSnapshots } =
     parsed.data;
 
   // Denormalize counts for the list view — saves fetching the blob to render
@@ -100,6 +118,7 @@ export async function POST(request: Request) {
     endedAt: new Date(endedAt).toISOString(),
     eventCount: events.length,
     events,
+    loopSnapshots: loopSnapshots ?? [],
   };
 
   let blob;

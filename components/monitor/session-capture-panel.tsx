@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Circle,
   Square,
@@ -11,12 +11,49 @@ import {
   AlertTriangle,
   Pencil,
   Plus,
+  RotateCcw,
 } from "lucide-react";
 
 import type { LogEntry } from "@/components/diagnostics/live-event-log";
 import type { MonitorCaptureRow } from "@/lib/db/queries/monitor-captures";
+import type { LoopSnapshot } from "@/lib/ocarina-api";
 
 const MAX_CAPTURE = 50_000;
+const DRAFT_KEY = "ocarina-monitor-capture-draft-v1";
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const DRAFT_FLUSH_MS = 5_000;
+
+interface Draft {
+  source: "pi_rest" | "realtime" | "webserial";
+  deviceName: string | null;
+  deviceId: string | null;
+  startedAt: number;
+  /** Last-time the draft was flushed to localStorage. */
+  savedAt: number;
+  events: LogEntry[];
+  loopSnapshots?: { ts: number; snapshot: LoopSnapshot }[];
+}
+
+function readDraft(): Draft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Draft;
+    if (!parsed.startedAt || Date.now() - parsed.startedAt > DRAFT_MAX_AGE_MS) {
+      window.localStorage.removeItem(DRAFT_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+}
 
 type CaptureState =
   | "idle"
@@ -28,6 +65,10 @@ type CaptureState =
 interface Props {
   /** Imperatively registered by the parent so the hook's onEvent funnels here. */
   registerSink: (sink: ((entry: LogEntry) => void) | null) => void;
+  /** Imperatively registered loop-snapshot sink (Pi-REST only). */
+  registerLoopSink?: (
+    sink: ((snapshot: LoopSnapshot, ts: number) => void) | null
+  ) => void;
   /** Used in the auto-generated capture name. */
   deviceName: string | null;
   /** Active transport for this monitor view — stored alongside the capture. */
@@ -45,6 +86,7 @@ interface Props {
  */
 export function SessionCapturePanel({
   registerSink,
+  registerLoopSink,
   deviceName,
   source,
   deviceId,
@@ -54,7 +96,14 @@ export function SessionCapturePanel({
   const [size, setSize] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [overflow, setOverflow] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const bufferRef = useRef<LogEntry[]>([]);
+  const loopBufferRef = useRef<{ ts: number; snapshot: LoopSnapshot }[]>([]);
+
+  // Surface a draft from a previous interrupted session on mount.
+  useEffect(() => {
+    setDraft(readDraft());
+  }, []);
 
   const sink = useCallback((entry: LogEntry) => {
     if (bufferRef.current.length >= MAX_CAPTURE) {
@@ -65,30 +114,53 @@ export function SessionCapturePanel({
     setSize(bufferRef.current.length);
   }, []);
 
+  const loopSink = useCallback((snapshot: LoopSnapshot, ts: number) => {
+    // Separate cap so a loop-frenzy doesn't push event entries off the
+    // main buffer.
+    if (loopBufferRef.current.length >= MAX_CAPTURE) return;
+    loopBufferRef.current.push({ ts, snapshot });
+  }, []);
+
   const start = useCallback(() => {
     bufferRef.current = [];
+    loopBufferRef.current = [];
     setSize(0);
     setOverflow(false);
     setStartedAt(Date.now());
     setState("recording");
     registerSink(sink);
-  }, [registerSink, sink]);
+    registerLoopSink?.(loopSink);
+    clearDraft();
+    setDraft(null);
+  }, [registerSink, registerLoopSink, sink, loopSink]);
 
   const persist = useCallback(
-    async (events: LogEntry[], startTs: number, endTs: number) => {
-      const name = defaultName(deviceName, startTs);
+    async (
+      events: LogEntry[],
+      loopSnapshots: { ts: number; snapshot: LoopSnapshot }[],
+      startTs: number,
+      endTs: number,
+      explicitSource?: Draft["source"],
+      explicitDeviceName?: string | null,
+      explicitDeviceId?: string | null
+    ) => {
+      const useSource = explicitSource ?? source;
+      const useDeviceName = explicitDeviceName ?? deviceName;
+      const useDeviceId = explicitDeviceId ?? deviceId ?? null;
+      const name = defaultName(useDeviceName, startTs);
       try {
         const res = await fetch("/api/monitor/captures", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             name,
-            source,
-            deviceId: deviceId ?? null,
-            deviceName,
+            source: useSource,
+            deviceId: useDeviceId,
+            deviceName: useDeviceName,
             startedAt: startTs,
             endedAt: endTs,
             events,
+            loopSnapshots,
           }),
         });
         if (!res.ok) {
@@ -96,6 +168,8 @@ export function SessionCapturePanel({
           throw new Error(`${res.status}: ${body || res.statusText}`);
         }
         const { capture } = (await res.json()) as { capture: MonitorCaptureRow };
+        clearDraft();
+        setDraft(null);
         setState({ kind: "saved", capture });
         onSaved?.(capture);
       } catch (err) {
@@ -108,22 +182,72 @@ export function SessionCapturePanel({
 
   const stop = useCallback(() => {
     registerSink(null);
+    registerLoopSink?.(null);
     const endTs = Date.now();
     const events = bufferRef.current;
+    const loops = loopBufferRef.current;
     if (events.length === 0 || startedAt === null) {
       setState("idle");
       return;
     }
     setState("saving");
-    void persist(events, startedAt, endTs);
-  }, [registerSink, startedAt, persist]);
+    void persist(events, loops, startedAt, endTs);
+  }, [registerSink, registerLoopSink, startedAt, persist]);
+
+  // While recording, flush the buffer to localStorage every few seconds so a
+  // tab crash / accidental close doesn't lose the in-flight session. Cleared
+  // on successful save, discard, or reset.
+  useEffect(() => {
+    if (state !== "recording" || startedAt === null) return;
+    const flush = () => {
+      try {
+        const payload: Draft = {
+          source,
+          deviceName,
+          deviceId: deviceId ?? null,
+          startedAt,
+          savedAt: Date.now(),
+          events: bufferRef.current,
+          loopSnapshots: loopBufferRef.current,
+        };
+        window.localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+      } catch {
+        // Quota exceeded — accept the loss silently; capture still survives
+        // the tab's lifetime in memory.
+      }
+    };
+    flush();
+    const iv = setInterval(flush, DRAFT_FLUSH_MS);
+    return () => clearInterval(iv);
+  }, [state, startedAt, source, deviceName, deviceId]);
 
   const reset = useCallback(() => {
     bufferRef.current = [];
+    loopBufferRef.current = [];
     setSize(0);
     setOverflow(false);
     setStartedAt(null);
     setState("idle");
+    clearDraft();
+  }, []);
+
+  const resumeDraft = useCallback(() => {
+    if (!draft) return;
+    setState("saving");
+    void persist(
+      draft.events,
+      draft.loopSnapshots ?? [],
+      draft.startedAt,
+      draft.savedAt,
+      draft.source,
+      draft.deviceName,
+      draft.deviceId
+    );
+  }, [draft, persist]);
+
+  const discardDraft = useCallback(() => {
+    clearDraft();
+    setDraft(null);
   }, []);
 
   const downloadFallbackJSON = () => {
@@ -161,6 +285,41 @@ export function SessionCapturePanel({
 
   return (
     <div className="rounded-xl border bg-card p-4">
+      {draft && state === "idle" && (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="text-xs">
+              <p className="font-medium text-amber-200">
+                Unsaved capture recovered
+              </p>
+              <p className="text-muted-foreground">
+                {draft.events.length} events from{" "}
+                {new Date(draft.startedAt).toLocaleString()} · source{" "}
+                <span className="font-mono">{draft.source}</span>
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={resumeDraft}
+                className="flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/15"
+              >
+                <RotateCcw className="size-3" />
+                Save it
+              </button>
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-card/50 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Trash2 className="size-3" />
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-medium">Session capture</h2>

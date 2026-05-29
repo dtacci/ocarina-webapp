@@ -19,13 +19,23 @@ export default async function CapturesPage() {
             delete what you don&apos;t need.
           </p>
         </div>
-        <Link
-          href="/monitor"
-          className="flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-3" />
-          Back to Monitor
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link
+            href="/captures/explore"
+            className="flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            title="Browse publicly-shared captures across users"
+          >
+            <Share2 className="size-3" />
+            Explore public
+          </Link>
+          <Link
+            href="/monitor"
+            className="flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-3" />
+            Back to Monitor
+          </Link>
+        </div>
       </div>
 
       {captures.length === 0 ? (

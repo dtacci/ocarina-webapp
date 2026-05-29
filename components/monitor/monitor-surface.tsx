@@ -42,9 +42,19 @@ interface Props {
 
 export function MonitorSurface({ mode }: Props) {
   const sinkRef = useRef<((entry: LogEntry) => void) | null>(null);
+  const loopSinkRef = useRef<
+    | ((snapshot: NonNullable<ReturnType<typeof usePiRestTeensy>["loopSnapshot"]>, ts: number) => void)
+    | null
+  >(null);
   const registerSink = useCallback(
     (sink: ((entry: LogEntry) => void) | null) => {
       sinkRef.current = sink;
+    },
+    []
+  );
+  const registerLoopSink = useCallback(
+    (sink: typeof loopSinkRef.current) => {
+      loopSinkRef.current = sink;
     },
     []
   );
@@ -96,12 +106,17 @@ export function MonitorSurface({ mode }: Props) {
       const masterTxt = s.master_length_ms > 0
         ? `${(s.master_length_ms / 1000).toFixed(2)}s`
         : "—";
+      const ts = Date.now();
       signals.pushLogEntry(
         "loop",
         `active=${s.active_track} · ${bpmTxt} · master=${masterTxt} · ${s.tracks
           .map((t) => `${t.id}:${t.state}${t.muted ? "(M)" : ""}`)
-          .join(" ")}`
+          .join(" ")}`,
+        ts
       );
+      // Capture structured snapshot too so a future replay can drive the
+      // LoopStatePanel, not just the event log line.
+      loopSinkRef.current?.(s, ts);
     }
     lastLoopSigRef.current = sig;
   }, [mode.kind, piRest.loopSnapshot, signals]);
@@ -224,6 +239,7 @@ export function MonitorSurface({ mode }: Props) {
 
       <SessionCapturePanel
         registerSink={registerSink}
+        registerLoopSink={registerLoopSink}
         deviceName={
           mode.kind === "realtime"
             ? mode.deviceName

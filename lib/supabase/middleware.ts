@@ -41,7 +41,9 @@ export async function updateSession(request: NextRequest) {
     // /recordings/[id] is public (detail page); /recordings without trailing slash stays protected
     request.nextUrl.pathname.startsWith("/recordings/") ||
     // Publicly-shared monitor captures — token-gated, served outside the dashboard layout
-    request.nextUrl.pathname.startsWith("/captures/share/");
+    request.nextUrl.pathname.startsWith("/captures/share/") ||
+    // Public discovery feed of shared captures
+    request.nextUrl.pathname === "/captures/explore";
 
   if (!user && !isAuthRoute && !isApiRoute && !isEmbedRoute && !isPublicRoute) {
     const url = request.nextUrl.clone();
