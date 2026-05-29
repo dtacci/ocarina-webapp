@@ -6,14 +6,16 @@
  * Client-only — OSMD needs the DOM. The parent loads this through next/dynamic
  * with `{ ssr: false }` so the OSMD bundle never runs server-side.
  *
- * Beyond rendering, it supports:
+ * Beyond rendering:
  *  - `zoom`: re-renders at a scale without reloading the score.
- *  - `playheadSec` + `isPlaying`: drives OSMD's cursor to follow synth playback,
- *    advancing by OSMD's own musical timestamp (robust to ties/rests) and
- *    auto-scrolling the current note into view.
+ *  - `playheadSec` + `isPlaying`: lights the currently-sounding noteheads orange
+ *    by recoloring their live SVG elements (no re-render), advancing via OSMD's
+ *    own musical timestamp so it's robust to ties/rests. Auto-scroll is gentle:
+ *    an *instant* scroll only when the active note leaves the viewport (the old
+ *    per-tick smooth-scroll fought OSMD's followCursor and jittered).
  *
- * All OSMD calls are wrapped defensively so a cursor/zoom hiccup degrades to
- * "no cursor" rather than blanking the score.
+ * All OSMD calls are wrapped defensively so a cursor hiccup degrades to "no
+ * highlight" rather than blanking the score.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -22,15 +24,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export interface NotationCanvasProps {
   musicxml: string;
-  /** Render scale; 1 = default. */
   zoom?: number;
-  /** Synth playback position in seconds, or null when stopped. */
   playheadSec?: number | null;
   isPlaying?: boolean;
-  /** Tempo used to map playhead seconds → score position. */
   tempoBpm?: number;
   className?: string;
 }
+
+const ACTIVE_CLASS = "osmd-note-active";
 
 export default function NotationCanvas({
   musicxml,
@@ -43,8 +44,15 @@ export default function NotationCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const readyRef = useRef(false);
+  const highlightedRef = useRef<Element[]>([]);
+  const lastScrollRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const clearHighlight = () => {
+    for (const el of highlightedRef.current) el.classList.remove(ACTIVE_CLASS);
+    highlightedRef.current = [];
+  };
 
   // Load + render the score whenever the MusicXML changes.
   useEffect(() => {
@@ -59,16 +67,15 @@ export default function NotationCanvas({
         drawingParameters: "compact",
         drawTitle: false,
         drawPartNames: false,
-        followCursor: true,
-        cursorsOptions: [
-          // Standard highlight box, in the app's amber, semi-transparent.
-          { type: 0, color: "#d97706", alpha: 0.28, follow: true },
-        ],
+        followCursor: false,
+        // Cursor exists only to drive GNotesUnderCursor(); kept invisible.
+        cursorsOptions: [{ type: 0, color: "#000000", alpha: 0, follow: false }],
       });
     }
     const osmd = osmdRef.current;
 
     readyRef.current = false;
+    highlightedRef.current = [];
     setLoading(true);
     setError(null);
     const started = performance.now();
@@ -94,15 +101,15 @@ export default function NotationCanvas({
     return () => {
       cancelled = true;
     };
-    // zoom intentionally excluded — handled by its own effect (re-render, no reload).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [musicxml]);
 
-  // Re-render on zoom change (no reload).
+  // Re-render on zoom change (no reload). SVG is rebuilt, so drop stale refs.
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || !readyRef.current) return;
     try {
+      highlightedRef.current = [];
       osmd.zoom = zoom;
       osmd.render();
     } catch {
@@ -110,7 +117,7 @@ export default function NotationCanvas({
     }
   }, [zoom]);
 
-  // Drive the cursor from the synth playhead.
+  // Highlight the sounding notes from the synth playhead.
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || !readyRef.current) return;
@@ -118,30 +125,48 @@ export default function NotationCanvas({
       const cursor = osmd.cursor;
       if (!cursor) return;
 
-      if (playheadSec == null || !isPlaying) {
+      if (playheadSec == null) {
+        clearHighlight();
         cursor.reset();
-        cursor.hide();
         return;
       }
 
-      cursor.show();
-      // Position in whole notes: seconds → quarter-beats → whole notes.
+      // Advance the (invisible) cursor to the playhead, in whole notes.
       const targetWhole = ((playheadSec * tempoBpm) / 60) / 4;
       const current = () => cursor.iterator?.currentTimeStamp?.RealValue ?? 0;
-      // Seeked backwards → restart from the top.
       if (current() > targetWhole + 1e-6) cursor.reset();
       let guard = 0;
-      while (
-        !cursor.iterator?.EndReached &&
-        current() < targetWhole &&
-        guard++ < 10000
-      ) {
+      while (!cursor.iterator?.EndReached && current() < targetWhole && guard++ < 10000) {
         cursor.next();
       }
-      // Keep the active note in view.
-      cursor.cursorElement?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+
+      // Recolor the notes under the cursor; revert the previous set.
+      const gnotes = cursor.GNotesUnderCursor?.() ?? [];
+      const els: Element[] = [];
+      for (const gn of gnotes) {
+        // getSVGGElement lives on the concrete VexFlow subclass, not the base type.
+        const el = (gn as unknown as {
+          getSVGGElement?: () => SVGGElement | null;
+        }).getSVGGElement?.();
+        if (el) els.push(el);
+      }
+      clearHighlight();
+      for (const el of els) el.classList.add(ACTIVE_CLASS);
+      highlightedRef.current = els;
+
+      // Gentle follow: instant scroll only when the active note is off-screen.
+      if (isPlaying && els[0]) {
+        const now = performance.now();
+        const rect = els[0].getBoundingClientRect();
+        const offTop = rect.top < 140;
+        const offBottom = rect.bottom > window.innerHeight - 80;
+        if ((offTop || offBottom) && now - lastScrollRef.current > 600) {
+          els[0].scrollIntoView({ block: "center", behavior: "auto" });
+          lastScrollRef.current = now;
+        }
+      }
     } catch {
-      /* cursor is best-effort */
+      /* highlight is best-effort */
     }
   }, [playheadSec, isPlaying, tempoBpm]);
 
@@ -155,6 +180,7 @@ export default function NotationCanvas({
       }
       osmdRef.current = null;
       readyRef.current = false;
+      highlightedRef.current = [];
     };
   }, []);
 

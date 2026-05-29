@@ -93,6 +93,12 @@ const COMPONENT_CSS = `
     0 10px 30px -10px rgba(0, 0, 0, 0.55),
     inset 0 0 0 1px rgba(120, 90, 40, 0.08);
 }
+/* The currently-sounding notes flash amber during synth playback. */
+.osmd-note-active, .osmd-note-active * {
+  fill: #ea7a1c !important;
+  stroke: #ea7a1c !important;
+  transition: fill 60ms ease, stroke 60ms ease;
+}
 @media print {
   body * { visibility: hidden; }
   #notation-print, #notation-print * { visibility: visible; }
@@ -157,6 +163,16 @@ export function TranscriptionDetail({
   const exportBase = `/api/transcription/${recording.id}/export`;
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The synth emits time updates at ~60fps; throttle to ~15fps so we don't
+  // re-render (and re-highlight) every animation frame.
+  const playheadThrottleRef = useRef(0);
+  function handlePlayhead(t: number) {
+    const now = performance.now();
+    if (t > 0 && now - playheadThrottleRef.current < 60) return;
+    playheadThrottleRef.current = now;
+    setPlayheadSec(t);
+  }
 
   async function saveTitle() {
     const next = titleDraft.trim() || "Untitled transcription";
@@ -390,12 +406,9 @@ export function TranscriptionDetail({
             <ToneMidiPlayer
               midiBlobUrl={`${exportBase}?format=midi`}
               duration={recording.duration_sec}
-              onTimeUpdate={(t) => setPlayheadSec(t)}
+              onTimeUpdate={handlePlayhead}
               onBpmChange={() => {}}
-              onStateChange={(playing) => {
-                setIsPlaying(playing);
-                if (!playing) setPlayheadSec((p) => p); // keep position on pause
-              }}
+              onStateChange={(playing) => setIsPlaying(playing)}
             />
           </div>
         ) : null}
