@@ -314,6 +314,8 @@ export const monitorCaptures = pgTable("monitor_captures", {
   isPublic: boolean("is_public").notNull().default(false),
   /** URL-safe random string. Unique when present (partial unique index). */
   shareToken: text("share_token"),
+  /** Inline activity-heatmap SVG persisted to Blob at save time. */
+  thumbnailUrl: text("thumbnail_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

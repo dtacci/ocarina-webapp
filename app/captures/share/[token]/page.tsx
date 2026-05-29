@@ -7,6 +7,7 @@ import { listPublicCommentsByToken } from "@/lib/db/queries/capture-comments";
 import { createClient } from "@/lib/supabase/server";
 import { ReplaySurface } from "@/components/monitor/replay-surface";
 import { CaptureComments } from "@/components/monitor/capture-comments";
+import { SafeMarkdown } from "@/components/monitor/safe-markdown";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -71,9 +72,9 @@ export default async function SharedCapturePage({ params }: PageProps) {
 
       {capture.notes && (
         <div className="rounded-xl border bg-card/60 p-3">
-          <p className="text-xs whitespace-pre-wrap text-muted-foreground/90 italic">
+          <SafeMarkdown className="text-xs text-muted-foreground/90 italic">
             {capture.notes}
-          </p>
+          </SafeMarkdown>
         </div>
       )}
 

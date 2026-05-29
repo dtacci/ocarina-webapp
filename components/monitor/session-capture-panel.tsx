@@ -17,6 +17,7 @@ import {
 import type { LogEntry } from "@/components/diagnostics/live-event-log";
 import type { MonitorCaptureRow } from "@/lib/db/queries/monitor-captures";
 import type { LoopSnapshot } from "@/lib/ocarina-api";
+import { buildCaptureThumbnailSvg } from "@/lib/monitor/capture-thumbnail";
 
 const MAX_CAPTURE = 50_000;
 const DRAFT_KEY = "ocarina-monitor-capture-draft-v1";
@@ -148,6 +149,7 @@ export function SessionCapturePanel({
       const useDeviceName = explicitDeviceName ?? deviceName;
       const useDeviceId = explicitDeviceId ?? deviceId ?? null;
       const name = defaultName(useDeviceName, startTs);
+      const { svg: thumbnailSvg } = buildCaptureThumbnailSvg(events);
       try {
         const res = await fetch("/api/monitor/captures", {
           method: "POST",
@@ -161,6 +163,7 @@ export function SessionCapturePanel({
             endedAt: endTs,
             events,
             loopSnapshots,
+            thumbnailSvg,
           }),
         });
         if (!res.ok) {

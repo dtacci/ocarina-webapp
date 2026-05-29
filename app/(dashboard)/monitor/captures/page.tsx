@@ -5,6 +5,8 @@ import { listMyCaptures } from "@/lib/db/queries/monitor-captures";
 import { DeleteCaptureButton } from "@/components/monitor/delete-capture-button";
 import { MarkCommentsSeen } from "@/components/monitor/mark-comments-seen";
 import { CaptureSearchForm } from "@/components/monitor/capture-search-form";
+import { CaptureThumbnail } from "@/components/monitor/capture-thumbnail";
+import { SafeMarkdown } from "@/components/monitor/safe-markdown";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +102,12 @@ export default async function CapturesPage({ searchParams }: PageProps) {
               key={c.id}
               className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"
             >
-              <Link href={`/monitor/captures/${c.id}`} className="min-w-0 flex-1 hover:underline">
+              <Link
+                href={`/monitor/captures/${c.id}`}
+                className="flex min-w-0 flex-1 items-center gap-3 hover:underline"
+              >
+                <CaptureThumbnail url={c.thumbnail_url} alt={`Activity heatmap for ${c.name}`} />
+                <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium">{c.name}</span>
                   {c.is_public && (
@@ -147,10 +154,11 @@ export default async function CapturesPage({ searchParams }: PageProps) {
                   )}
                 </div>
                 {c.notes && (
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 whitespace-pre-wrap">
+                  <SafeMarkdown className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 block">
                     {c.notes}
-                  </p>
+                  </SafeMarkdown>
                 )}
+                </div>
               </Link>
               <Link
                 href={`/monitor/captures/${c.id}`}

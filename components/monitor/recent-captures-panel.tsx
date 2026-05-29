@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowRight, Download, FolderArchive, Loader2, Play } from "lucide-react";
 
 import type { MonitorCaptureRow } from "@/lib/db/queries/monitor-captures";
+import { CaptureThumbnail } from "@/components/monitor/capture-thumbnail";
+import { SafeMarkdown } from "@/components/monitor/safe-markdown";
 
 interface Props {
   /** Bump this from the parent after a successful save to refetch. */
@@ -77,8 +79,14 @@ export function RecentCapturesPanel({ refreshNonce }: Props) {
             >
               <Link
                 href={`/monitor/captures/${c.id}`}
-                className="min-w-0 flex-1 hover:underline"
+                className="flex min-w-0 flex-1 items-center gap-2.5 hover:underline"
               >
+                <CaptureThumbnail
+                  url={c.thumbnail_url}
+                  alt={`Activity heatmap for ${c.name}`}
+                  className="h-8 w-11"
+                />
+                <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{c.name}</div>
                 <div className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] text-muted-foreground">
                   <span>{relative(c.created_at)}</span>
@@ -90,10 +98,11 @@ export function RecentCapturesPanel({ refreshNonce }: Props) {
                   )}
                 </div>
                 {c.notes && (
-                  <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground/80 italic">
+                  <SafeMarkdown className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground/80 italic block">
                     {c.notes}
-                  </p>
+                  </SafeMarkdown>
                 )}
+                </div>
               </Link>
               <Link
                 href={`/monitor/captures/${c.id}`}

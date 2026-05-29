@@ -2,6 +2,8 @@ import Link from "next/link";
 import { FolderArchive, Play, Waves, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { listPublicCaptures } from "@/lib/db/queries/monitor-captures";
+import { SafeMarkdown } from "@/components/monitor/safe-markdown";
+import { CaptureThumbnail } from "@/components/monitor/capture-thumbnail";
 
 const PAGE_SIZE = 30;
 
@@ -66,6 +68,7 @@ export default async function CapturesExplorePage({ searchParams }: PageProps) {
                 href={`/captures/share/${c.share_token}`}
                 className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3 hover:border-foreground/40"
               >
+                <CaptureThumbnail url={c.thumbnail_url} alt={`Activity heatmap for ${c.name}`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{c.name}</div>
                   <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
@@ -92,9 +95,9 @@ export default async function CapturesExplorePage({ searchParams }: PageProps) {
                     )}
                   </div>
                   {c.notes && (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 italic whitespace-pre-wrap">
+                    <SafeMarkdown className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 italic block">
                       {c.notes}
-                    </p>
+                    </SafeMarkdown>
                   )}
                 </div>
                 <span className="flex items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-300">

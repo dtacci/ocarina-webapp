@@ -51,6 +51,8 @@ const postSchema = z.object({
   endedAt: z.number(),
   events: z.array(logEntrySchema).max(MAX_EVENTS),
   loopSnapshots: z.array(loopSnapshotSchema).max(MAX_EVENTS).optional(),
+  /** Pre-rendered activity-heatmap SVG uploaded alongside the JSON payload. */
+  thumbnailSvg: z.string().max(16_000).optional(),
 });
 
 export async function GET() {
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, source, deviceId, deviceName, startedAt, endedAt, events, loopSnapshots } =
+  const { name, source, deviceId, deviceName, startedAt, endedAt, events, loopSnapshots, thumbnailSvg } =
     parsed.data;
 
   // Denormalize counts for the list view — saves fetching the blob to render
@@ -122,12 +124,27 @@ export async function POST(request: Request) {
   };
 
   let blob;
+  let thumbnailUrl: string | null = null;
   try {
     blob = await put(blobPath, JSON.stringify(payload), {
       access: "public",
       contentType: "application/json",
       addRandomSuffix: true,
     });
+    if (thumbnailSvg && thumbnailSvg.length > 0) {
+      const thumbPath = `${user.id}/monitor-captures/${Date.now()}-${slug(name)}.svg`;
+      try {
+        const thumb = await put(thumbPath, thumbnailSvg, {
+          access: "public",
+          contentType: "image/svg+xml",
+          addRandomSuffix: true,
+        });
+        thumbnailUrl = thumb.url;
+      } catch {
+        // Thumbnail is decorative — failure here doesn't block the capture.
+        // Row just gets a null thumbnail_url and the UI shows the icon fallback.
+      }
+    }
   } catch (err) {
     return Response.json(
       { error: "Blob upload failed", detail: String(err) },
@@ -154,18 +171,23 @@ export async function POST(request: Request) {
       heartbeat_count: heartbeats,
       loop_event_count: loops,
       misc_event_count: misc,
+      thumbnail_url: thumbnailUrl,
     })
     .select()
     .single();
 
   if (insertErr || !row) {
-    // Try to clean up the orphan blob so we don't accrue garbage.
+    // Try to clean up the orphan blobs so we don't accrue garbage.
     try {
       const { del } = await import("@vercel/blob");
-      await del(blob.url);
+      const orphans = [blob.url, ...(thumbnailUrl ? [thumbnailUrl] : [])];
+      await Promise.all(orphans.map((u) => del(u)));
     } catch {
-      // Best-effort cleanup; log via console for triage.
-      console.warn("orphan blob left after failed insert:", blob.url);
+      console.warn(
+        "orphan blob(s) left after failed insert:",
+        blob.url,
+        thumbnailUrl ?? "(no thumbnail)"
+      );
     }
     return Response.json(
       { error: "Insert failed", detail: insertErr?.message ?? "no row returned" },

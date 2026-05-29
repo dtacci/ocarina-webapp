@@ -23,6 +23,7 @@ export interface MonitorCaptureRow {
   notes: string | null;
   is_public: boolean;
   share_token: string | null;
+  thumbnail_url: string | null;
   created_at: string;
 }
 

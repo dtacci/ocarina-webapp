@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MessageSquare, Loader2, Send, Trash2, AlertTriangle } from "lucide-react";
 
 import type { CaptureCommentRow } from "@/lib/db/queries/capture-comments";
+import { SafeMarkdown } from "@/components/monitor/safe-markdown";
 
 interface Props {
   captureId: string;
@@ -96,9 +97,9 @@ export function CaptureComments({
                     </span>
                     <span>{relative(c.created_at)}</span>
                   </div>
-                  <p className="whitespace-pre-wrap text-sm text-foreground/90">
+                  <SafeMarkdown className="text-sm text-foreground/90">
                     {c.body}
-                  </p>
+                  </SafeMarkdown>
                 </div>
                 {canDelete && (
                   <button
@@ -128,7 +129,7 @@ export function CaptureComments({
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[10px] text-muted-foreground/70">
-              {draft.length}/2000
+              {draft.length}/2000 · **bold** · *italic* · `code` · [link](url)
             </span>
             <button
               type="submit"

@@ -12,6 +12,7 @@ import {
   getCapturesCount,
 } from "@/lib/db/queries/monitor-captures";
 import { listRecentCommentsOnMyCaptures } from "@/lib/db/queries/capture-comments";
+import { SafeMarkdown } from "@/components/monitor/safe-markdown";
 import { ActivityHeatmap } from "@/components/activity/activity-heatmap";
 import { SessionCard } from "@/components/activity/session-card";
 import { StatsCards } from "@/components/activity/stats-cards";
@@ -98,9 +99,9 @@ export default async function ActivityPage() {
                     )}
                   </div>
                   {c.notes && (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 italic whitespace-pre-wrap">
+                    <SafeMarkdown className="mt-1 line-clamp-2 text-xs text-muted-foreground/90 italic block">
                       {c.notes}
-                    </p>
+                    </SafeMarkdown>
                   )}
                 </Link>
                 <Link

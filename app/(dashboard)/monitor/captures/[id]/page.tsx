@@ -9,6 +9,7 @@ import { ReplaySurface } from "@/components/monitor/replay-surface";
 import { CaptureNotesEditor } from "@/components/monitor/capture-notes-editor";
 import { CaptureShareCard } from "@/components/monitor/capture-share-card";
 import { CaptureComments } from "@/components/monitor/capture-comments";
+import { CaptureThumbnail } from "@/components/monitor/capture-thumbnail";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -28,7 +29,13 @@ export default async function CapturePage({ params }: PageProps) {
   return (
     <div className="space-y-4 max-w-6xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="flex min-w-0 items-center gap-3">
+          <CaptureThumbnail
+            url={capture.thumbnail_url}
+            alt={`Activity heatmap for ${capture.name}`}
+            className="h-16 w-[5.6rem]"
+          />
+          <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">{capture.name}</h1>
           <p className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground text-sm">
             <span>Saved capture · {capture.event_count} events ·{" "}
@@ -47,6 +54,7 @@ export default async function CapturePage({ params }: PageProps) {
               <span className="text-amber-300/80">{capture.fx_event_count} fx</span>
             )}
           </p>
+          </div>
         </div>
         <div className="flex items-center gap-1.5">
           <a

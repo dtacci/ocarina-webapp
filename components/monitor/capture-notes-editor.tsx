@@ -78,7 +78,7 @@ export function CaptureNotesEditor({ captureId, initialNotes }: Props) {
         className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
       />
       <p className="mt-1.5 text-[10px] text-muted-foreground/70">
-        Plain text · saves automatically · max 8 000 chars
+        Saves automatically · **bold** · *italic* · `code` · [link](url) · max 8 000 chars
       </p>
     </div>
   );

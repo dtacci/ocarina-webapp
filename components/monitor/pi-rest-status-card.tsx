@@ -112,6 +112,7 @@ export function PiRestStatusCard({ piRest }: Props) {
               {version.git_dirty ? "*" : ""} · firmware {version.firmware.build_date}
             </p>
           )}
+          {version && <VersionMismatchHint piSha={version.git_sha} />}
           {teensyConnected === false && (
             <p className="mt-1 text-xs text-red-300">
               Teensy disconnected — note / heartbeat / loop events have
@@ -124,6 +125,25 @@ export function PiRestStatusCard({ piRest }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Compares the Vercel-injected webapp git_sha to the Pi's reported git_sha.
+ * Both being known + different = mismatch hint. Doesn't try to score severity;
+ * if the user sees this and it bothers them they can redeploy or reflash.
+ */
+function VersionMismatchHint({ piSha }: { piSha: string }) {
+  const webappSha = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? null;
+  if (!webappSha) return null;
+  if (webappSha === piSha) return null;
+  return (
+    <p
+      className="mt-0.5 font-mono text-[10px] text-amber-400/80"
+      title={`Webapp ${webappSha.slice(0, 7)} · Pi ${piSha.slice(0, 7)}`}
+    >
+      ⚠ version mismatch · webapp {webappSha.slice(0, 7)} ≠ pi {piSha.slice(0, 7)}
+    </p>
   );
 }
 

@@ -93,10 +93,10 @@ export async function DELETE(_request: Request, { params }: Params) {
 
   const { id } = await params;
 
-  // Fetch first so we know which blob to clean up after the row delete.
+  // Fetch first so we know which blobs to clean up after the row delete.
   const { data: row } = await supabase
     .from("monitor_captures")
-    .select("blob_url")
+    .select("blob_url, thumbnail_url")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -113,13 +113,17 @@ export async function DELETE(_request: Request, { params }: Params) {
     return Response.json({ error: "Delete failed" }, { status: 500 });
   }
 
-  // Best-effort blob cleanup. If this fails the row is already gone and the
-  // user is unblocked; orphan blob is a separate sweep problem.
-  try {
-    await del(row.blob_url);
-  } catch (err) {
-    console.warn("blob delete failed for capture", id, err);
-  }
+  // Best-effort blob cleanup — JSON payload + thumbnail SVG. If either fails
+  // the row is already gone and the user is unblocked; orphan blob is a
+  // separate sweep problem.
+  const orphans = [row.blob_url, row.thumbnail_url].filter(
+    (u): u is string => typeof u === "string" && u.length > 0
+  );
+  await Promise.all(
+    orphans.map(async (u) => {
+      try { await del(u); } catch (err) { console.warn("blob delete failed", id, u, err); }
+    })
+  );
 
   return Response.json({ ok: true });
 }
