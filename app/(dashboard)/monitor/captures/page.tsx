@@ -4,11 +4,23 @@ import { ArrowLeft, Download, FolderArchive, Play, Share2 } from "lucide-react";
 import { listMyCaptures } from "@/lib/db/queries/monitor-captures";
 import { DeleteCaptureButton } from "@/components/monitor/delete-capture-button";
 import { MarkCommentsSeen } from "@/components/monitor/mark-comments-seen";
+import { CaptureSearchForm } from "@/components/monitor/capture-search-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function CapturesPage() {
-  const captures = await listMyCaptures();
+interface PageProps {
+  searchParams: Promise<{ q?: string; source?: string }>;
+}
+
+export default async function CapturesPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+  const source =
+    sp.source === "pi_rest" || sp.source === "realtime" || sp.source === "webserial"
+      ? sp.source
+      : undefined;
+  const search = sp.q?.trim() || undefined;
+  const hasFilter = Boolean(search || source);
+  const captures = await listMyCaptures({ limit: 200, search, source });
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -40,25 +52,47 @@ export default async function CapturesPage() {
         </div>
       </div>
 
+      <CaptureSearchForm />
+
       {captures.length === 0 ? (
-        <div className="mx-auto max-w-xl space-y-4 py-16 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-full border bg-card">
-            <FolderArchive className="size-6 text-muted-foreground" />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-medium">No captures yet</h2>
-            <p className="text-sm text-muted-foreground">
-              Open Monitor, click Start, do the thing, click Stop. The capture
-              shows up here.
+        hasFilter ? (
+          <div className="rounded-xl border border-dashed py-12 text-center">
+            <FolderArchive className="mx-auto mb-2 size-8 text-muted-foreground/60" />
+            <p className="text-sm font-medium">No matches</p>
+            <p className="text-xs text-muted-foreground">
+              Nothing in your library matches{" "}
+              {search && (
+                <span className="font-mono text-foreground/80">
+                  &quot;{search}&quot;
+                </span>
+              )}
+              {search && source && " · "}
+              {source && (
+                <span className="font-mono text-foreground/80">{source}</span>
+              )}
+              .
             </p>
           </div>
-          <Link
-            href="/monitor"
-            className="inline-flex items-center rounded-md border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Open Monitor →
-          </Link>
-        </div>
+        ) : (
+          <div className="mx-auto max-w-xl space-y-4 py-16 text-center">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full border bg-card">
+              <FolderArchive className="size-6 text-muted-foreground" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-lg font-medium">No captures yet</h2>
+              <p className="text-sm text-muted-foreground">
+                Open Monitor, click Start, do the thing, click Stop. The capture
+                shows up here.
+              </p>
+            </div>
+            <Link
+              href="/monitor"
+              className="inline-flex items-center rounded-md border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Open Monitor →
+            </Link>
+          </div>
+        )
       ) : (
         <div className="space-y-2">
           {captures.map((c) => (

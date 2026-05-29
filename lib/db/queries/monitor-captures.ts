@@ -26,20 +26,46 @@ export interface MonitorCaptureRow {
   created_at: string;
 }
 
-/** Lists the caller's captures, newest first. */
-export async function listMyCaptures(limit = 50): Promise<MonitorCaptureRow[]> {
+export interface ListMyCapturesOptions {
+  limit?: number;
+  search?: string;
+  source?: "pi_rest" | "realtime" | "webserial";
+}
+
+/** Lists the caller's captures, newest first. Optional name/notes filter. */
+export async function listMyCaptures(
+  limitOrOpts: number | ListMyCapturesOptions = 50
+): Promise<MonitorCaptureRow[]> {
+  const opts: ListMyCapturesOptions =
+    typeof limitOrOpts === "number" ? { limit: limitOrOpts } : limitOrOpts;
+  const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("monitor_captures")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  if (opts.source) q = q.eq("source", opts.source);
+  if (opts.search && opts.search.trim().length > 0) {
+    // ILIKE on name OR notes — escape the user's input to defuse % / _.
+    const escaped = opts.search
+      .trim()
+      .replace(/\\/g, "\\\\")
+      .replace(/%/g, "\\%")
+      .replace(/_/g, "\\_");
+    const term = `%${escaped}%`;
+    q = q.or(`name.ilike.${term},notes.ilike.${term}`);
+  }
+
+  const { data, error } = await q;
 
   if (error) {
     console.error("listMyCaptures", error);

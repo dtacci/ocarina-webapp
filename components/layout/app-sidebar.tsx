@@ -48,6 +48,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { isEnabled, type FeatureFlag } from "@/lib/features";
 import { CapturesUnreadBadge } from "@/components/layout/captures-unread-badge";
+import { LooperActiveBadge } from "@/components/layout/looper-active-badge";
 
 type NavItem = {
   title: string;
@@ -83,7 +84,7 @@ const navTools: NavItem[] = [
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
   { title: "Config", url: "/config", icon: Settings, feature: "configManager" as const },
   { title: "Configurator", url: "/configurator", icon: Sliders, feature: "buttonConfigurator" as const },
-  { title: "Looper", url: "/looper-dashboard", icon: Repeat, feature: "looperDashboard" as const },
+  { title: "Looper", url: "/looper-dashboard", icon: Repeat, feature: "looperDashboard" as const, badge: LooperActiveBadge },
   { title: "Analytics", url: "/analytics", icon: BarChart2, feature: "analyticsDashboard" as const },
 ];
 
