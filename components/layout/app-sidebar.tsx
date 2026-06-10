@@ -7,6 +7,7 @@ import {
   Music,
   Layers,
   Disc3,
+  Headphones,
   Activity,
   MonitorSmartphone,
   Settings,
@@ -81,6 +82,7 @@ const navMain: NavItem[] = [
 
 const navTools: NavItem[] = [
   { title: "Looper", url: "/looper", icon: AudioLines, feature: "looperDA" as const },
+  { title: "DJ Decks", url: "/dj", icon: Headphones, feature: "djMode" as const },
   { title: "Drums", url: "/looper/drums", icon: Drum, feature: "drumPatternEditor" as const },
   { title: "Sample Editor", url: "/sample-editor", icon: Scissors, feature: "sampleEditor" as const },
   { title: "Devices", url: "/devices", icon: MonitorSmartphone, feature: "deviceRegistration" as const },
