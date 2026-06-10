@@ -13,7 +13,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ArrowLeft,
   Music4,
@@ -32,6 +32,8 @@ import {
   Globe,
 } from "lucide-react";
 import type { RecordingRow } from "@/lib/db/queries/recordings";
+import type { TonePlayerApi } from "@/components/karaoke/tone-midi-player";
+import type { NoteClickInfo } from "@/components/transcription/notation-canvas";
 import { derive } from "@/lib/transcription/derive";
 import { paramsHash } from "@/lib/transcription/params-hash";
 import {
@@ -115,6 +117,14 @@ const COMPONENT_CSS = `
   fill: #ea7a1c !important;
   stroke: #ea7a1c !important;
   transition: fill 60ms ease, stroke 60ms ease;
+}
+/* Notes are clickable (seek + preview); show it on hover. */
+.notation-paper .vf-stavenote {
+  cursor: pointer;
+}
+.notation-paper .vf-stavenote:hover :is(path, rect) {
+  fill: #b45309;
+  stroke: #b45309;
 }
 @media print {
   body * { visibility: hidden; }
@@ -221,6 +231,21 @@ export function TranscriptionDetail({
     if (t > 0 && now - playheadThrottleRef.current < 60) return;
     playheadThrottleRef.current = now;
     setPlayheadSec(t);
+  }
+
+  // Click-a-note → seek the synth there (and highlight immediately). When
+  // paused, also sound the clicked pitch so you can audition single notes.
+  const playerApiRef = useRef<TonePlayerApi | null>(null);
+  const registerPlayerApi = useCallback((api: TonePlayerApi | null) => {
+    playerApiRef.current = api;
+  }, []);
+  function handleNoteClick({ seconds, midi, durationSec }: NoteClickInfo) {
+    playerApiRef.current?.seekTo(seconds);
+    playheadThrottleRef.current = 0;
+    setPlayheadSec(seconds);
+    if (!isPlaying && midi != null) {
+      playerApiRef.current?.previewNote(midi, durationSec);
+    }
   }
 
   async function saveTitle() {
@@ -474,7 +499,11 @@ export function TranscriptionDetail({
             onTimeUpdate={handlePlayhead}
             onBpmChange={() => {}}
             onStateChange={(playing) => setIsPlaying(playing)}
+            registerApi={registerPlayerApi}
           />
+          <p className="px-2 pb-1 pt-1.5 text-xs text-muted-foreground">
+            Click any note in the score to hear it and play from there.
+          </p>
         </div>
 
         {canEdit && shareOpen ? (
@@ -570,6 +599,7 @@ export function TranscriptionDetail({
                     playheadSec={playheadSec}
                     isPlaying={isPlaying}
                     tempoBpm={params.tempo_bpm * speed}
+                    onNoteClick={handleNoteClick}
                   />
                 </div>
               </div>

@@ -2,26 +2,40 @@
 
 Status as of the Phase-1 build. The core feature is live and working: device/dev
 ingest → derivation → OSMD notation, with interpretation controls, render cache,
-synth playback (flash-highlighted, auto-scroll), zoom, transpose, inline title,
-share links, confidence badge + faint low-confidence notes, rename/delete in the
-browse list, MusicXML/MIDI export, and print.
+synth playback (flash-highlighted, auto-scroll), click-a-note to seek/preview,
+zoom, transpose, inline title, share links, confidence badge + faint
+low-confidence notes, rename/delete in the browse list, MusicXML/MIDI export,
+and print.
 
 Reference design doc: `~/Documents/ideas/digital_ocarina/ocarina-transcription-plan.md`.
+
+There is now a headless-browser test for the notation player —
+`node scripts/verify-notation-playback.mjs` (see its header for setup). Run it
+after touching `notation-canvas`, `tone-midi-player`, or `transcription-detail`.
+
+---
+
+## Resolved (verified in a real browser via the script above)
+
+- **Click-a-note-to-hear — works now.** Clicking any note seeks the synth to
+  that note (highlight + timeline jump, mid-playback too) and previews its
+  pitch when paused. What was actually wrong with the blind attempts: the
+  `.vf-notehead`/`.vf-stavenote` classes DO exist and are clickable
+  (`pointer-events="bounding-box"`), but (a) the page has ~16 `<svg>`s — the
+  lucide toolbar icons — so unscoped `querySelector("svg")` grabs the wrong
+  one (the score is `#osmdSvgPage1`), (b) OSMD's *internal* layout boxes are
+  degenerate (the `width not > 0` warning) so hit-testing must use live DOM
+  `getBoundingClientRect`, and (c) per-element listeners die whenever OSMD
+  re-renders (zoom/autoResize). The fix in `notation-canvas.tsx`: one cursor
+  sweep per render builds a step map (timestamp → live SVG els → pitch), one
+  delegated click listener on the container, staleness detected via
+  `el.isConnected` and the map rebuilt on demand. The synth side exposes
+  `seekTo`/`previewNote` through a `registerApi` callback (refs don't pass
+  through `next/dynamic`).
 
 ---
 
 ## Known issues / needs eyes-on a real render
-
-These need someone to inspect the rendered OSMD output in a browser (the agent
-built them blind and couldn't verify). Fastest path to fix: a short screen
-recording with the console open, or paste the relevant console line.
-
-- **Click-a-note-to-hear — removed.** Multiple approaches failed to register
-  clicks (`getSVGGElement` wrapper, bounding-box hit-test, per-note listeners,
-  `.vf-notehead` DOM pairing). Likely OSMD's SVG structure / class names differ
-  from what was tried, compounded by the degenerate layout boxes (see below).
-  To finish: open the score, inspect a notehead's actual SVG element/class, and
-  wire listeners to that. The pitch source (`note.Pitch.Frequency`) is known-good.
 
 - **Glissando not rendering.** `musicxml-gen.ts` emits valid paired
   `<glissando type="start|stop">`, but no wavy line appears. Suspect OSMD's
@@ -29,10 +43,11 @@ recording with the console open, or paste the relevant console line.
   rendering, or the markup needs `<slide>` instead. Low priority.
 
 - **OSMD `SkyBottomLineBatchCalculatorBackend: width not > 0 in measure N`.**
-  Recurring console warning during render — OSMD computes degenerate measure
-  widths. The score still renders, but this likely underlies the click/geometry
-  problems above. Worth investigating (container width at render time? compact
-  mode? OSMD version?).
+  Recurring console warning during render — OSMD computes degenerate *internal*
+  measure widths. Confirmed harmless to the rendered geometry (the live SVG
+  rects are correct, which is why click hit-testing works); it's console noise.
+  If it ever matters: suspects are container width at render time, compact
+  mode, or OSMD version.
 
 - **PWA `manifest.webmanifest` syntax error** (`Line 1, column 1`). Pre-existing
   and unrelated to transcription, but it shows in the console on every page —

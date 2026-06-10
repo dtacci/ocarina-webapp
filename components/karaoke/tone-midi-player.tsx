@@ -10,6 +10,18 @@ import { useAudioPlayerStore } from "@/lib/stores/audio-player";
 
 type PlayerState = "loading" | "ready" | "playing" | "paused" | "error";
 
+/**
+ * Imperative controls for parents (e.g. click-a-note-to-hear in the
+ * transcription view). Handed out via the `registerApi` callback prop rather
+ * than a ref because `next/dynamic` doesn't forward refs.
+ */
+export interface TonePlayerApi {
+  /** Jump the transport to `seconds` (playback-rate-adjusted timeline). */
+  seekTo: (seconds: number) => void;
+  /** Sound a single pitch through the player's synth (respects Key offset). */
+  previewNote: (midi: number, durationSec?: number) => void;
+}
+
 interface Props {
   midiBlobUrl: string;
   duration: number;
@@ -22,6 +34,8 @@ interface Props {
    * passes nothing → 1 → identical to before.
    */
   playbackRate?: number;
+  /** Called with the imperative API once mounted (and null on unmount). */
+  registerApi?: (api: TonePlayerApi | null) => void;
 }
 
 export default function ToneMidiPlayer({
@@ -31,6 +45,7 @@ export default function ToneMidiPlayer({
   onBpmChange,
   onStateChange,
   playbackRate = 1,
+  registerApi,
 }: Props) {
   const [state, setState] = useState<PlayerState>("loading");
   const [currentTime, setCurrentTime] = useState(0);
@@ -47,6 +62,43 @@ export default function ToneMidiPlayer({
 
   // Keep pitch ref in sync for live updates
   useEffect(() => { pitchRef.current = pitchOffset; }, [pitchOffset]);
+
+  // Total duration as a ref so the imperative API can clamp without re-binding.
+  const totalDurationRef = useRef(totalDuration);
+  useEffect(() => { totalDurationRef.current = totalDuration; }, [totalDuration]);
+
+  // Hand the imperative API to the parent (registerApi should be stable —
+  // wrap it in useCallback at the call site).
+  useEffect(() => {
+    if (!registerApi) return;
+    registerApi({
+      seekTo: (seconds: number) => {
+        const t = Math.max(0, Math.min(seconds, totalDurationRef.current || seconds));
+        Tone.getTransport().seconds = t;
+        setCurrentTime(t);
+        onTimeUpdate(t);
+      },
+      previewNote: (midi: number, durationSec = 0.4) => {
+        // A click is a user gesture, so Tone.start() resolves immediately.
+        void Tone.start().then(() => {
+          const synth = synthRef.current;
+          if (!synth) return;
+          const note = Tone.Frequency(
+            Math.max(21, Math.min(108, midi + pitchRef.current)),
+            "midi",
+          ).toNote();
+          synth.triggerAttackRelease(
+            note,
+            Math.max(0.15, Math.min(durationSec, 1.5)),
+            undefined,
+            0.85,
+          );
+        });
+      },
+    });
+    return () => registerApi(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerApi]);
 
   // Load and parse MIDI
   useEffect(() => {
