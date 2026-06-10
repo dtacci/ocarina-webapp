@@ -15,7 +15,7 @@ after touching `notation-canvas`, `tone-midi-player`, or `transcription-detail`.
 
 ---
 
-## Resolved (verified in a real browser via the script above)
+## Resolved (verified in a real browser via the script above, or unit-tested)
 
 - **Click-a-note-to-hear — works now.** Clicking any note seeks the synth to
   that note (highlight + timeline jump, mid-playback too) and previews its
@@ -35,12 +35,29 @@ after touching `notation-canvas`, `tone-midi-player`, or `transcription-detail`.
 
 ---
 
-## Known issues / needs eyes-on a real render
+- **Glissando — fixed.** `musicxml-gen.ts` now emits `<slide>` instead of
+  `<glissando>`. Verified against OSMD 1.9.9 directly: its parser only forwards
+  `<glissando>` to the slur reader when the note *also* carries a slur/slide,
+  so bare glissandi vanish; `<slide>` renders standalone (a `vf-line` group),
+  including in compact mode (which was NOT the culprit). Existing cached
+  renders predate the change — re-derive (tweak any control) to see lines.
 
-- **Glissando not rendering.** `musicxml-gen.ts` emits valid paired
-  `<glissando type="start|stop">`, but no wavy line appears. Suspect OSMD's
-  `drawingParameters: "compact"` (in `notation-canvas.tsx`) disables slur/gliss
-  rendering, or the markup needs `<slide>` instead. Low priority.
+- **Keyboard accessibility.** Notes are focusable (`tabindex`/`role=button`
+  with pitch-name labels); Tab onto the score, ←/→ moves between notes, Enter
+  plays from there. Covered by the verify script.
+
+- **PWA `manifest.webmanifest` fixed.** The auth proxy was 307-redirecting the
+  manifest fetch to `/login`, so browsers parsed login HTML as JSON. Excluded
+  in `proxy.ts` (with robots.txt/sitemap.xml).
+
+- **Supabase keep-alive.** Free-tier Supabase pauses after ~7 idle days (drops
+  off DNS; multi-minute restore). `/api/keepalive` + a daily Vercel cron
+  (`vercel.json`) keep it awake. Set `CRON_SECRET` in Vercel env to lock the
+  route down (optional — it's harmless unauthenticated).
+
+---
+
+## Known issues / needs eyes-on a real render
 
 - **OSMD `SkyBottomLineBatchCalculatorBackend: width not > 0 in measure N`.**
   Recurring console warning during render — OSMD computes degenerate *internal*
@@ -48,10 +65,6 @@ after touching `notation-canvas`, `tone-midi-player`, or `transcription-detail`.
   rects are correct, which is why click hit-testing works); it's console noise.
   If it ever matters: suspects are container width at render time, compact
   mode, or OSMD version.
-
-- **PWA `manifest.webmanifest` syntax error** (`Line 1, column 1`). Pre-existing
-  and unrelated to transcription, but it shows in the console on every page —
-  the manifest is probably being served as HTML (404/redirect) rather than JSON.
 
 ---
 
