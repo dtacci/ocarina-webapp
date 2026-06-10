@@ -12,7 +12,7 @@ export async function getSessionMix(sessionId: string): Promise<SessionMixRow | 
   const supabase = await createClient();
   const { data } = await supabase
     .from("session_mixes")
-    .select("id,session_id,name,channels,master,updated_at")
+    .select("id,session_id,name,channels,master,arrangement,updated_at")
     .eq("session_id", sessionId)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -24,6 +24,7 @@ export async function getSessionMix(sessionId: string): Promise<SessionMixRow | 
     name: data.name,
     channels: (data.channels as SessionMixDoc["channels"]) ?? [],
     master: (data.master as SessionMixDoc["master"]) ?? { volume: 1 },
+    arrangement: (data.arrangement as SessionMixDoc["arrangement"]) ?? null,
     updatedAt: data.updated_at,
   };
 }
@@ -46,6 +47,7 @@ export async function upsertSessionMix(
         name: doc.name,
         channels: doc.channels,
         master: doc.master,
+        arrangement: doc.arrangement ?? null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "session_id,name" },

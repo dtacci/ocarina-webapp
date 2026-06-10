@@ -33,13 +33,15 @@ export default async function TracksPage({ params }: Props) {
     <TracksClient
       sessionId={sessionId}
       sessionTitle={master?.title ?? "Untitled session"}
+      sessionBpm={master?.bpm ?? sources[0]?.bpm ?? null}
       stems={sources.map((r, i) => ({
         id: r.id,
         title: r.title ?? `Track ${i + 1}`,
         url: r.blob_url,
         durationSec: r.duration_sec,
+        peaks: Array.isArray(r.waveform_peaks) ? (r.waveform_peaks as number[]) : null,
       }))}
-      initialMix={mix ? { name: mix.name, channels: mix.channels, master: mix.master } : null}
+      initialMix={mix ? { name: mix.name, channels: mix.channels, master: mix.master, arrangement: mix.arrangement } : null}
     />
   );
 }

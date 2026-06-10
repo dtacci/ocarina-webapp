@@ -9,7 +9,12 @@
  */
 import * as Tone from "tone";
 import { createMixBus, type MixBus, type MixChannel } from "./master-bus";
-import type { MixChannelSpec, SessionMixDoc } from "./mix-types";
+import {
+  arrangementLengthSec,
+  type Arrangement,
+  type MixChannelSpec,
+  type SessionMixDoc,
+} from "./mix-types";
 import type { EffectNode } from "./editor-types";
 
 export interface MixStem {
@@ -19,6 +24,12 @@ export interface MixStem {
 
 export interface MixEngine {
   play: () => Promise<void>;
+  /**
+   * Timeline playback: schedules one source per clip through the clip lane's
+   * channel strip (so mute/solo/effects/fader all apply). Resolves when
+   * started; playback ends on its own at the arrangement's end.
+   */
+  playArrangement: (arr: Arrangement) => Promise<void>;
   stop: () => void;
   isPlaying: () => boolean;
   /** Seconds since play started (master timeline, not per-stem loop). */
@@ -66,7 +77,21 @@ export async function createMixEngine(
 
   let playing = false;
   let startedAtCtx = 0;
+  let clipSources: Tone.ToneBufferSource[] = [];
+  const buffersById = new Map(stems.map((s) => [s.recordingId, s.buffer]));
   const durationSec = stems.reduce((m, s) => Math.max(m, s.buffer.duration), 0);
+
+  const stopAll = () => {
+    for (const ch of channels.values()) {
+      try { ch.player.stop(); } catch { /* not started */ }
+    }
+    for (const src of clipSources) {
+      try { src.stop(); } catch { /* not started */ }
+      src.dispose();
+    }
+    clipSources = [];
+    playing = false;
+  };
 
   return {
     async play() {
@@ -79,13 +104,36 @@ export async function createMixEngine(
       playing = true;
     },
 
-    stop() {
-      if (!playing) return;
-      for (const ch of channels.values()) {
-        try { ch.player.stop(); } catch { /* not started */ }
+    async playArrangement(arr) {
+      if (playing) stopAll();
+      await Tone.start();
+      const t0 = Tone.now() + 0.1;
+      for (const lane of arr.lanes) {
+        const ch = channels.get(lane.recordingId);
+        const buffer = buffersById.get(lane.recordingId);
+        if (!ch || !buffer) continue;
+        for (const clip of lane.clips) {
+          const tb = new Tone.ToneAudioBuffer();
+          tb.set(buffer);
+          const src = new Tone.ToneBufferSource(tb);
+          // Tiny edge fades keep clip boundaries click-free.
+          src.fadeIn = 0.005;
+          src.fadeOut = 0.005;
+          src.connect(ch.input);
+          src.start(t0 + clip.startSec, clip.offsetSec, clip.durationSec);
+          clipSources.push(src);
+        }
       }
-      playing = false;
+      startedAtCtx = t0;
+      playing = true;
+      // Auto-stop bookkeeping when the timeline runs out.
+      const lengthSec = arrangementLengthSec(arr);
+      setTimeout(() => {
+        if (playing && Tone.now() - startedAtCtx >= lengthSec - 0.05) stopAll();
+      }, (lengthSec + 0.3) * 1000);
     },
+
+    stop: stopAll,
 
     isPlaying: () => playing,
 

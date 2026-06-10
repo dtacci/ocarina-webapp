@@ -17,8 +17,11 @@ import { renderMixdown } from "@/lib/audio/mix-render";
 import { encodeWav } from "@/lib/audio/wav-encoder";
 import { computePeaksFromBuffer } from "@/lib/audio/compute-peaks";
 import {
+  arrangementLengthSec,
+  defaultArrangement,
   defaultChannelSpec,
   DEFAULT_MASTER,
+  type Arrangement,
   type MixChannelSpec,
   type SessionMixDoc,
 } from "@/lib/audio/mix-types";
@@ -26,6 +29,7 @@ import type { EffectNode } from "@/lib/audio/editor-types";
 import { saveSessionMix } from "@/app/(dashboard)/tracks/actions";
 import { useAudioTakeover } from "@/hooks/use-audio-takeover";
 import { ChannelStrip } from "./channel-strip";
+import { TimelineCanvas } from "./timeline-canvas";
 import { EffectChain } from "@/components/sample-editor/effect-chain";
 import { PeakMeter } from "@/components/sample-editor/peak-meter";
 import { LinearSlider } from "@/components/sample-editor/primitives/linear-slider";
@@ -35,11 +39,13 @@ export interface MixerStemInput {
   title: string;
   url: string;
   durationSec: number;
+  peaks: number[] | null;
 }
 
 export interface MixerSurfaceProps {
   sessionId: string;
   sessionTitle: string;
+  sessionBpm: number | null;
   stems: MixerStemInput[];
   initialMix: SessionMixDoc | null;
 }
@@ -49,7 +55,7 @@ function fmt(sec: number): string {
   return `${m}:${(sec % 60).toFixed(1).padStart(4, "0")}`;
 }
 
-export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: MixerSurfaceProps) {
+export function MixerSurface({ sessionId, sessionTitle, sessionBpm, stems, initialMix }: MixerSurfaceProps) {
   useAudioTakeover();
 
   const [doc, setDoc] = useState<SessionMixDoc>(() => {
@@ -67,13 +73,26 @@ export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: Mix
   const [rendering, setRendering] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [fxOpenFor, setFxOpenFor] = useState<string | null>(null);
+  const [mode, setMode] = useState<"mixer" | "arrange">("mixer");
+  const [arrangement, setArrangement] = useState<Arrangement>(
+    () => initialMix?.arrangement ?? defaultArrangement(stems, sessionBpm),
+  );
+  const arrangementRef = useRef(arrangement);
+  useEffect(() => { arrangementRef.current = arrangement; }, [arrangement]);
+  const playheadRef = useRef<number | null>(null);
   const [engine, setEngine] = useState<MixEngine | null>(null);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   const buffersRef = useRef<MixStem[]>([]);
   const docRef = useRef(doc);
   useEffect(() => { docRef.current = doc; }, [doc]);
+  const fullDoc = useCallback(
+    () => ({ ...docRef.current, arrangement: arrangementRef.current }),
+    [],
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -131,9 +150,16 @@ export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: Mix
     if (!engine) return;
     let raf = 0;
     const tick = () => {
+      const pos = engine.position();
+      const total = modeRef.current === "arrange"
+        ? arrangementLengthSec(arrangementRef.current)
+        : engine.durationSec;
       if (timeRef.current) {
-        timeRef.current.textContent = `${fmt(engine.position())} / ${fmt(engine.durationSec)}`;
+        timeRef.current.textContent = `${fmt(pos)} / ${fmt(total)}`;
       }
+      playheadRef.current = engine.isPlaying() ? pos : null;
+      // Arrangement playback self-stops at the end — mirror into the button.
+      setPlaying((prev) => (prev === engine.isPlaying() ? prev : engine.isPlaying()));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -172,14 +198,14 @@ export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: Mix
 
   const handleSave = useCallback(async () => {
     setSaving(true);
-    const result = await saveSessionMix(sessionId, docRef.current);
+    const result = await saveSessionMix(sessionId, fullDoc());
     setSaving(false);
     if ("error" in result) setToast(`save failed — ${result.error}`);
     else {
       setDirty(false);
       setToast("mix saved");
     }
-  }, [sessionId]);
+  }, [sessionId, fullDoc]);
 
   const handleMixdown = useCallback(async () => {
     if (rendering || buffersRef.current.length === 0) return;
@@ -187,7 +213,11 @@ export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: Mix
     engine?.stop();
     setPlaying(false);
     try {
-      const rendered = await renderMixdown(buffersRef.current, docRef.current);
+      const rendered = await renderMixdown(
+        buffersRef.current,
+        docRef.current,
+        modeRef.current === "arrange" ? arrangementRef.current : null,
+      );
       const wavBytes = encodeWav(rendered);
       const peaks = computePeaksFromBuffer(rendered, 200);
       const form = new FormData();
@@ -225,6 +255,21 @@ export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: Mix
         <h1 className="workbench-label text-base text-[color:var(--ink-300)]">
           mix · <span className="text-[color:var(--wb-amber)]">{sessionTitle}</span>
         </h1>
+        <div className="flex items-center gap-1 border border-[color:var(--wb-line)] px-1 py-0.5">
+          {(["mixer", "arrange"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              aria-pressed={mode === m}
+              className={`workbench-label px-2 py-1 transition-colors ${
+                mode === m ? "text-[color:var(--wb-amber)]" : "text-[color:var(--ink-500)] hover:text-[color:var(--ink-300)]"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
         <div className="ml-auto flex items-center gap-2">
           {dirty && !saving ? (
             <span className="workbench-readout text-[10px] text-[color:var(--wb-amber-dim)] lowercase">
@@ -266,6 +311,8 @@ export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: Mix
             if (playing) {
               engine.stop();
               setPlaying(false);
+            } else if (mode === "arrange") {
+              void engine.playArrangement(arrangementRef.current).then(() => setPlaying(true));
             } else {
               void engine.play().then(() => setPlaying(true));
             }
@@ -299,6 +346,23 @@ export function MixerSurface({ sessionId, sessionTitle, stems, initialMix }: Mix
           {engine ? <PeakMeter analyser={engine.masterAnalyser} height={40} /> : null}
         </div>
       </div>
+
+      {mode === "arrange" ? (
+        <TimelineCanvas
+          lanes={stems.map((s) => ({
+            id: s.id,
+            label: s.title,
+            durationSec: s.durationSec,
+            peaks: s.peaks,
+          }))}
+          arrangement={arrangement}
+          onChange={(arr, commit) => {
+            setArrangement(arr);
+            if (commit) setDirty(true);
+          }}
+          playheadRef={playheadRef}
+        />
+      ) : null}
 
       {/* Channel strips */}
       <div className="space-y-2">

@@ -40,6 +40,12 @@ export interface MixChannelOptions {
 
 export interface MixChannel {
   player: Tone.Player;
+  /**
+   * Strip entry point (pre-effects). The default player feeds it; arrangement
+   * playback connects per-clip sources here so clips inherit the channel's
+   * chain, pan, fader, and mute.
+   */
+  input: Tone.Gain;
   /** Post-fader, pre-master meter tap. */
   analyser: Tone.Analyser;
   setVolume: (v: number) => void;
@@ -73,6 +79,7 @@ export function createMixBus(): MixBus {
     const toneBuffer = new Tone.ToneAudioBuffer();
     toneBuffer.set(buffer);
     const player = new Tone.Player(toneBuffer);
+    const input = new Tone.Gain(1);
     const panner = new Tone.Panner(opts.pan ?? 0);
     const fader = new Tone.Gain(opts.volume ?? 1);
     const mute = new Tone.Gain(opts.muted ? 0 : 1);
@@ -83,7 +90,8 @@ export function createMixBus(): MixBus {
     let stages: ChainStage[] = built.stages;
 
     const wire = () => {
-      wireChain(player, stages, panner);
+      player.connect(input);
+      wireChain(input, stages, panner);
       panner.connect(fader);
       fader.connect(mute);
       mute.connect(analyser);
@@ -96,6 +104,7 @@ export function createMixBus(): MixBus {
 
     const channel: MixChannel = {
       player,
+      input,
       analyser,
       setVolume: (v) => fader.gain.rampTo(Math.max(0, v), RAMP_SEC),
       setPan: (p) => panner.pan.rampTo(Math.max(-1, Math.min(1, p)), RAMP_SEC),
@@ -110,12 +119,12 @@ export function createMixBus(): MixBus {
               if (stage) patchStage(entry, stage);
             }
           } else {
-            player.disconnect();
+            input.disconnect();
             for (const s of stages) s.output.disconnect();
             built.dispose();
             built = await buildEffectNodes(newChain);
             stages = built.stages;
-            wireChain(player, stages, panner);
+            wireChain(input, stages, panner);
           }
           currentChain = newChain;
         });
@@ -124,6 +133,7 @@ export function createMixBus(): MixBus {
       dispose: () => {
         try { player.stop(); } catch { /* not started */ }
         player.dispose();
+        input.dispose();
         built.dispose();
         panner.dispose();
         fader.dispose();
