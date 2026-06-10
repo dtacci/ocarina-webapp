@@ -11,7 +11,8 @@
     "verify:notation": "node scripts/verify-notation-playback.mjs",
     "verify:sample-editor": "node scripts/verify-sample-editor.mjs",
     "verify:dj": "node scripts/verify-dj-mode.mjs",
-    "verify:tracks": "node scripts/verify-track-mixer.mjs"
+    "verify:tracks": "node scripts/verify-track-mixer.mjs",
+    "verify:arrangement": "node scripts/verify-arrangement.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.69",
