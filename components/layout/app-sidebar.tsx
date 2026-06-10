@@ -137,7 +137,7 @@ function NavSection({
           {items.map((item) => {
             const enabled = isEnabled(item.feature);
             return (
-              <SidebarMenuItem key={item.title}>
+              <SidebarMenuItem key={item.url}>
                 {enabled ? (
                   <SidebarMenuButton
                     render={<Link href={item.url} />}
