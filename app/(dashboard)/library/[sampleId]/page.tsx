@@ -91,13 +91,23 @@ export default async function SampleDetailPage({ params }: Props) {
           initialRating={userState.userRating}
           size="md"
         />
-        <Link
-          href={`/sample-editor/${encodeURIComponent(sample.id)}`}
-          className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors lowercase"
-        >
-          <Scissors className="size-3.5" />
-          edit in sample editor →
-        </Link>
+        {/* Editing needs web-fetchable audio. System samples store
+            device-relative paths — their WAVs live on the Pi, so the editor
+            can't load them; don't offer a link that ends in a decode error. */}
+        {/^https?:\/\//.test(sample.blob_url) ? (
+          <Link
+            href={`/sample-editor/${encodeURIComponent(sample.id)}`}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors lowercase"
+          >
+            <Scissors className="size-3.5" />
+            edit in sample editor →
+          </Link>
+        ) : (
+          <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground/70 lowercase">
+            <Scissors className="size-3.5" />
+            audio lives on the ocarina device — not editable on the web
+          </p>
+        )}
       </div>
 
       {/* Audio — preview if available, otherwise decorative waveform */}
