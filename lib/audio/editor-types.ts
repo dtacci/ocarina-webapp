@@ -36,6 +36,36 @@ export type EffectNode =
       /** Wet/dry mix, 0..1. 0 = dry only, 1 = harmonies only. */
       wet: number;
     }
+  | {
+      kind: "eq3";
+      enabled: boolean;
+      /** Band gains in dB, -24..+6 (kill-EQ range). */
+      low: number;
+      mid: number;
+      high: number;
+      /** Low/mid crossover in Hz. */
+      lowFreq: number;
+      /** Mid/high crossover in Hz. */
+      highFreq: number;
+    }
+  | {
+      kind: "distortion";
+      enabled: boolean;
+      /** Drive amount, 0..1. */
+      amount: number;
+      /** Wet/dry mix, 0..1. */
+      wet: number;
+    }
+  | {
+      kind: "chorus";
+      enabled: boolean;
+      /** LFO rate in Hz, 0.1..8. */
+      rateHz: number;
+      /** Modulation depth, 0..1. */
+      depth: number;
+      /** Wet/dry mix, 0..1. */
+      wet: number;
+    }
   | { kind: "gain"; enabled: boolean; db: number }
   | {
       kind: "compressor";
@@ -92,6 +122,9 @@ export const EFFECT_LABELS: Record<EffectKind, string> = {
   reverb: "REVERB",
   delay: "DELAY",
   harmony: "HARMONY",
+  eq3: "EQ",
+  distortion: "DISTORT",
+  chorus: "CHORUS",
   gain: "GAIN",
   compressor: "COMPRESSOR",
 };
@@ -110,6 +143,22 @@ export const EFFECT_RANGES = {
   harmony: {
     voice1Semitones: { min: -24, max: 24, default: 7 },  // perfect 5th
     voice2Semitones: { min: -24, max: 24, default: 12 }, // octave
+    wet: { min: 0, max: 1, default: 0.5 },
+  },
+  eq3: {
+    low: { min: -24, max: 6, default: 0 },
+    mid: { min: -24, max: 6, default: 0 },
+    high: { min: -24, max: 6, default: 0 },
+    lowFreq: { min: 80, max: 1000, default: 400 },
+    highFreq: { min: 1000, max: 8000, default: 2500 },
+  },
+  distortion: {
+    amount: { min: 0, max: 1, default: 0.4 },
+    wet: { min: 0, max: 1, default: 1 },
+  },
+  chorus: {
+    rateHz: { min: 0.1, max: 8, default: 1.5 },
+    depth: { min: 0, max: 1, default: 0.7 },
     wet: { min: 0, max: 1, default: 0.5 },
   },
   gain: { db: { min: -24, max: 12, default: 0 } },
@@ -147,6 +196,12 @@ export function makeDefaultNode(kind: EffectKind, duration: number): EffectNode 
       return { kind: "delay", enabled: true, timeSec: 0.25, feedback: 0.35, wet: 0.3 };
     case "harmony":
       return { kind: "harmony", enabled: true, voice1Semitones: 7, voice2Semitones: 12, wet: 0.5 };
+    case "eq3":
+      return { kind: "eq3", enabled: true, low: 0, mid: 0, high: 0, lowFreq: 400, highFreq: 2500 };
+    case "distortion":
+      return { kind: "distortion", enabled: true, amount: 0.4, wet: 1 };
+    case "chorus":
+      return { kind: "chorus", enabled: true, rateHz: 1.5, depth: 0.7, wet: 0.5 };
     case "gain":
       return { kind: "gain", enabled: true, db: 0 };
     case "compressor":

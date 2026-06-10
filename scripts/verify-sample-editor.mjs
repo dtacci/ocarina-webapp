@@ -177,6 +177,22 @@ await page.waitForTimeout(400);
 const t4 = await transportTc();
 check("space stops playback (timecode freezes)", stopped && t3 === t4, `frozen at ${t3.toFixed(3)}s`);
 
+// ---- 7. Effects expansion: add an EQ via the menu, params round-trip ----
+await page.getByRole("button", { name: "add effect" }).click();
+await page.getByRole("button", { name: /^eq low \/ mid \/ high/ }).or(
+  page.getByText("low / mid / high kill bands")).first().click();
+const eqCard = page.locator("section, div").filter({ hasText: /^EQ/ }).first();
+await page.getByText("low / mid / high kill bands").waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+const eqKnobs = await page.getByRole("slider", { name: /LOW|MID|HIGH/ }).count();
+check("eq3 card appears with band knobs", eqKnobs >= 3, `${eqKnobs} knobs`);
+// Nudge the LOW band down via keyboard (knobs are aria sliders).
+const lowKnob = page.getByRole("slider", { name: "LOW" }).first();
+await lowKnob.focus();
+for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowDown");
+const lowVal = await lowKnob.getAttribute("aria-valuenow");
+check("eq3 band knob responds", parseFloat(lowVal) < 0, `low=${lowVal}dB`);
+void eqCard;
+
 // ---- 7. Console hygiene ----
 const realErrors = errors.filter((e) => !/manifest|favicon/i.test(e));
 check("no page errors", realErrors.length === 0, realErrors.slice(0, 3).join(" | ") || "clean");

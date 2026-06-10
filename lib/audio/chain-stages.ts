@@ -117,6 +117,37 @@ export async function buildEffectNodes(chain: EffectNode[]): Promise<{
         stages.push({ input: inputGain, output: outputGain });
         break;
       }
+      case "eq3": {
+        const eq = own(new Tone.EQ3({
+          low: node.low,
+          mid: node.mid,
+          high: node.high,
+          lowFrequency: node.lowFreq,
+          highFrequency: node.highFreq,
+        }));
+        stages.push(single(eq));
+        break;
+      }
+      case "distortion": {
+        const dist = own(new Tone.Distortion({
+          distortion: node.amount,
+          wet: node.wet,
+          oversample: "2x",
+        }));
+        stages.push(single(dist));
+        break;
+      }
+      case "chorus": {
+        const chorus = own(new Tone.Chorus({
+          frequency: node.rateHz,
+          depth: node.depth,
+          wet: node.wet,
+          delayTime: 3.5,
+        }));
+        chorus.start(); // the modulation LFO needs an explicit start
+        stages.push(single(chorus));
+        break;
+      }
       case "gain": {
         const gain = own(new Tone.Gain(node.db, "decibels"));
         stages.push(single(gain));
@@ -253,6 +284,28 @@ export function patchStage(node: EffectNode, stage: ChainStage): void {
       delay.delayTime.value = node.timeSec;
       delay.feedback.value = node.feedback;
       delay.wet.value = node.wet;
+      break;
+    }
+    case "eq3": {
+      const eq = stage.input as Tone.EQ3;
+      eq.low.value = node.low;
+      eq.mid.value = node.mid;
+      eq.high.value = node.high;
+      eq.lowFrequency.value = node.lowFreq;
+      eq.highFrequency.value = node.highFreq;
+      break;
+    }
+    case "distortion": {
+      const dist = stage.input as Tone.Distortion;
+      dist.distortion = node.amount; // regenerates the waveshaper curve
+      dist.wet.value = node.wet;
+      break;
+    }
+    case "chorus": {
+      const chorus = stage.input as Tone.Chorus;
+      chorus.frequency.value = node.rateHz;
+      chorus.depth = node.depth;
+      chorus.wet.value = node.wet;
       break;
     }
     case "gain": {
