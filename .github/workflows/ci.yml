@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: typecheck
+        run: npx tsc --noEmit
+      - name: unit tests
+        run: npm test
+      # Non-blocking until the ~18 pre-existing react-hooks errors
+      # (set-state-in-effect, refs-during-render) are burned down — then
+      # remove continue-on-error to make lint gate merges.
+      - name: lint (non-blocking)
+        run: npm run lint
+        continue-on-error: true
+
+      # The headless E2E suites (verify:notation, verify:sample-editor) need
+      # a dev server + Supabase/Blob secrets; they stay manual for now.

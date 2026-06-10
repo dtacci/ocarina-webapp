@@ -88,8 +88,9 @@ export async function POST(request: Request) {
     fx = 0,
     heartbeats = 0,
     loops = 0,
-    gpio = 0,
     misc = 0;
+  // No event kind maps to gpio anymore; kept at 0 for the response shape.
+  const gpio = 0;
   for (const e of events) {
     switch (e.kind) {
       case "button":    buttons++;    break;
