@@ -212,8 +212,13 @@ check(
   await page.getByText("unsaved changes").isVisible(),
 );
 
-// A post-drag synthetic click can start playback (mousedown/up pair) — settle.
-if (await page.getByRole("button", { name: "stop playback" }).isVisible().catch(() => false)) {
+// Browsers fire a synthetic click at the drag's common ancestor on mouseup;
+// the canvas suppresses it after a trim commit so a handle drag must NOT
+// start playback (regression check for the drag-release seek bug).
+const playingAfterDrag = await page
+  .getByRole("button", { name: "stop playback" }).isVisible().catch(() => false);
+check("releasing a trim drag does not trigger seek-and-play", !playingAfterDrag);
+if (playingAfterDrag) {
   await page.getByRole("button", { name: "stop playback" }).click();
   await page.waitForTimeout(200);
 }
