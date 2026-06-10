@@ -159,9 +159,13 @@ function noteXml(
   const tieXml = ties.length ? `\n        ${ties.join("\n        ")}` : "";
 
   // Glissando: stop before start (close the prior span, then open the next).
+  // Emitted as <slide>, not <glissando>: OSMD (≤1.9.9) drops bare <glissando>
+  // elements — its parser only forwards them to the slur reader when the same
+  // note also carries a <slur> or <slide>. <slide> renders standalone, and a
+  // continuous slide is the truer notation for a sung pitch glide anyway.
   const notationParts = [...tiedNotations];
-  if (glissStop) notationParts.push(`<glissando type="stop" number="1" line-type="wavy"/>`);
-  if (glissStart) notationParts.push(`<glissando type="start" number="1" line-type="wavy"/>`);
+  if (glissStop) notationParts.push(`<slide type="stop" number="1" line-type="solid"/>`);
+  if (glissStart) notationParts.push(`<slide type="start" number="1" line-type="solid"/>`);
   const notationsXml = notationParts.length
     ? `\n        <notations>${notationParts.join("")}</notations>`
     : "";

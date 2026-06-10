@@ -97,12 +97,13 @@ test("gliss: a slide is detected and surfaced as a warning", () => {
   assert.ok(warningKinds(result).includes("pitch_bend_slides"));
 });
 
-test("gliss: MusicXML emits balanced, paired glissando start/stop", () => {
+test("gliss: MusicXML emits balanced, paired slide start/stop", () => {
+  // <slide>, not <glissando> — OSMD ignores bare <glissando> (see musicxml-gen).
   const { result } = deriveSong("gliss");
-  const starts = (result.musicxml.match(/<glissando type="start"/g) ?? []).length;
-  const stops = (result.musicxml.match(/<glissando type="stop"/g) ?? []).length;
-  assert.ok(starts >= 1, "at least one glissando start");
-  assert.equal(starts, stops, "every glissando start has a matching stop");
+  const starts = (result.musicxml.match(/<slide type="start"/g) ?? []).length;
+  const stops = (result.musicxml.match(/<slide type="stop"/g) ?? []).length;
+  assert.ok(starts >= 1, "at least one slide start");
+  assert.equal(starts, stops, "every slide start has a matching stop");
 });
 
 test("truncated file parses without throwing and still derives notes", () => {
