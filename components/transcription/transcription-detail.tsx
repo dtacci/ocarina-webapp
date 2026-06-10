@@ -122,6 +122,12 @@ const COMPONENT_CSS = `
 .notation-paper .vf-stavenote {
   cursor: pointer;
 }
+/* Keyboard navigation: Tab onto a note, arrows to move, Enter to play. */
+.notation-paper .vf-stavenote:focus-visible {
+  outline: 2px solid #ea7a1c;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
 .notation-paper .vf-stavenote:hover :is(path, rect) {
   fill: #b45309;
   stroke: #b45309;

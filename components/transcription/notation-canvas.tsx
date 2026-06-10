@@ -52,6 +52,9 @@ export interface NotationCanvasProps {
 
 const ACTIVE_CLASS = "osmd-note-active";
 
+const PITCH_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const midiName = (m: number) => `${PITCH_NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
+
 /** One cursor step: a musical onset and the notes' live SVG <g> elements. */
 interface NoteStep {
   /** Onset in whole notes (OSMD timestamp units; a quarter note = 0.25). */
@@ -163,6 +166,18 @@ export default function NotationCanvas({
           steps.push({ whole, durWhole, els, midi, isRest: !sawPitch });
         }
         cursor.next();
+      }
+      // Make notes keyboard-reachable: Tab onto a note, ←/→ to move, Enter to
+      // play from there (handled by the container's keydown listener).
+      for (let i = 0; i < steps.length; i++) {
+        const s = steps[i];
+        const primary = s.els[0];
+        primary.setAttribute("tabindex", "0");
+        primary.setAttribute("role", "button");
+        primary.setAttribute(
+          "aria-label",
+          `${s.isRest || s.midi == null ? "Rest" : midiName(s.midi)}, note ${i + 1} of ${steps.length}. Press Enter to play from here.`,
+        );
       }
       cursor.reset();
     } catch {
@@ -296,24 +311,38 @@ export default function NotationCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playheadSec, isPlaying, tempoBpm]);
 
-  // Click-a-note: one delegated listener on the container. Resolve the step
-  // by DOM containment first, then by proximity to the notes' live rects.
+  // Click/keyboard note activation: delegated listeners on the container.
+  // Clicks resolve the step by DOM containment first, then by proximity to
+  // the notes' live rects; keyboard uses the focused element (notes carry
+  // tabindex + role=button from the step-map build).
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    const activateStep = (step: NoteStep) => {
+      // Highlight immediately — don't wait for the playhead round-trip (which
+      // React may skip entirely when re-activating the same note).
+      applyStepHighlight(step);
+      const bpm = tempoBpmRef.current;
+      const wholeToSec = (w: number) => (w * 4 * 60) / bpm;
+      onNoteClickRef.current?.({
+        seconds: wholeToSec(step.whole),
+        midi: step.isRest ? null : step.midi,
+        durationSec: wholeToSec(step.durWhole),
+      });
+    };
+
+    const stepOfTarget = (target: Node | null) =>
+      target
+        ? freshSteps().find((s) => s.els.some((el) => el === target || el.contains(target))) ?? null
+        : null;
 
     const onClick = (e: MouseEvent) => {
       if (!onNoteClickRef.current || !readyRef.current) return;
       const steps = freshSteps();
       if (steps.length === 0) return;
-      const target = e.target as Node | null;
 
-      let hit: NoteStep | null = null;
-      if (target) {
-        hit =
-          steps.find((s) => s.els.some((el) => el === target || el.contains(target))) ??
-          null;
-      }
+      let hit = stepOfTarget(e.target as Node | null);
       if (!hit) {
         // Near-miss tolerance: noteheads are ~12px; accept clicks within 24px
         // of a note's center so stems/whitespace right next to a head count.
@@ -333,23 +362,34 @@ export default function NotationCanvas({
         }
         if (best > 24) hit = null;
       }
-      if (!hit) return;
+      if (hit) activateStep(hit);
+    };
 
-      // Highlight immediately — don't wait for the playhead round-trip (which
-      // React may skip entirely when re-clicking the same note).
-      applyStepHighlight(hit);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!readyRef.current) return;
+      const steps = freshSteps();
+      const current = stepOfTarget(e.target as Node | null);
+      if (!current) return;
 
-      const bpm = tempoBpmRef.current;
-      const wholeToSec = (w: number) => (w * 4 * 60) / bpm;
-      onNoteClickRef.current({
-        seconds: wholeToSec(hit.whole),
-        midi: hit.isRest ? null : hit.midi,
-        durationSec: wholeToSec(hit.durWhole),
-      });
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activateStep(current);
+      } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        const idx = steps.indexOf(current);
+        const next = steps[idx + (e.key === "ArrowRight" ? 1 : -1)];
+        const focusEl = next?.els[0] as HTMLElement | undefined;
+        focusEl?.focus();
+        focusEl?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
     };
 
     container.addEventListener("click", onClick);
-    return () => container.removeEventListener("click", onClick);
+    container.addEventListener("keydown", onKeyDown);
+    return () => {
+      container.removeEventListener("click", onClick);
+      container.removeEventListener("keydown", onKeyDown);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
