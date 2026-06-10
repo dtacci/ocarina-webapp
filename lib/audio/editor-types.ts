@@ -16,6 +16,26 @@ export type EffectNode =
   | { kind: "filter"; enabled: boolean; mode: FilterMode; freq: number; q: number }
   | { kind: "pitch"; enabled: boolean; semitones: number }
   | { kind: "reverb"; enabled: boolean; decaySec: number; wet: number }
+  | {
+      kind: "delay";
+      enabled: boolean;
+      /** Seconds, 0.01..2. */
+      timeSec: number;
+      /** 0..0.95 — kept under 1 to prevent runaway feedback. */
+      feedback: number;
+      /** Wet/dry mix, 0..1. */
+      wet: number;
+    }
+  | {
+      kind: "harmony";
+      enabled: boolean;
+      /** Voice 1 pitch offset in semitones, -24..+24. */
+      voice1Semitones: number;
+      /** Voice 2 pitch offset in semitones, -24..+24 (set to 0 to disable voice 2). */
+      voice2Semitones: number;
+      /** Wet/dry mix, 0..1. 0 = dry only, 1 = harmonies only. */
+      wet: number;
+    }
   | { kind: "gain"; enabled: boolean; db: number }
   | {
       kind: "compressor";
@@ -44,7 +64,10 @@ export interface EditSpec {
 /**
  * Default chain state when opening a fresh editor session.
  * Trim spans the full sample (callers should clamp endSec to actual duration).
- * Everything else is disabled — user opts in per effect.
+ * Everything else is disabled — user opts in per effect by clicking the LED.
+ *
+ * All seven effect cards are present from the start so users can see the
+ * full pedalboard at a glance instead of having to discover them via "+ ADD".
  */
 export function defaultChain(durationSec: number): EffectNode[] {
   return [
@@ -52,7 +75,10 @@ export function defaultChain(durationSec: number): EffectNode[] {
     { kind: "fade", enabled: false, inMs: 0, outMs: 0, curve: "linear" },
     { kind: "filter", enabled: false, mode: "hp", freq: 80, q: 0.7 },
     { kind: "pitch", enabled: false, semitones: 0 },
+    { kind: "harmony", enabled: false, voice1Semitones: 7, voice2Semitones: 12, wet: 0.5 },
+    { kind: "delay", enabled: false, timeSec: 0.25, feedback: 0.35, wet: 0.3 },
     { kind: "reverb", enabled: false, decaySec: 2, wet: 0.25 },
+    { kind: "compressor", enabled: false, threshold: -24, ratio: 4, attack: 0.003, release: 0.25, knee: 30, makeup: 0 },
     { kind: "gain", enabled: true, db: 0 },
   ];
 }
@@ -64,6 +90,8 @@ export const EFFECT_LABELS: Record<EffectKind, string> = {
   filter: "FILTER",
   pitch: "PITCH",
   reverb: "REVERB",
+  delay: "DELAY",
+  harmony: "HARMONY",
   gain: "GAIN",
   compressor: "COMPRESSOR",
 };
@@ -74,6 +102,16 @@ export const EFFECT_RANGES = {
   filter: { freq: { min: 20, max: 20000, default: 1000 }, q: { min: 0.1, max: 18, default: 0.7 } },
   pitch: { semitones: { min: -24, max: 24, default: 0 } },
   reverb: { decaySec: { min: 0.1, max: 10, default: 2 }, wet: { min: 0, max: 1, default: 0.25 } },
+  delay: {
+    timeSec: { min: 0.01, max: 2, default: 0.25 },
+    feedback: { min: 0, max: 0.95, default: 0.35 },
+    wet: { min: 0, max: 1, default: 0.3 },
+  },
+  harmony: {
+    voice1Semitones: { min: -24, max: 24, default: 7 },  // perfect 5th
+    voice2Semitones: { min: -24, max: 24, default: 12 }, // octave
+    wet: { min: 0, max: 1, default: 0.5 },
+  },
   gain: { db: { min: -24, max: 12, default: 0 } },
   compressor: {
     threshold: { min: -60, max: 0, default: -24 },
@@ -105,6 +143,10 @@ export function makeDefaultNode(kind: EffectKind, duration: number): EffectNode 
       return { kind: "pitch", enabled: true, semitones: 0 };
     case "reverb":
       return { kind: "reverb", enabled: true, decaySec: 2, wet: 0.25 };
+    case "delay":
+      return { kind: "delay", enabled: true, timeSec: 0.25, feedback: 0.35, wet: 0.3 };
+    case "harmony":
+      return { kind: "harmony", enabled: true, voice1Semitones: 7, voice2Semitones: 12, wet: 0.5 };
     case "gain":
       return { kind: "gain", enabled: true, db: 0 };
     case "compressor":

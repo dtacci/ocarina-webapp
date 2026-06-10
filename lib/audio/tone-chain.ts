@@ -17,6 +17,13 @@
  */
 import * as Tone from "tone";
 import type { EffectNode } from "./editor-types";
+import {
+  buildEffectNodes,
+  isStructurallyEqual,
+  patchStage,
+  wireChain,
+  type ChainStage,
+} from "./chain-stages";
 
 export interface RealtimeController {
   /** Stop playback and dispose all nodes. Safe to call multiple times. */
@@ -34,6 +41,16 @@ export interface RealtimeController {
    * Never fires when `loop: true` was passed to `playRealtime`.
    */
   onNaturalEnd: (cb: () => void) => void;
+  /**
+   * Push a new chain into the live graph without restarting playback.
+   * - If the topology is identical (same kinds, same positions, same
+   *   enabled flags), patches each stage's params in place — zero glitch.
+   * - Otherwise tears down the effect graph and rebuilds it; sources keep
+   *   playing and reconnect to the new chain head. Brief click possible.
+   * - Returns the await-able promise for callers that need to know when
+   *   async work (e.g. reverb IR regen) completes.
+   */
+  updateChain: (newChain: EffectNode[]) => Promise<void>;
 }
 
 /**
@@ -65,96 +82,6 @@ function findNode<K extends EffectNode["kind"]>(
   return chain.find((n) => n.kind === kind) as Extract<EffectNode, { kind: K }> | undefined;
 }
 
-/**
- * Build the effect-chain nodes (not including the source or destination).
- * Returns the ordered list of nodes + a disposer that releases them.
- *
- * Call site is responsible for connecting source → first node and
- * last node → destination.
- */
-async function buildEffectNodes(chain: EffectNode[]): Promise<{
-  nodes: Tone.ToneAudioNode[];
-  dispose: () => void;
-}> {
-  const nodes: Tone.ToneAudioNode[] = [];
-
-  for (const node of chain) {
-    if (!node.enabled) continue;
-
-    switch (node.kind) {
-      case "filter": {
-        const filterType =
-          node.mode === "hp" ? "highpass" : node.mode === "lp" ? "lowpass" : "bandpass";
-        const filter = new Tone.Filter({
-          type: filterType,
-          frequency: node.freq,
-          Q: node.q,
-        });
-        nodes.push(filter);
-        break;
-      }
-      case "pitch": {
-        const pitch = new Tone.PitchShift({ pitch: node.semitones });
-        nodes.push(pitch);
-        break;
-      }
-      case "reverb": {
-        const reverb = new Tone.Reverb({ decay: node.decaySec, wet: node.wet });
-        // Reverb IR is generated async — must resolve before audio is routed.
-        await reverb.ready;
-        nodes.push(reverb);
-        break;
-      }
-      case "gain": {
-        const gain = new Tone.Gain(node.db, "decibels");
-        nodes.push(gain);
-        break;
-      }
-      case "compressor": {
-        const comp = new Tone.Compressor({
-          threshold: node.threshold,
-          ratio: node.ratio,
-          attack: node.attack,
-          release: node.release,
-          knee: node.knee,
-        });
-        nodes.push(comp);
-        if (node.makeup !== 0) {
-          nodes.push(new Tone.Gain(node.makeup, "decibels"));
-        }
-        break;
-      }
-      // trim + fade are handled at source level, not as nodes
-      case "trim":
-      case "fade":
-        break;
-    }
-  }
-
-  return {
-    nodes,
-    dispose: () => {
-      for (const n of nodes) n.dispose();
-    },
-  };
-}
-
-/** Chain source through an ordered node list into a destination. */
-function wireChain(
-  source: Tone.ToneAudioNode,
-  nodes: Tone.ToneAudioNode[],
-  destination: Tone.ToneAudioNode,
-): void {
-  if (nodes.length === 0) {
-    source.connect(destination);
-    return;
-  }
-  source.connect(nodes[0]);
-  for (let i = 0; i < nodes.length - 1; i++) {
-    nodes[i].connect(nodes[i + 1]);
-  }
-  nodes[nodes.length - 1].connect(destination);
-}
 
 /**
  * Start realtime playback of `buffer` through the effect chain.
@@ -190,29 +117,49 @@ export async function playRealtime(
 
   const analyser = new Tone.Analyser("waveform", 512);
   const destination = Tone.getDestination();
+  analyser.connect(destination);
 
+  // Track every scheduled/active source so stop() can tear them all down,
+  // and so updateChain() can re-route them onto a freshly-built effect graph.
+  const activeSources = new Set<Tone.ToneBufferSource>();
+
+  // Mutable chain state — rebuilt by updateChain on structural changes.
+  let currentChain: EffectNode[] = chain;
+  let currentStages: ChainStage[] = [];
   let disposeEffects: () => void = () => {};
   let chainHead: Tone.ToneAudioNode = analyser;
-  if (bypass) {
-    // A|B = A: straight through, skip all effects.
-    analyser.connect(destination);
-  } else {
-    const built = await buildEffectNodes(chain);
-    disposeEffects = built.dispose;
-    if (built.nodes.length > 0) {
-      // Wire built nodes in series, last → analyser. Each scheduled source
-      // then only needs to connect to chainHead (the first node or analyser).
-      for (let i = 0; i < built.nodes.length - 1; i++) {
-        built.nodes[i].connect(built.nodes[i + 1]);
+
+  /**
+   * Wire a freshly-built stages list between any active sources and the
+   * analyser. Mutates chainHead. Caller must have disposed the previous
+   * graph + disconnected sources from the old chainHead first.
+   */
+  function installStages(stages: ChainStage[]) {
+    currentStages = stages;
+    if (stages.length === 0) {
+      chainHead = analyser;
+    } else {
+      for (let i = 0; i < stages.length - 1; i++) {
+        stages[i].output.connect(stages[i + 1].input);
       }
-      built.nodes[built.nodes.length - 1].connect(analyser);
-      chainHead = built.nodes[0];
+      stages[stages.length - 1].output.connect(analyser);
+      chainHead = stages[0].input;
     }
-    analyser.connect(destination);
+    // Reconnect any in-flight sources to the new chain head.
+    for (const s of activeSources) {
+      try {
+        s.connect(chainHead);
+      } catch {
+        // already disposed or already connected — fine
+      }
+    }
   }
 
-  // Track every scheduled/active source so stop() can tear them all down.
-  const activeSources = new Set<Tone.ToneBufferSource>();
+  if (!bypass) {
+    const built = await buildEffectNodes(chain);
+    disposeEffects = built.dispose;
+    installStages(built.stages);
+  }
   let naturalEndCallback: (() => void) | null = null;
   let stopped = false;
   const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -364,6 +311,88 @@ export async function playRealtime(
     sourceBuffer.dispose();
   };
 
+  /**
+   * Live-update the effect chain without restarting playback. Bypass mode
+   * (`A` switch) is locked at play start — it only affects whether effects
+   * exist at all; toggle the switch to swap.
+   *
+   * Serialized: if a structural rebuild is already in flight, the latest
+   * pending chain is stored and applied once the rebuild settles. Last
+   * caller always wins.
+   */
+  let rebuildInFlight = false;
+  let pendingChain: EffectNode[] | null = null;
+  const updateChain = async (newChain: EffectNode[]): Promise<void> => {
+    if (stopped || bypass) {
+      currentChain = newChain;
+      return;
+    }
+    if (rebuildInFlight) {
+      pendingChain = newChain;
+      return;
+    }
+
+    if (isStructurallyEqual(currentChain, newChain)) {
+      // Pure param updates — patch each stage in place. Walk both chains in
+      // parallel; only enabled entries occupy a stage slot.
+      let stageIdx = 0;
+      for (let i = 0; i < newChain.length; i++) {
+        const entry = newChain[i];
+        if (!entry.enabled) continue;
+        // trim/fade don't occupy stage slots (handled at source level).
+        if (entry.kind === "trim" || entry.kind === "fade") continue;
+        const stage = currentStages[stageIdx];
+        if (stage) patchStage(entry, stage);
+        stageIdx++;
+      }
+      currentChain = newChain;
+      return;
+    }
+
+    // Structural rebuild: disconnect sources from old chainHead, dispose old
+    // graph, build new one, reconnect sources via installStages.
+    rebuildInFlight = true;
+    try {
+      for (const s of activeSources) {
+        try {
+          s.disconnect();
+        } catch {
+          // already disconnected — fine
+        }
+      }
+      try {
+        // Disconnect the old chain tail from the analyser too.
+        if (currentStages.length > 0) {
+          currentStages[currentStages.length - 1].output.disconnect(analyser);
+        }
+      } catch {
+        // already disconnected — fine
+      }
+      disposeEffects();
+      currentStages = [];
+      chainHead = analyser;
+
+      const built = await buildEffectNodes(newChain);
+      if (stopped) {
+        // Playback stopped while we were async-building — discard.
+        built.dispose();
+        return;
+      }
+      disposeEffects = built.dispose;
+      installStages(built.stages);
+      currentChain = newChain;
+    } finally {
+      rebuildInFlight = false;
+    }
+
+    // If something else came in while we were rebuilding, apply it now.
+    if (pendingChain) {
+      const next = pendingChain;
+      pendingChain = null;
+      void updateChain(next);
+    }
+  };
+
   return {
     source: primarySource,
     analyser,
@@ -371,6 +400,7 @@ export async function playRealtime(
     onNaturalEnd: (cb) => {
       naturalEndCallback = cb;
     },
+    updateChain,
   };
 }
 
@@ -403,8 +433,8 @@ export async function renderOffline(
         source.curve = fade.curve === "exp" ? "exponential" : "linear";
       }
 
-      const { nodes } = await buildEffectNodes(chain);
-      wireChain(source, nodes, Tone.getDestination());
+      const { stages } = await buildEffectNodes(chain);
+      wireChain(source, stages, Tone.getDestination());
 
       // Inside Tone.Offline, time 0 is the start of the render.
       source.start(0, trimStart, duration);
