@@ -335,6 +335,34 @@ export const transcriptionFeedback = pgTable(
   (t) => [index("transcription_feedback_session_idx").on(t.sessionId)],
 );
 
+/**
+ * Track-editor mixes (companion-app roadmap, phase 3). One jsonb document
+ * per saved mix of a looper session's stems — channels carry
+ * volume/pan/mute/solo + an EffectNode[] chain each (the sample editor's
+ * edit_spec serialization), `master` the master fader + chain, and
+ * `arrangement` is reserved for the clip timeline (phase B).
+ */
+export const sessionMixes = pgTable(
+  "session_mixes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // The looper play session that groups the stems (recordings.session_id).
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default("Mix"),
+    channels: jsonb("channels").notNull().default([]),
+    master: jsonb("master").notNull().default({}),
+    arrangement: jsonb("arrangement"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("session_mixes_session_name_idx").on(t.sessionId, t.name)],
+);
+
 // ============================================================================
 // ACTIVITY DOMAIN
 // ============================================================================

@@ -447,6 +447,14 @@ export function RecordingDetail({
                   · {sessionTracks.length} other {sessionTracks.length === 1 ? "track" : "tracks"}
                 </span>
               </h2>
+              {recording.session_id ? (
+                <Link
+                  href={`/tracks/${recording.session_id}`}
+                  className="ml-auto text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors lowercase"
+                >
+                  open in track mixer →
+                </Link>
+              ) : null}
             </div>
             <div className="rounded-lg border divide-y overflow-hidden">
               {sessionTracks.map((track, i) => {
