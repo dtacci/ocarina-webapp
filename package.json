@@ -10,7 +10,8 @@
     "test": "node --import tsx --test \"lib/transcription/**/*.test.ts\"",
     "verify:notation": "node scripts/verify-notation-playback.mjs",
     "verify:sample-editor": "node scripts/verify-sample-editor.mjs",
-    "verify:dj": "node scripts/verify-dj-mode.mjs"
+    "verify:dj": "node scripts/verify-dj-mode.mjs",
+    "verify:tracks": "node scripts/verify-track-mixer.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.69",

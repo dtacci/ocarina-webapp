@@ -106,6 +106,84 @@ export async function ensureVerifyFixture() {
   if (!visible) throw new Error("RLS check failed: verify-bot can't read its own sample");
 }
 
+/**
+ * Ensure a 2-stem looper session owned by verify-bot (for the track mixer):
+ * parent "master" recording + two stems with distinct generated tones.
+ * Returns { sessionId, stemIds }. Idempotent by parent title.
+ */
+export const VERIFY_SESSION_TITLE = "verify-bot session";
+
+export async function ensureVerifySession() {
+  const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const admin = createClient(supaUrl, serviceKey, { auth: { persistSession: false } });
+  const PARENT_TITLE = VERIFY_SESSION_TITLE;
+
+  const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 500 });
+  const user = list?.users.find((u) => u.email?.toLowerCase() === VERIFY_EMAIL);
+  if (!user) throw new Error("run ensureVerifyFixture first");
+
+  // recordings.session_id references public.sessions — find/create the play
+  // session via the existing master recording's title.
+  const { data: existing } = await admin.from("recordings")
+    .select("id,session_id").eq("user_id", user.id).eq("title", PARENT_TITLE)
+    .eq("recording_type", "master").maybeSingle();
+  if (existing?.session_id) {
+    const { data: stems } = await admin.from("recordings")
+      .select("id").eq("session_id", existing.session_id).eq("recording_type", "stem")
+      .order("created_at", { ascending: true });
+    if (stems?.length === 2) {
+      return { sessionId: existing.session_id, stemIds: stems.map((s) => s.id) };
+    }
+    await admin.from("recordings").delete().eq("session_id", existing.session_id);
+  } else if (existing) {
+    await admin.from("recordings").delete().eq("id", existing.id);
+  }
+
+  const { data: session, error: sErr } = await admin.from("sessions")
+    .insert({ user_id: user.id, ended_at: new Date().toISOString(), duration_sec: FIXTURE_DURATION })
+    .select("id").single();
+  if (sErr) throw new Error(`insert session: ${sErr.message}`);
+
+  // Stem A: the standard fixture (440/880 bursts). Stem B: continuous 660 Hz.
+  const a = makeFixtureWav();
+  const n = Math.round(FIXTURE_DURATION * FIXTURE_SR);
+  const bSamples = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / FIXTURE_SR;
+    bSamples[i] = 0.5 * Math.sin(2 * Math.PI * 660 * t) * Math.min(1, t / 0.01, (FIXTURE_DURATION - t) / 0.05);
+  }
+  const bBuf = Buffer.from(a.buf); // clone header, rewrite data
+  for (let i = 0; i < n; i++) {
+    bBuf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, bSamples[i])) * 32767), 44 + i * 2);
+  }
+
+  const [blobA, blobB] = await Promise.all([
+    put("verify/session-stem-a.wav", a.buf, { access: "public", contentType: "audio/wav", addRandomSuffix: true }),
+    put("verify/session-stem-b.wav", bBuf, { access: "public", contentType: "audio/wav", addRandomSuffix: true }),
+  ]);
+
+  const { error: pErr } = await admin.from("recordings").insert({
+    user_id: user.id, title: PARENT_TITLE, blob_url: blobA.url,
+    duration_sec: FIXTURE_DURATION, sample_rate: FIXTURE_SR, bpm: 120,
+    recording_type: "master", waveform_peaks: a.peaks, session_id: session.id,
+  });
+  if (pErr) throw new Error(`insert parent: ${pErr.message}`);
+
+  const stems = [];
+  for (const [title, url] of [["Stem A (bursts)", blobA.url], ["Stem B (drone)", blobB.url]]) {
+    const { data, error } = await admin.from("recordings").insert({
+      user_id: user.id, title, blob_url: url,
+      duration_sec: FIXTURE_DURATION, sample_rate: FIXTURE_SR, bpm: 120,
+      recording_type: "stem", session_id: session.id,
+    }).select("id").single();
+    if (error) throw new Error(`insert stem: ${error.message}`);
+    stems.push(data.id);
+  }
+  console.log(`provisioned session ${session.id} with 2 stems`);
+  return { sessionId: session.id, stemIds: stems };
+}
+
 /** Drive the real /login form. Page must be a fresh Playwright page. */
 export async function loginAsVerifyBot(page, baseUrl) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
