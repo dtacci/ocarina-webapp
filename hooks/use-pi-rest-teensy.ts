@@ -9,6 +9,7 @@ import {
   ocarina,
   openEventStream,
   type HeartbeatEvent,
+  type PotsEvent,
   type LoopSnapshot,
   type StatusResponse,
   type TeensyHealth,
@@ -41,6 +42,12 @@ export interface UsePiRestTeensyOptions {
   enabled?: boolean;
   onHardware?: (ev: HardwareEvent) => void;
   onTelemetry?: (ev: TelemetryEvent) => void;
+  /**
+   * High-rate pot stream (~30 Hz while a knob moves). Delivered straight from
+   * the WS handler — do NOT setState in here; drive refs / rampTo / canvas
+   * directly (the 1 Hz `pots` state below stays the React-friendly snapshot).
+   */
+  onPots?: (ev: PotsEvent) => void;
 }
 
 export interface UsePiRestTeensy {
@@ -89,12 +96,14 @@ export interface UsePiRestTeensy {
 export function usePiRestTeensy(
   options: UsePiRestTeensyOptions = {}
 ): UsePiRestTeensy {
-  const { enabled = true, onHardware, onTelemetry } = options;
+  const { enabled = true, onHardware, onTelemetry, onPots } = options;
 
   const onHwRef = useRef(onHardware);
   const onTelRef = useRef(onTelemetry);
+  const onPotsRef = useRef(onPots);
   useEffect(() => { onHwRef.current = onHardware; }, [onHardware]);
   useEffect(() => { onTelRef.current = onTelemetry; }, [onTelemetry]);
+  useEffect(() => { onPotsRef.current = onPots; }, [onPots]);
 
   const isConfigured = isOcarinaApiConfigured();
   const [status, setStatus] = useState<PiRestStatus>(
@@ -247,6 +256,10 @@ export function usePiRestTeensy(
               ts,
             });
           }
+        },
+        // High-rate knob stream — bypasses React state entirely (see option doc).
+        onPots: (e) => {
+          onPotsRef.current?.(e);
         },
         onNoteOn: (e) => {
           onTelRef.current?.({

@@ -149,6 +149,22 @@ export interface HeartbeatEvent {
   };
 }
 
+/**
+ * High-rate pot stream (~30 Hz while a knob moves; silent at rest). Same
+ * 0–100 scale and field names as `HeartbeatEvent.pots`. Enabled by the Pi
+ * alongside the heartbeat (firmware `CMD:POTS:ON`); consumers that need
+ * realtime knob values (DJ crossfader) should use this, not the 1 Hz
+ * heartbeat. Handle via callback/ref — at 30 Hz this must never hit setState.
+ */
+export interface PotsEvent {
+  type: "pots";
+  volume: number;
+  reverb_mix: number;
+  filter: number;
+  pitch_bend: number;
+  ts_ms: number;
+}
+
 export interface NoteOnEvent {
   type: "note_on";
   note: string;
@@ -229,6 +245,7 @@ export interface GpioReleaseEvent {
 
 export type EventMessage =
   | HeartbeatEvent
+  | PotsEvent
   | NoteOnEvent
   | NoteOffEvent
   | GpioPressEvent
@@ -341,6 +358,8 @@ export const ocarina = {
 
 export interface EventStreamHandlers {
   onHeartbeat?: (e: HeartbeatEvent) => void;
+  /** ~30 Hz while a knob moves — keep the handler setState-free. */
+  onPots?: (e: PotsEvent) => void;
   onNoteOn?: (e: NoteOnEvent) => void;
   onNoteOff?: (e: NoteOffEvent) => void;
   onGpioPress?: (e: GpioPressEvent) => void;
@@ -370,6 +389,7 @@ export function openEventStream(handlers: EventStreamHandlers): WebSocket {
     try {
       const e = JSON.parse(evt.data) as EventMessage;
       if (e.type === "heartbeat") handlers.onHeartbeat?.(e);
+      else if (e.type === "pots") handlers.onPots?.(e);
       else if (e.type === "note_on") handlers.onNoteOn?.(e);
       else if (e.type === "note_off") handlers.onNoteOff?.(e);
       else if (e.type === "gpio_press") handlers.onGpioPress?.(e);
