@@ -6,10 +6,9 @@
 // it for real (unit tests can't see the SVG). Run it whenever notation-canvas,
 // tone-midi-player, or transcription-detail change.
 //
-// Setup (one-time; playwright is intentionally not a project dependency):
-//   npm i --no-save playwright && npx playwright install chromium-headless-shell
+// Setup (one-time): npx playwright install chromium-headless-shell
 // Usage (dev server must be running, and the target recording public):
-//   node scripts/verify-notation-playback.mjs [transcription-url]
+//   npm run verify:notation [-- <transcription-url>]
 import { chromium } from "playwright";
 
 const URL =
@@ -123,6 +122,25 @@ await page.waitForTimeout(500);
 const slow = await clickAndCompare(idxA);
 check("click at 0.5× speed still lands on the note", slow.match, `t=${slow.t}s`);
 check("0.5× seek time ≈ 2× the 1× time", Math.abs(slow.t - base.t * 2) < 0.4, `${base.t}s → ${slow.t}s`);
+
+// ---- 7. Keyboard: Tab/focus a note, ArrowRight to move, Enter to play there ----
+const kbStart = await page.evaluate(() => {
+  const staves = [...document.querySelectorAll('#osmdSvgPage1 .vf-stavenote[tabindex="0"]')];
+  staves[5]?.focus();
+  return { focusable: staves.length, focused: document.activeElement === staves[5] };
+});
+check("notes are keyboard-focusable", kbStart.focusable > 0 && kbStart.focused, `${kbStart.focusable} focusable notes`);
+await page.keyboard.press("ArrowRight");
+await page.keyboard.press("ArrowRight");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
+const kb = await page.evaluate(() => {
+  const staves = [...document.querySelectorAll('#osmdSvgPage1 .vf-stavenote[tabindex="0"]')];
+  const active = document.querySelector("#osmdSvgPage1 .osmd-note-active");
+  const stave = active ? (active.closest(".vf-stavenote") ?? active) : null;
+  return { focusedIdx: staves.indexOf(document.activeElement), activeIdx: staves.indexOf(stave) };
+});
+check("arrows move focus, Enter plays from the focused note", kb.focusedIdx === 7 && kb.activeIdx === 7, `focused=${kb.focusedIdx}, highlighted=${kb.activeIdx}`);
 
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | ") || "clean");
 
