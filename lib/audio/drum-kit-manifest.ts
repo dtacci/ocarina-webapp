@@ -65,4 +65,31 @@ export const SAMPLE_808_MANIFEST: KitManifest = {
   ],
 };
 
-export const BUILTIN_KITS: KitManifest[] = [SYNTH_808_MANIFEST, SAMPLE_808_MANIFEST];
+/** Cassette-recorded 808 one-shots (digital-ocarina/samples, Cassette808 set). */
+export const CASSETTE_808_MANIFEST: KitManifest = {
+  id: "cassette-808",
+  name: "Cassette 808",
+  kind: "sample",
+  voices: DEFAULT_VOICE_NAMES.map((name) => ({
+    name,
+    file: `/kits/cassette-808/${name}.wav`,
+  })),
+};
+
+/** Acoustic kit (VCSL "bigrusty" set): sidestick rides the clap slot. */
+export const ACOUSTIC_KIT_MANIFEST: KitManifest = {
+  id: "acoustic",
+  name: "Acoustic Kit",
+  kind: "sample",
+  voices: DEFAULT_VOICE_NAMES.map((name) => ({
+    name,
+    file: `/kits/acoustic/${name}.wav`,
+  })),
+};
+
+export const BUILTIN_KITS: KitManifest[] = [
+  SYNTH_808_MANIFEST,
+  SAMPLE_808_MANIFEST,
+  CASSETTE_808_MANIFEST,
+  ACOUSTIC_KIT_MANIFEST,
+];

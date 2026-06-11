@@ -30,7 +30,15 @@ type Action =
 
 function initialState(): DrumPatternState {
   return {
-    patterns: Array.from({ length: PATTERN_COUNT }, emptyPattern),
+    // Fresh sessions (no saved state in localStorage) start with two playable
+    // grooves in A/B instead of silence — press play and something happens.
+    // Saved state hydrates over this, so returning users never see them.
+    patterns: [
+      starterPattern(STARTER_HOUSE),
+      starterPattern(STARTER_BOOM_BAP),
+      emptyPattern(),
+      emptyPattern(),
+    ],
     active: 0,
     mutes: new Array(VOICE_COUNT).fill(false),
     solo: null,
@@ -42,6 +50,45 @@ function initialState(): DrumPatternState {
 function emptyPattern(): Pattern {
   return Array.from({ length: VOICE_COUNT }, () =>
     Array.from({ length: STEPS_PER_PATTERN }, () => ({ on: false, velocity: 1 as Velocity }))
+  );
+}
+
+/**
+ * Starter grooves, one row per voice (kick, snare, clap, c-hat, o-hat,
+ * low/mid/hi-tom): 0 = rest, 1/2/3 map to velocity 0/1/2.
+ */
+type StarterRows = number[][];
+
+const STARTER_HOUSE: StarterRows = [
+  [3, 0, 0, 0, 3, 0, 0, 0, 3, 0, 0, 0, 3, 0, 0, 0], // kick — four on the floor
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // snare
+  [0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0], // clap on 2 & 4
+  [2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 0, 0], // c-hat eighths
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0], // o-hat lift into the loop
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+];
+
+const STARTER_BOOM_BAP: StarterRows = [
+  [3, 0, 0, 0, 0, 0, 0, 2, 0, 0, 3, 0, 0, 0, 0, 0], // kick — boom .. ba-boom
+  [0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0], // snare on 2 & 4
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0], // c-hat eighths, swungish accents
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+];
+
+function starterPattern(rows: StarterRows): Pattern {
+  return Array.from({ length: VOICE_COUNT }, (_, v) =>
+    Array.from({ length: STEPS_PER_PATTERN }, (_, s) => {
+      const cell = rows[v]?.[s] ?? 0;
+      return cell === 0
+        ? { on: false, velocity: 1 as Velocity }
+        : { on: true, velocity: (cell - 1) as Velocity };
+    })
   );
 }
 
