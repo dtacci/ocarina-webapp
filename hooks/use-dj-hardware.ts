@@ -29,12 +29,17 @@ export type DjButtonTarget =
   | "hotcue4"
   | "playToggle";
 
+/** Which deck per-deck hardware actions (filter pot, buttons) land on. */
+export type DjDeckFocus = "follow" | "a" | "b";
+
 export interface DjPotMapping {
   crossfader: PotAssignment;
   masterVolume: PotAssignment;
-  /** Filter sweep on whichever deck is focused in the UI. */
+  /** Filter sweep on the focused deck (see deckFocus). */
   deckFilter: PotAssignment;
-  /** Pi GPIO row → pad/transport actions (on the crossfader-favored deck). */
+  /** "follow" = whichever deck the crossfader currently leans toward. */
+  deckFocus: DjDeckFocus;
+  /** Pi GPIO row → pad/transport actions (on the focused deck). */
   buttons: Record<PiGpioName, DjButtonTarget>;
 }
 
@@ -42,6 +47,7 @@ export const DEFAULT_DJ_MAPPING: DjPotMapping = {
   crossfader: "pitch_bend",
   masterVolume: "off",
   deckFilter: "off",
+  deckFocus: "follow",
   buttons: {
     inst_1: "hotcue1",
     inst_2: "hotcue2",

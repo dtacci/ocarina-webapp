@@ -11,11 +11,13 @@
 // Usage (dev server must be running):
 //   npm run verify:dj [-- <base-url>]
 import { config } from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 import { chromium } from "playwright";
 
 config({ path: ".env.local", quiet: true });
 
-const { ensureVerifyFixture, loginAsVerifyBot } = await import("./lib/verify-fixture.mjs");
+const { ensureVerifyFixture, ensureVerifySession, loginAsVerifyBot, VERIFY_EMAIL } =
+  await import("./lib/verify-fixture.mjs");
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
 
@@ -26,6 +28,17 @@ const check = (name, ok, detail = "") => {
 };
 
 await ensureVerifyFixture();
+await ensureVerifySession(); // bpm-tagged stems for the beat-loop check
+
+const admin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false } },
+);
+const { data: userList } = await admin.auth.admin.listUsers({ page: 1, perPage: 500 });
+const botId = userList?.users.find((u) => u.email?.toLowerCase() === VERIFY_EMAIL)?.id;
+// Stale DJ-mix rows from interrupted runs would break the row-count assertion.
+await admin.from("recordings").delete().eq("user_id", botId).like("title", "DJ mix%");
 
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
 const page = await browser.newPage({ viewport: { width: 1680, height: 1000 } });
@@ -63,7 +76,7 @@ check("both decks load the fixture from the source browser", decksLoaded);
 // ---- 2. Loop + play both decks ----
 for (const label of ["A", "B"]) {
   const deck = page.locator(`section[aria-label="Deck ${label}"]`);
-  await deck.getByRole("button", { name: "loop" }).click();
+  await deck.getByRole("button", { name: "loop", exact: true }).click();
   await deck.getByRole("button", { name: `play deck ${label}` }).click();
 }
 await page.waitForTimeout(700);
@@ -188,7 +201,62 @@ await tempoFader.press("ArrowUp");
 const rate = await page.evaluate(() => window.__djEngine.decks.a.getState().rate);
 check("tempo fader keyboard nudge raises the rate", rate > 1.0005 && rate < 1.01, `rate=${rate}`);
 
-// ---- 10. Console hygiene ----
+// ---- 10. Beat loop: bpm-tagged stem, 1-bar loop holds the region ----
+// Re-load deck A from the "loops" tab (fixture stem, bpm 120 → 1 bar = 2 s;
+// region clamps to the 2 s track). Without the loop the 2 s track would end.
+await page.getByRole("button", { name: "load" }).nth(0).click();
+await page.getByRole("dialog").waitFor();
+await page.getByRole("button", { name: "loops" }).click();
+await page.getByRole("dialog").getByRole("button", { name: /stem b \(drone\)/i }).first().click();
+await page.getByRole("dialog").waitFor({ state: "detached" });
+const deckA = page.locator('section[aria-label="Deck A"]');
+await deckA.getByText(/stem b/i).waitFor({ timeout: 20000 });
+// Release the full-track loop engaged in check 2 so only the beat loop can
+// keep the 2 s track alive.
+await deckA.getByRole("button", { name: "loop", exact: true }).click();
+await page.evaluate(() => window.__djEngine.decks.a.seek(0.3));
+await page.locator('button[aria-label="loop 1 bars deck A"]').click();
+await deckA.getByRole("button", { name: "play deck A" }).click();
+await page.waitForTimeout(2500); // > region length (1.7 s) and > track end
+const loopState = await page.evaluate(() => {
+  const s = window.__djEngine.decks.a.getState();
+  return {
+    playing: s.playing,
+    pos: Number(s.positionSec.toFixed(3)),
+    bars: s.loopBars,
+    start: s.loopStartSec,
+    dur: s.durationSec,
+  };
+});
+check(
+  "1-bar beat loop holds playback inside the region",
+  loopState.playing &&
+    loopState.bars === 1 &&
+    loopState.pos >= loopState.start - 0.05 &&
+    loopState.pos < loopState.dur,
+  JSON.stringify(loopState),
+);
+
+// ---- 11. Record the master bus → saved to the library ----
+await page.getByRole("button", { name: "record mix" }).click();
+await page.waitForTimeout(1500);
+await page.getByRole("button", { name: "stop recording" }).click();
+await page.getByText("saved", { exact: true }).waitFor({ timeout: 30000 });
+const { data: djRows } = await admin
+  .from("recordings")
+  .select("id,duration_sec,blob_url")
+  .eq("user_id", botId)
+  .like("title", "DJ mix%");
+check(
+  "master recording lands in the library (non-trivial duration)",
+  (djRows?.length ?? 0) === 1 &&
+    djRows[0].duration_sec > 0.8 &&
+    djRows[0].blob_url?.startsWith("http"),
+  `rows=${djRows?.length} duration=${djRows?.[0]?.duration_sec}s`,
+);
+await admin.from("recordings").delete().eq("user_id", botId).like("title", "DJ mix%");
+
+// ---- 12. Console hygiene ----
 const realErrors = errors.filter((e) => !/manifest|favicon/i.test(e));
 check("no page errors", realErrors.length === 0, realErrors.slice(0, 3).join(" | ") || "clean");
 

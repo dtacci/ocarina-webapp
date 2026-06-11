@@ -7,6 +7,7 @@
  */
 import type {
   DjButtonTarget,
+  DjDeckFocus,
   DjPotMapping,
   PotAssignment,
 } from "@/hooks/use-dj-hardware";
@@ -91,9 +92,20 @@ export function PotMappingPanel({
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <span className="workbench-label text-[10px] text-[color:var(--ink-500)]">
-          buttons → favored deck
-        </span>
+        <label className="flex items-center gap-2">
+          <span className="workbench-label text-[10px] text-[color:var(--ink-500)]">
+            buttons + filter act on
+          </span>
+          <select
+            value={mapping.deckFocus}
+            onChange={(e) => onChange({ deckFocus: e.target.value as DjDeckFocus })}
+            className={selectClass}
+          >
+            <option value="follow">follow crossfader</option>
+            <option value="a">deck a</option>
+            <option value="b">deck b</option>
+          </select>
+        </label>
         {GPIO_BUTTONS.map((b) => (
           <label key={b.key} className="flex items-center gap-2">
             <span className="workbench-label text-[10px] text-[color:var(--ink-500)]">{b.label} →</span>

@@ -45,6 +45,10 @@ export interface DeckState {
   cueSec: number;
   /** Performance pads: 4 stored positions, null = unset. Reset on load(). */
   hotCues: (number | null)[];
+  /** Beat-synced loop length in bars (4/4), null = no region loop. */
+  loopBars: number | null;
+  /** Left edge of the active region loop, null when loopBars is null. */
+  loopStartSec: number | null;
   eq: Record<EqBand, number>;
   /** Bipolar filter knob: -1 (LP closed) .. 0 (off) .. 1 (HP closed). */
   filter: number;
@@ -70,6 +74,12 @@ export interface DjDeck {
   clearHotCue: (i: number) => void;
   setRate: (rate: number) => void;
   setLoop: (on: boolean) => void;
+  /**
+   * Engage a beat-synced loop of `bars` bars (4 beats each at the track bpm)
+   * starting at the current position; null releases it. No-op without a
+   * track bpm. Seeking/jumping outside the region also releases it.
+   */
+  setLoopBars: (bars: number | null) => void;
   setEq: (band: EqBand, db: number) => void;
   setFilter: (v: number) => void;
   setVolume: (v: number) => void;
@@ -83,6 +93,11 @@ export interface DjEngine {
   getCrossfade: () => number;
   setMasterVolume: (v: number) => void;
   masterAnalyser: Tone.Analyser;
+  /** Tap the master bus into a MediaRecorder (pre-master-analyser). */
+  startRecording: () => Promise<void>;
+  /** Stop and return the captured blob (webm/mp4-opus, browser-dependent). */
+  stopRecording: () => Promise<Blob>;
+  isRecording: () => boolean;
   dispose: () => void;
 }
 
@@ -119,6 +134,8 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
   let loop = false;
   let cueSec = 0;
   const hotCues: (number | null)[] = [null, null, null, null];
+  /** Beat-synced loop region; position() folds into it once passed. */
+  let region: { start: number; end: number; bars: number } | null = null;
   let filterKnob = 0;
   let volume = 1;
   const eqState: Record<EqBand, number> = { low: 0, mid: 0, high: 0 };
@@ -130,7 +147,12 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
 
   const position = (): number => {
     let p = playing ? posAtAnchor + (now() - anchorCtx) * rate : posAtAnchor;
-    if (loop && durationSec > 0) p = ((p % durationSec) + durationSec) % durationSec;
+    if (region && p > region.end) {
+      // Past the region's right edge the player wraps to region.start.
+      p = region.start + ((p - region.start) % (region.end - region.start));
+    } else if (loop && durationSec > 0) {
+      p = ((p % durationSec) + durationSec) % durationSec;
+    }
     return Math.max(0, Math.min(p, durationSec));
   };
 
@@ -179,6 +201,7 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
       durationSec = buffer.duration;
       cueSec = 0;
       hotCues.fill(null);
+      region = null;
       anchor(0);
       playing = false;
     },
@@ -201,6 +224,11 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
     },
 
     seek(sec) {
+      // Leaving the region releases the beat loop (Pioneer-ish: a jump is an
+      // explicit exit; staying inside keeps looping).
+      if (region && (sec < region.start || sec >= region.end)) {
+        deck.setLoopBars(null);
+      }
       if (playing) startAt(sec);
       else anchor(Math.max(0, Math.min(sec, durationSec)));
     },
@@ -238,7 +266,33 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
 
     setLoop(on) {
       loop = on;
-      if (player) player.loop = on;
+      // The region owns player.loop while active; the flag takes over on release.
+      if (player && !region) player.loop = on;
+    },
+
+    setLoopBars(bars) {
+      if (bars === null) {
+        region = null;
+        if (player) {
+          player.loop = loop;
+          player.loopStart = 0;
+          player.loopEnd = 0; // 0 = end of buffer (Tone convention)
+        }
+        return;
+      }
+      const bpm = meta?.bpm;
+      if (!player || !bpm || durationSec === 0) return;
+      const p = position();
+      const start = Math.min(p, Math.max(0, durationSec - 0.05));
+      const end = Math.min(start + (bars * 4 * 60) / bpm, durationSec);
+      if (end - start < 0.05) return;
+      // Re-anchor at the entry position: the wrap math in position() needs the
+      // anchor to be region-relative-consistent from this instant.
+      anchor(p);
+      region = { start, end, bars };
+      player.loopStart = start;
+      player.loopEnd = end;
+      player.loop = true;
     },
 
     setEq(band, db) {
@@ -279,6 +333,8 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
         loop,
         cueSec,
         hotCues: [...hotCues],
+        loopBars: region?.bars ?? null,
+        loopStartSec: region?.start ?? null,
         eq: { ...eqState },
         filter: filterKnob,
         volume,
@@ -313,6 +369,9 @@ export function createDjEngine(): DjEngine {
   const deckA = createDeck(xfA, master);
   const deckB = createDeck(xfB, master);
 
+  // Lazy — most sessions never record, and MediaRecorder allocation isn't free.
+  let recorder: Tone.Recorder | null = null;
+
   return {
     decks: { a: deckA, b: deckB },
 
@@ -331,7 +390,25 @@ export function createDjEngine(): DjEngine {
 
     masterAnalyser,
 
+    async startRecording() {
+      if (!recorder) {
+        recorder = new Tone.Recorder();
+        master.connect(recorder);
+      }
+      if (recorder.state !== "started") await recorder.start();
+    },
+
+    async stopRecording() {
+      if (!recorder || recorder.state !== "started") {
+        throw new Error("not recording");
+      }
+      return recorder.stop();
+    },
+
+    isRecording: () => recorder?.state === "started",
+
     dispose() {
+      recorder?.dispose();
       (deckA as unknown as { __dispose: () => void }).__dispose();
       (deckB as unknown as { __dispose: () => void }).__dispose();
       xfA.dispose();

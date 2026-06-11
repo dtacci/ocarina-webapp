@@ -75,9 +75,14 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
     return () => { delete w.__djEngine; };
   }, [engine]);
 
-  // The deck hardware buttons / the filter pot act on — wherever the
-  // crossfader currently leans.
-  const favoredDeck = (): DeckId => (xfadeRef.current < 0.5 ? "a" : "b");
+  // The deck hardware buttons / the filter pot act on: an explicit focus from
+  // the mapping, or wherever the crossfader currently leans ("follow").
+  // Read through a ref — these fire from WS handlers at event rate.
+  const deckFocusRef = useRef<"follow" | "a" | "b">("follow");
+  const favoredDeck = (): DeckId =>
+    deckFocusRef.current === "follow"
+      ? xfadeRef.current < 0.5 ? "a" : "b"
+      : deckFocusRef.current;
 
   const hw = useDjHardware({
     onCrossfade: (v) => {
@@ -103,6 +108,9 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
       engineRef.current?.decks[favoredDeck()].toggle();
     },
   });
+  useEffect(() => {
+    deckFocusRef.current = hw.mapping.deckFocus;
+  }, [hw.mapping.deckFocus]);
 
   // Reflect pot-driven crossfade into the slider at UI rate (not pot rate).
   useEffect(() => {

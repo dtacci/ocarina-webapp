@@ -46,6 +46,7 @@ export function DeckPanel({
 }: DeckPanelProps) {
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(false);
+  const [loopBars, setLoopBars] = useState<number | null>(null);
   const [rate, setRate] = useState(1);
 
   const timeRef = useRef<HTMLSpanElement>(null);
@@ -64,8 +65,10 @@ export function DeckPanel({
           ? `${(trackBpm * s.rate).toFixed(1)} bpm`
           : "--- bpm";
       }
-      // Natural end flips engine state without a UI event — mirror it.
+      // Natural end / seek-released loops flip engine state without a UI
+      // event — mirror both.
       setPlaying((prev) => (prev === s.playing ? prev : s.playing));
+      setLoopBars((prev) => (prev === s.loopBars ? prev : s.loopBars));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -176,6 +179,35 @@ export function DeckPanel({
         >
           {playing ? "❚❚" : "▶"}
         </button>
+        {/* Beat loops — engage at the playhead, length from the track bpm. */}
+        <div className="ml-auto flex items-center gap-1">
+          {[1, 2, 4].map((bars) => (
+            <button
+              key={bars}
+              type="button"
+              disabled={!hasTrack || !trackBpm}
+              aria-label={`loop ${bars} bars deck ${label}`}
+              aria-pressed={loopBars === bars}
+              title={
+                trackBpm
+                  ? `${bars}-bar loop from the playhead`
+                  : "needs a track bpm"
+              }
+              className="workbench-label border border-[color:var(--wb-line)] px-2 py-1.5 transition-colors hover:border-[color:var(--wb-amber-dim)] disabled:opacity-40 tabular-nums"
+              style={{
+                color: loopBars === bars ? "var(--wb-amber)" : "var(--ink-500)",
+                borderColor: loopBars === bars ? "var(--wb-amber-dim)" : undefined,
+              }}
+              onClick={() => {
+                const next = loopBars === bars ? null : bars;
+                deck.setLoopBars(next);
+                setLoopBars(deck.getState().loopBars);
+              }}
+            >
+              {bars}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -184,7 +216,7 @@ export function DeckPanel({
             deck.setLoop(next);
           }}
           aria-pressed={loop}
-          className="workbench-label ml-auto flex items-center gap-1.5 border border-[color:var(--wb-line)] px-2.5 py-1.5 transition-colors"
+          className="workbench-label flex items-center gap-1.5 border border-[color:var(--wb-line)] px-2.5 py-1.5 transition-colors"
           style={{ color: loop ? "var(--wb-amber)" : "var(--ink-500)" }}
         >
           <span className="workbench-led" data-on={loop} />
