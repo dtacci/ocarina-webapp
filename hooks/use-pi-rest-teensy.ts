@@ -48,6 +48,11 @@ export interface UsePiRestTeensyOptions {
    * directly (the 1 Hz `pots` state below stays the React-friendly snapshot).
    */
   onPots?: (ev: PotsEvent) => void;
+  /**
+   * Pi GPIO row presses by name ("inst_1".."inst_4", "voice"). Same delivery
+   * contract as onPots: straight from the WS handler, no setState inside.
+   */
+  onGpioButton?: (name: string, pressed: boolean) => void;
 }
 
 export interface UsePiRestTeensy {
@@ -96,14 +101,16 @@ export interface UsePiRestTeensy {
 export function usePiRestTeensy(
   options: UsePiRestTeensyOptions = {}
 ): UsePiRestTeensy {
-  const { enabled = true, onHardware, onTelemetry, onPots } = options;
+  const { enabled = true, onHardware, onTelemetry, onPots, onGpioButton } = options;
 
   const onHwRef = useRef(onHardware);
   const onTelRef = useRef(onTelemetry);
   const onPotsRef = useRef(onPots);
+  const onGpioBtnRef = useRef(onGpioButton);
   useEffect(() => { onHwRef.current = onHardware; }, [onHardware]);
   useEffect(() => { onTelRef.current = onTelemetry; }, [onTelemetry]);
   useEffect(() => { onPotsRef.current = onPots; }, [onPots]);
+  useEffect(() => { onGpioBtnRef.current = onGpioButton; }, [onGpioButton]);
 
   const isConfigured = isOcarinaApiConfigured();
   const [status, setStatus] = useState<PiRestStatus>(
@@ -284,6 +291,7 @@ export function usePiRestTeensy(
         // Buttons aren't physically wired yet — these handlers fire when
         // they get built.
         onGpioPress: (e) => {
+          onGpioBtnRef.current?.(e.name, true);
           onHwRef.current?.({
             button: e.pin,
             event: "press",
@@ -291,6 +299,7 @@ export function usePiRestTeensy(
           });
         },
         onGpioRelease: (e) => {
+          onGpioBtnRef.current?.(e.name, false);
           onHwRef.current?.({
             button: e.pin,
             event: "release",

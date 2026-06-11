@@ -1,6 +1,7 @@
 // E2E verification for DJ mode (/dj): deck loading from the source browser,
 // playback, equal-power crossfader behavior (deck analyser levels invert),
-// mid-sweep behavior, and transport.
+// mid-sweep behavior, transport, hot-cue pads, the waveform overview
+// (renders + click-to-seek), and the tempo fader.
 //
 // Loudness has no DOM proxy, so the page exposes the engine as
 // `window.__djEngine` in development (see dj-surface.tsx) and this script
@@ -136,7 +137,58 @@ await page.waitForTimeout(200);
 const aPaused = await page.evaluate(() => !window.__djEngine.decks.a.getState().playing);
 check("pause stops deck A", aPaused);
 
-// ---- 6. Console hygiene ----
+// ---- 6. Hot cue pads: set at the playhead, jump back ----
+await page.evaluate(() => window.__djEngine.decks.a.seek(0.5));
+await page.locator('button[aria-label="hot cue 1 deck A"]').click();
+const cueSec = await page.evaluate(() => window.__djEngine.decks.a.getState().hotCues[0]);
+check(
+  "hot cue pad stores the playhead position",
+  cueSec !== null && Math.abs(cueSec - 0.5) < 0.05,
+  `hotCues[0]=${cueSec}`,
+);
+await page.evaluate(() => window.__djEngine.decks.a.seek(1.5));
+await page.locator('button[aria-label="hot cue 1 deck A"]').click();
+const afterJump = await page.evaluate(() => window.__djEngine.decks.a.getState().positionSec);
+check(
+  "hot cue pad jumps back to the stored cue",
+  Math.abs(afterJump - cueSec) < 0.15,
+  `position=${afterJump.toFixed(3)} cue=${cueSec?.toFixed(3)}`,
+);
+
+// ---- 7. Waveform overview renders peaks ----
+const litPixels = await page
+  .locator('[aria-label="waveform deck A"] canvas')
+  .first()
+  .evaluate((c) => {
+    const data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let lit = 0;
+    for (let i = 3; i < data.length; i += 40) if (data[i] > 0) lit++; // alpha
+    return lit;
+  });
+check("waveform overview paints the track peaks", litPixels > 100, `${litPixels} lit samples`);
+
+// ---- 8. Waveform click-to-seek ----
+const wfBox = await page.locator('[aria-label="waveform deck A"]').boundingBox();
+await page.mouse.click(wfBox.x + wfBox.width * 0.75, wfBox.y + wfBox.height / 2);
+await page.waitForTimeout(100);
+const seekFrac = await page.evaluate(() => {
+  const s = window.__djEngine.decks.a.getState();
+  return s.positionSec / s.durationSec;
+});
+check(
+  "clicking the waveform at 75% seeks there",
+  Math.abs(seekFrac - 0.75) < 0.05,
+  `position=${(seekFrac * 100).toFixed(1)}%`,
+);
+
+// ---- 9. Tempo fader: keyboard nudge changes the playback rate ----
+const tempoFader = page.getByRole("slider", { name: "tempo deck A" });
+await tempoFader.focus();
+await tempoFader.press("ArrowUp");
+const rate = await page.evaluate(() => window.__djEngine.decks.a.getState().rate);
+check("tempo fader keyboard nudge raises the rate", rate > 1.0005 && rate < 1.01, `rate=${rate}`);
+
+// ---- 10. Console hygiene ----
 const realErrors = errors.filter((e) => !/manifest|favicon/i.test(e));
 check("no page errors", realErrors.length === 0, realErrors.slice(0, 3).join(" | ") || "clean");
 

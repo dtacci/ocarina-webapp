@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * DJ mode — two decks, an equal-power crossfader, and the ocarina's physical
- * pots as control surface (via the high-rate "pots" stream + use-dj-hardware).
+ * DJ mode — Pioneer-style battle layout: CDJ deck A | DJM mixer column |
+ * CDJ deck B, with the ocarina's physical pots + GPIO buttons as control
+ * surface (high-rate "pots"/"gpio" streams via use-dj-hardware).
  *
  * Control-ownership rules:
  *  - Knobs/faders: React state is the source of truth, pushed into the engine.
@@ -10,22 +11,21 @@
  *    the engine directly at ~30 Hz (no setState) and a 10 Hz interval reflects
  *    the latest value back into the slider; dragging the slider suppresses pot
  *    input until 500 ms after release (last-writer-wins without fighting).
+ *  - Hardware buttons: discrete actions (hot cues / play toggle) on the
+ *    crossfader-favored deck — same focus convention as the filter pot.
  *  - Transport readouts: rAF straight into the DOM (see DeckPanel).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Tone from "tone";
-import { createDjEngine, type DjEngine } from "@/lib/audio/dj-engine";
+import { createDjEngine, type DjEngine, type DeckId } from "@/lib/audio/dj-engine";
+import { computePeaksFromBuffer } from "@/lib/audio/compute-peaks";
 import type { DjSource } from "@/lib/db/queries/dj";
 import { useAudioTakeover } from "@/hooks/use-audio-takeover";
 import { useDjHardware } from "@/hooks/use-dj-hardware";
 import { DeckPanel } from "./deck";
-import { Crossfader } from "./crossfader";
 import { DeckSourceBrowser } from "./deck-source-browser";
+import { MixerColumn } from "./mixer-column";
 import { PotMappingPanel } from "./pot-mapping-panel";
-import { PeakMeter } from "@/components/sample-editor/peak-meter";
-import { LinearSlider } from "@/components/sample-editor/primitives/linear-slider";
-
-type DeckId = "a" | "b";
 
 interface DeckTrackMeta {
   title: string | null;
@@ -49,6 +49,10 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
     a: EMPTY_META,
     b: EMPTY_META,
   });
+  const [peaks, setPeaks] = useState<Record<DeckId, number[] | null>>({
+    a: null,
+    b: null,
+  });
   const [browserFor, setBrowserFor] = useState<DeckId | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -71,6 +75,10 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
     return () => { delete w.__djEngine; };
   }, [engine]);
 
+  // The deck hardware buttons / the filter pot act on — wherever the
+  // crossfader currently leans.
+  const favoredDeck = (): DeckId => (xfadeRef.current < 0.5 ? "a" : "b");
+
   const hw = useDjHardware({
     onCrossfade: (v) => {
       engineRef.current?.setCrossfade(v);
@@ -82,9 +90,17 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
       // Reflected into the slider by the same 10 Hz sync below.
     },
     onDeckFilter: (v) => {
-      // Applies to the deck the crossfader currently favors.
-      const deck = xfadeRef.current < 0.5 ? "a" : "b";
-      engineRef.current?.decks[deck].setFilter(v * 2 - 1);
+      engineRef.current?.decks[favoredDeck()].setFilter(v * 2 - 1);
+    },
+    onHotCue: (i) => {
+      const deck = engineRef.current?.decks[favoredDeck()];
+      if (!deck) return;
+      // Pad semantics, same as a click: empty = set, stored = jump.
+      if (deck.getState().hotCues[i] === null) deck.setHotCue(i);
+      else deck.jumpHotCue(i);
+    },
+    onPlayToggle: () => {
+      engineRef.current?.decks[favoredDeck()].toggle();
     },
   });
 
@@ -116,9 +132,11 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
         await Tone.start(); // load is always a user gesture — unlock here too
         const buffer = await Tone.getContext().rawContext.decodeAudioData(bytes);
         eng.decks[deckId].load(buffer, { title, bpm });
+        setPeaks((p) => ({ ...p, [deckId]: computePeaksFromBuffer(buffer, 600) }));
         setMeta((m) => ({ ...m, [deckId]: { title, bpm, loading: false } }));
       } catch (err) {
         setMeta((m) => ({ ...m, [deckId]: EMPTY_META }));
+        setPeaks((p) => ({ ...p, [deckId]: null }));
         setLoadError(
           `couldn't load "${title}" — ${err instanceof Error ? err.message : "decode failed"}`,
         );
@@ -155,11 +173,11 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
   );
 
   return (
-    <div className="workbench -m-6 min-h-[calc(100vh-3.5rem)] space-y-5 p-8">
+    <div className="workbench dj-rig -m-6 min-h-[calc(100vh-3.5rem)] space-y-5 p-8">
       <header className="flex items-baseline justify-between">
         <h1 className="workbench-label text-base text-[color:var(--ink-300)]">dj decks</h1>
         <p className="workbench-readout text-[10px] text-[color:var(--ink-600)] lowercase">
-          load a track on each side · sweep the crossfader · map a hardware knob below
+          load a track on each side · sweep the crossfader · map hardware below
         </p>
       </header>
 
@@ -171,55 +189,43 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
 
       {engine ? (
         <>
-          <div className="flex flex-wrap gap-5">
+          {/* Battle layout: CDJ | DJM | CDJ. Stacks below xl. */}
+          <div className="flex flex-col items-stretch gap-5 xl:grid xl:grid-cols-[1fr_auto_1fr] xl:items-start">
             <DeckPanel
               deck={engine.decks.a}
               label="A"
               trackTitle={meta.a.title}
               trackBpm={meta.a.bpm}
+              peaks={peaks.a}
               loading={meta.a.loading}
               onRequestLoad={() => setBrowserFor("a")}
+            />
+            <MixerColumn
+              engine={engine}
+              xfade={xfade}
+              onXfadeChange={handleSliderChange}
+              onXfadeDragStart={() => {
+                hw.suppressUntilRef.current = Number.MAX_SAFE_INTEGER;
+              }}
+              onXfadeDragEnd={() => {
+                hw.suppressUntilRef.current = Date.now() + 500;
+              }}
+              hwActive={hwActive}
+              masterVol={masterVol}
+              onMasterVol={(v) => {
+                setMasterVol(v);
+                engine.setMasterVolume(v);
+              }}
             />
             <DeckPanel
               deck={engine.decks.b}
               label="B"
               trackTitle={meta.b.title}
               trackBpm={meta.b.bpm}
+              peaks={peaks.b}
               loading={meta.b.loading}
               onRequestLoad={() => setBrowserFor("b")}
             />
-          </div>
-
-          {/* Crossfader + master */}
-          <div className="flex flex-wrap items-center gap-6 border border-[color:var(--wb-line)] bg-[color:var(--ink-800)] px-5 py-4">
-            <div className="min-w-[280px] flex-1">
-              <Crossfader
-                value={xfade}
-                onChange={handleSliderChange}
-                onDragStart={() => {
-                  hw.suppressUntilRef.current = Number.MAX_SAFE_INTEGER;
-                }}
-                onDragEnd={() => {
-                  hw.suppressUntilRef.current = Date.now() + 500;
-                }}
-                hwActive={hwActive}
-              />
-            </div>
-            <div className="flex items-end gap-3">
-              <LinearSlider
-                value={masterVol}
-                min={0}
-                max={1.2}
-                step={0.01}
-                label="master"
-                width={120}
-                onChange={(v) => {
-                  setMasterVol(v);
-                  engine.setMasterVolume(v);
-                }}
-              />
-              <PeakMeter analyser={engine.masterAnalyser} height={44} />
-            </div>
           </div>
 
           <PotMappingPanel

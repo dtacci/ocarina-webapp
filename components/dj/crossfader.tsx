@@ -29,7 +29,7 @@ export function Crossfader({ value, onChange, onDragStart, onDragEnd, hwActive }
       <span className="workbench-label text-base text-[color:var(--wb-amber)]">A</span>
       <div className="relative flex-1">
         {/* center detent */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-[color:var(--ink-500)]" />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-4 w-px -translate-x-1/2 -translate-y-1/2 bg-[color:var(--ink-500)]" />
         <input
           type="range"
           min={0}
@@ -48,7 +48,7 @@ export function Crossfader({ value, onChange, onDragStart, onDragEnd, hwActive }
               onDragEnd?.();
             }
           }}
-          className="h-2 w-full cursor-ew-resize accent-[var(--wb-amber)]"
+          className="dj-xfader"
         />
       </div>
       <span className="workbench-label text-base text-[color:var(--wb-amber)]">B</span>

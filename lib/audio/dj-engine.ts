@@ -43,6 +43,8 @@ export interface DeckState {
   rate: number;
   loop: boolean;
   cueSec: number;
+  /** Performance pads: 4 stored positions, null = unset. Reset on load(). */
+  hotCues: (number | null)[];
   eq: Record<EqBand, number>;
   /** Bipolar filter knob: -1 (LP closed) .. 0 (off) .. 1 (HP closed). */
   filter: number;
@@ -61,6 +63,11 @@ export interface DjDeck {
   setCue: (sec?: number) => void;
   /** Jump to the cue point, preserving play/pause state. */
   jumpCue: () => void;
+  /** Store hot cue i (0–3) at sec (defaults to the current position). */
+  setHotCue: (i: number, sec?: number) => void;
+  /** Jump to hot cue i, preserving play/pause state. No-op while unset. */
+  jumpHotCue: (i: number) => void;
+  clearHotCue: (i: number) => void;
   setRate: (rate: number) => void;
   setLoop: (on: boolean) => void;
   setEq: (band: EqBand, db: number) => void;
@@ -111,6 +118,7 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
   let rate = 1;
   let loop = false;
   let cueSec = 0;
+  const hotCues: (number | null)[] = [null, null, null, null];
   let filterKnob = 0;
   let volume = 1;
   const eqState: Record<EqBand, number> = { low: 0, mid: 0, high: 0 };
@@ -170,6 +178,7 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
       meta = m;
       durationSec = buffer.duration;
       cueSec = 0;
+      hotCues.fill(null);
       anchor(0);
       playing = false;
     },
@@ -202,6 +211,22 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
 
     jumpCue() {
       deck.seek(cueSec);
+    },
+
+    setHotCue(i, sec) {
+      if (i < 0 || i >= hotCues.length) return;
+      hotCues[i] = Math.max(0, Math.min(sec ?? position(), durationSec));
+    },
+
+    jumpHotCue(i) {
+      const target = hotCues[i];
+      if (target === null || target === undefined) return;
+      deck.seek(target);
+    },
+
+    clearHotCue(i) {
+      if (i < 0 || i >= hotCues.length) return;
+      hotCues[i] = null;
     },
 
     setRate(r) {
@@ -253,6 +278,7 @@ function createDeck(xfGain: Tone.Gain, master: Tone.Gain): DjDeck {
         rate,
         loop,
         cueSec,
+        hotCues: [...hotCues],
         eq: { ...eqState },
         filter: filterKnob,
         volume,

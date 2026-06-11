@@ -1,19 +1,22 @@
 "use client";
 
 /**
- * One DJ deck panel: track readout, transport (play/pause, cue, loop),
- * tempo nudge, kill-EQ knobs, bipolar filter knob, channel fader, meter.
+ * One CDJ-style deck unit: track display, waveform overview, jog platter +
+ * vertical tempo fader, hot-cue pads, and transport (CUE / PLAY / loop).
  *
- * Knob/fader state lives in React (the UI is the source of truth and pushes
- * into the engine); the transport readout is rAF-driven straight into the
- * DOM — same pattern as the sample editor's timecode — so position display
- * never re-renders the panel.
+ * Mixer controls (EQ, filter, channel fader, meter) live in the center
+ * mixer column (channel-strip.tsx), Pioneer-style.
+ *
+ * Transport readout is rAF-driven straight into the DOM — position display
+ * never re-renders the panel. The CUE button follows CDJ semantics: paused →
+ * set the cue at the playhead; playing → snap back to the cue and pause.
  */
 import { useEffect, useRef, useState } from "react";
 import type { DjDeck } from "@/lib/audio/dj-engine";
-import { Knob } from "@/components/sample-editor/primitives/knob";
-import { LinearSlider } from "@/components/sample-editor/primitives/linear-slider";
-import { PeakMeter } from "@/components/sample-editor/peak-meter";
+import { WaveformOverview } from "./waveform-overview";
+import { JogPlatter } from "./jog-platter";
+import { HotCuePads } from "./hot-cue-pads";
+import { VerticalFader } from "./vertical-fader";
 
 function fmt(sec: number): string {
   if (!Number.isFinite(sec)) return "0:00.0";
@@ -27,6 +30,7 @@ export interface DeckPanelProps {
   label: "A" | "B";
   trackTitle: string | null;
   trackBpm: number | null;
+  peaks: number[] | null;
   loading?: boolean;
   onRequestLoad: () => void;
 }
@@ -36,22 +40,18 @@ export function DeckPanel({
   label,
   trackTitle,
   trackBpm,
+  peaks,
   loading = false,
   onRequestLoad,
 }: DeckPanelProps) {
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(false);
   const [rate, setRate] = useState(1);
-  const [eqLow, setEqLow] = useState(0);
-  const [eqMid, setEqMid] = useState(0);
-  const [eqHigh, setEqHigh] = useState(0);
-  const [filter, setFilter] = useState(0);
-  const [volume, setVolume] = useState(1);
 
   const timeRef = useRef<HTMLSpanElement>(null);
-  const barRef = useRef<HTMLDivElement>(null);
+  const bpmRef = useRef<HTMLSpanElement>(null);
 
-  // Position readout + progress bar + natural-end detection, all off-state.
+  // Position/BPM readout + natural-end detection, all off-state.
   useEffect(() => {
     let raf = 0;
     const tick = () => {
@@ -59,9 +59,10 @@ export function DeckPanel({
       if (timeRef.current) {
         timeRef.current.textContent = `${fmt(s.positionSec)} / ${fmt(s.durationSec)}`;
       }
-      if (barRef.current) {
-        const pct = s.durationSec > 0 ? (s.positionSec / s.durationSec) * 100 : 0;
-        barRef.current.style.width = `${pct}%`;
+      if (bpmRef.current) {
+        bpmRef.current.textContent = trackBpm
+          ? `${(trackBpm * s.rate).toFixed(1)} bpm`
+          : "--- bpm";
       }
       // Natural end flips engine state without a UI event — mirror it.
       setPlaying((prev) => (prev === s.playing ? prev : s.playing));
@@ -69,24 +70,25 @@ export function DeckPanel({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [deck]);
+  }, [deck, trackBpm]);
 
   const hasTrack = trackTitle !== null;
 
   return (
     <section
       aria-label={`Deck ${label}`}
-      className="flex-1 min-w-[300px] space-y-4 border border-[color:var(--wb-line)] bg-[color:var(--ink-800)] p-4"
+      className="min-w-[300px] space-y-3 border border-[color:var(--wb-line)] bg-[color:var(--ink-800)] p-4"
     >
-      {/* Header: deck letter + track + load */}
-      <div className="flex items-center gap-3">
+      {/* Track display */}
+      <div className="flex items-center gap-3 border border-[color:var(--wb-line-soft)] bg-[color:var(--ink-900)] px-3 py-2">
         <span className="workbench-label text-lg text-[color:var(--wb-amber)]">{label}</span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-[color:var(--ink-300)]">
             {loading ? "loading…" : hasTrack ? trackTitle : "no track loaded"}
           </p>
           <p className="workbench-readout text-[10px] text-[color:var(--ink-500)] lowercase">
-            {trackBpm ? `${Math.round(trackBpm)} bpm · ` : ""}
+            <span ref={bpmRef} className="tabular-nums">--- bpm</span>
+            {" · "}
             <span ref={timeRef} className="tabular-nums">0:00.0 / 0:00.0</span>
           </p>
         </div>
@@ -100,45 +102,79 @@ export function DeckPanel({
         </button>
       </div>
 
-      {/* Progress strip */}
-      <div className="h-1 w-full bg-[color:var(--ink-900)]">
-        <div ref={barRef} className="h-full bg-[color:var(--wb-amber)]" style={{ width: 0 }} />
+      {/* Waveform overview (click to seek) */}
+      <WaveformOverview peaks={peaks} deck={deck} deckLabel={label} />
+
+      {/* Platter + tempo */}
+      <div className="flex items-center justify-center gap-5 py-1">
+        <JogPlatter deck={deck} deckLabel={label} />
+        <VerticalFader
+          value={rate}
+          min={0.92}
+          max={1.08}
+          step={0.001}
+          height={150}
+          label="tempo"
+          ariaLabel={`tempo deck ${label}`}
+          defaultValue={1}
+          centerDetent
+          format={(v) => `${v >= 1 ? "+" : ""}${((v - 1) * 100).toFixed(1)}%`}
+          onChange={(v) => {
+            setRate(v);
+            deck.setRate(v);
+          }}
+        />
       </div>
 
+      {/* Hot cues */}
+      <HotCuePads deck={deck} deckLabel={label} disabled={!hasTrack} />
+
       {/* Transport */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3 pt-1">
         <button
           type="button"
+          disabled={!hasTrack}
+          aria-label={`cue deck ${label}`}
+          title="paused: set cue at playhead · playing: back to cue"
+          className="dj-transport-btn"
+          data-lit={false}
+          style={
+            {
+              "--btn-accent": "var(--dj-cue)",
+              "--btn-glow": "var(--dj-cue-glow)",
+            } as React.CSSProperties
+          }
+          onClick={() => {
+            const s = deck.getState();
+            if (s.playing) {
+              deck.jumpCue();
+              deck.pause();
+            } else {
+              deck.setCue();
+            }
+            setPlaying(deck.getState().playing);
+          }}
+        >
+          cue
+        </button>
+        <button
+          type="button"
+          disabled={!hasTrack}
+          aria-label={playing ? `pause deck ${label}` : `play deck ${label}`}
+          className="dj-transport-btn"
+          data-lit={playing}
+          style={
+            {
+              "--btn-accent": "var(--dj-play)",
+              "--btn-glow": "var(--dj-play-glow)",
+            } as React.CSSProperties
+          }
           onClick={() => {
             deck.toggle();
             setPlaying(deck.getState().playing);
           }}
-          disabled={!hasTrack}
-          aria-label={playing ? `pause deck ${label}` : `play deck ${label}`}
-          className="workbench-label min-w-[72px] border border-[color:var(--wb-amber-dim)] px-3 py-1.5 text-left text-[color:var(--wb-amber)] hover:bg-[color:var(--wb-amber-glow)] transition-colors disabled:opacity-40 tabular-nums"
         >
-          {playing ? "■ pause" : "▶ play"}
-        </button>
-        <button
-          type="button"
-          onClick={() => deck.setCue()}
-          disabled={!hasTrack}
-          title="Set cue at the playhead"
-          className="workbench-label border border-[color:var(--wb-line)] px-2.5 py-1.5 hover:border-[color:var(--ink-500)] transition-colors disabled:opacity-40"
-        >
-          set cue
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            deck.jumpCue();
-            setPlaying(deck.getState().playing);
-          }}
-          disabled={!hasTrack}
-          title="Jump to cue"
-          className="workbench-label border border-[color:var(--wb-line)] px-2.5 py-1.5 hover:border-[color:var(--ink-500)] transition-colors disabled:opacity-40"
-        >
-          cue
+          {playing ? "❚❚" : "▶"}
         </button>
         <button
           type="button"
@@ -148,67 +184,12 @@ export function DeckPanel({
             deck.setLoop(next);
           }}
           aria-pressed={loop}
-          className="workbench-label flex items-center gap-1.5 border border-[color:var(--wb-line)] px-2.5 py-1.5 transition-colors"
+          className="workbench-label ml-auto flex items-center gap-1.5 border border-[color:var(--wb-line)] px-2.5 py-1.5 transition-colors"
           style={{ color: loop ? "var(--wb-amber)" : "var(--ink-500)" }}
         >
           <span className="workbench-led" data-on={loop} />
           loop
         </button>
-      </div>
-
-      {/* Tempo nudge */}
-      <LinearSlider
-        value={rate}
-        min={0.92}
-        max={1.08}
-        step={0.001}
-        label="tempo"
-        width={180}
-        showReadout
-        format={(v) => `${v >= 1 ? "+" : ""}${((v - 1) * 100).toFixed(1)}%`}
-        onChange={(v) => {
-          setRate(v);
-          deck.setRate(v);
-        }}
-      />
-
-      {/* EQ + filter knobs */}
-      <div className="flex items-end gap-4">
-        <Knob
-          label="low" value={eqLow} min={-24} max={6} step={0.5} defaultValue={0}
-          unit="dB" decimals={1} showSign size={44}
-          onChange={(v) => { setEqLow(v); deck.setEq("low", v); }}
-        />
-        <Knob
-          label="mid" value={eqMid} min={-24} max={6} step={0.5} defaultValue={0}
-          unit="dB" decimals={1} showSign size={44}
-          onChange={(v) => { setEqMid(v); deck.setEq("mid", v); }}
-        />
-        <Knob
-          label="high" value={eqHigh} min={-24} max={6} step={0.5} defaultValue={0}
-          unit="dB" decimals={1} showSign size={44}
-          onChange={(v) => { setEqHigh(v); deck.setEq("high", v); }}
-        />
-        <Knob
-          label="filter" value={filter} min={-1} max={1} step={0.02} defaultValue={0}
-          size={52}
-          format={(v) =>
-            Math.abs(v) < 0.03 ? "off" : v < 0 ? `lp ${Math.round(-v * 100)}` : `hp ${Math.round(v * 100)}`
-          }
-          onChange={(v) => { setFilter(v); deck.setFilter(v); }}
-        />
-        <div className="ml-auto flex items-end gap-3">
-          <LinearSlider
-            value={volume}
-            min={0}
-            max={1.2}
-            step={0.01}
-            label="level"
-            width={110}
-            onChange={(v) => { setVolume(v); deck.setVolume(v); }}
-          />
-          <PeakMeter analyser={deck.analyser} height={48} />
-        </div>
       </div>
     </section>
   );

@@ -15,22 +15,40 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePiRestTeensy, type PiRestStatus } from "@/hooks/use-pi-rest-teensy";
-import type { PotsEvent } from "@/lib/ocarina-api";
+import type { PiGpioName, PotsEvent } from "@/lib/ocarina-api";
 
 export type PotName = "volume" | "reverb_mix" | "filter" | "pitch_bend";
 export type PotAssignment = PotName | "off";
+
+/** What a Pi GPIO button can trigger in DJ mode. */
+export type DjButtonTarget =
+  | "off"
+  | "hotcue1"
+  | "hotcue2"
+  | "hotcue3"
+  | "hotcue4"
+  | "playToggle";
 
 export interface DjPotMapping {
   crossfader: PotAssignment;
   masterVolume: PotAssignment;
   /** Filter sweep on whichever deck is focused in the UI. */
   deckFilter: PotAssignment;
+  /** Pi GPIO row → pad/transport actions (on the crossfader-favored deck). */
+  buttons: Record<PiGpioName, DjButtonTarget>;
 }
 
 export const DEFAULT_DJ_MAPPING: DjPotMapping = {
   crossfader: "pitch_bend",
   masterVolume: "off",
   deckFilter: "off",
+  buttons: {
+    inst_1: "hotcue1",
+    inst_2: "hotcue2",
+    inst_3: "hotcue3",
+    inst_4: "hotcue4",
+    voice: "playToggle",
+  },
 };
 
 const STORAGE_KEY = "dj-pot-mapping-v1";
@@ -40,7 +58,13 @@ function loadMapping(): DjPotMapping {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DJ_MAPPING;
-    return { ...DEFAULT_DJ_MAPPING, ...(JSON.parse(raw) as Partial<DjPotMapping>) };
+    const parsed = JSON.parse(raw) as Partial<DjPotMapping>;
+    // Deep-merge `buttons` so pre-button saved mappings stay valid.
+    return {
+      ...DEFAULT_DJ_MAPPING,
+      ...parsed,
+      buttons: { ...DEFAULT_DJ_MAPPING.buttons, ...(parsed.buttons ?? {}) },
+    };
   } catch {
     return DEFAULT_DJ_MAPPING;
   }
@@ -51,6 +75,9 @@ export interface UseDjHardwareOptions {
   onCrossfade?: (v: number) => void;
   onMasterVolume?: (v: number) => void;
   onDeckFilter?: (v: number) => void;
+  /** Hot cue pad i (0–3) pressed on hardware. Fired on press only. */
+  onHotCue?: (i: number) => void;
+  onPlayToggle?: () => void;
 }
 
 export interface UseDjHardware {
@@ -90,11 +117,29 @@ export function useDjHardware(options: UseDjHardwareOptions): UseDjHardware {
     route(m.deckFilter, o.onDeckFilter);
   }, []);
 
-  const { status, isConfigured } = usePiRestTeensy({ onPots });
+  // Buttons skip the suppression window (it exists to stop a pot fighting an
+  // on-screen drag; a button press is a discrete intent).
+  const onGpioButton = useCallback((name: string, pressed: boolean) => {
+    if (!pressed) return;
+    const target = mappingRef.current.buttons[name as PiGpioName];
+    const o = optionsRef.current;
+    if (!target || target === "off") return;
+    if (target === "playToggle") {
+      o.onPlayToggle?.();
+    } else {
+      o.onHotCue?.(Number(target.slice(-1)) - 1);
+    }
+  }, []);
+
+  const { status, isConfigured } = usePiRestTeensy({ onPots, onGpioButton });
 
   const setMapping = useCallback((patch: Partial<DjPotMapping>) => {
     setMappingState((prev) => {
-      const next = { ...prev, ...patch };
+      const next = {
+        ...prev,
+        ...patch,
+        buttons: { ...prev.buttons, ...(patch.buttons ?? {}) },
+      };
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {
