@@ -46,6 +46,7 @@ import {
   type Warning,
 } from "@/lib/transcription/types";
 import { InterpretationControls } from "./interpretation-controls";
+import { AiCleanup } from "./ai-cleanup";
 
 const NotationCanvas = dynamic(
   () => import("@/components/transcription/notation-canvas"),
@@ -579,12 +580,20 @@ export function TranscriptionDetail({
           }
         >
           {canEdit ? (
-            <InterpretationControls
-              params={params}
-              keyCandidates={keyCandidates}
-              busy={busy}
-              onChange={handleChange}
-            />
+            <div className="space-y-4">
+              <InterpretationControls
+                params={params}
+                keyCandidates={keyCandidates}
+                busy={busy}
+                onChange={handleChange}
+              />
+              <AiCleanup
+                sessionId={recording.id}
+                currentParams={params}
+                busy={busy}
+                onApply={(p) => handleChange(p)}
+              />
+            </div>
           ) : null}
 
           <section id="notation-print" className="rounded-lg border bg-card p-3 sm:p-4 overflow-x-auto">

@@ -1,11 +1,20 @@
 import { getDevices } from "@/lib/db/queries/devices";
 import { ConfigForm } from "@/components/config/config-form";
+import { MlConsentToggle } from "@/components/config/ml-consent-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Settings } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { hasMlConsent } from "@/lib/events/log";
 
 export default async function ConfigPage() {
   const devices = await getDevices();
   const primaryDevice = devices[0] ?? null;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const mlConsent = user ? await hasMlConsent(user.id) : false;
 
   return (
     <div className="space-y-6">
@@ -34,6 +43,8 @@ export default async function ConfigPage() {
           </div>
         </div>
       )}
+
+      <MlConsentToggle initialEnabled={mlConsent} />
 
       <ConfigForm deviceId={primaryDevice?.id} />
     </div>
