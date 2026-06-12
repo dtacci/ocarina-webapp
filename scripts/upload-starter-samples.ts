@@ -94,6 +94,16 @@ async function main() {
 
   const picked: Row[] = [];
   for (const fam of familyNames) {
+    // Fill TO the quota: families that already have fetchable samples only
+    // get the difference, so re-runs top up instead of stacking.
+    const { count: fetchable } = await supabase
+      .from("samples")
+      .select("*", { count: "exact", head: true })
+      .eq("is_system", true)
+      .eq("family", fam)
+      .like("blob_url", "http%");
+    const quota = Math.max(0, PER_FAMILY - (fetchable ?? 0));
+    if (quota === 0) continue;
     // Page through the whole family (PostgREST caps single responses at 1k).
     const all: Row[] = [];
     for (let from = 0; ; from += 1000) {
@@ -122,13 +132,13 @@ async function main() {
     const chosen: Row[] = [];
     const seenPrefix = new Set<string>();
     for (const r of shuffled) {
-      if (chosen.length >= PER_FAMILY) break;
+      if (chosen.length >= quota) break;
       if (seenPrefix.has(prefix(r.id))) continue;
       seenPrefix.add(prefix(r.id));
       chosen.push(r);
     }
     for (const r of shuffled) {
-      if (chosen.length >= PER_FAMILY) break;
+      if (chosen.length >= quota) break;
       if (!chosen.includes(r)) chosen.push(r);
     }
     picked.push(...chosen);

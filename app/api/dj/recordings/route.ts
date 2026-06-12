@@ -9,12 +9,16 @@ export const maxDuration = 120;
  * PCM16 WAV — same division of labor as the track editor's mixdown save
  * (app/api/sessions/[id]/mixdown), minus the session parentage.
  *
+ * Also used by the drum machine's "save loop" (offline pattern render) —
+ * the optional bpm tag is what makes DJ beat-loops work on the result.
+ *
  * Body: multipart/form-data
  *   - wav:           Blob (audio/wav)
  *   - name:          string?  (recording title; default "DJ mix")
  *   - durationSec:   string   (number)
  *   - sampleRate:    string   (number)
  *   - waveformPeaks: string?  (JSON number[])
+ *   - bpm:           string?  (number)
  *
  * Returns: { id: string }
  */
@@ -39,6 +43,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "durationSec and sampleRate required" }, { status: 400 });
   }
   const name = (form.get("name") as string | null)?.trim() || "DJ mix";
+  const bpmRaw = Number(form.get("bpm"));
+  const bpm = Number.isFinite(bpmRaw) && bpmRaw > 0 ? Math.round(bpmRaw) : null;
   let peaks: number[] | null = null;
   try {
     const raw = form.get("waveformPeaks");
@@ -61,6 +67,7 @@ export async function POST(request: Request) {
       blob_url: blob.url,
       duration_sec: durationSec,
       sample_rate: sampleRate,
+      bpm,
       waveform_peaks: peaks,
       session_id: null,
       recording_type: "master",

@@ -16,7 +16,7 @@ export type Pattern = VoiceRow[]; // length VOICE_COUNT
 const STEPS_PER_PATTERN = 16;
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD_SEC = 0.1;
-const VELOCITY_GAIN: Record<Velocity, number> = { 0: 0.4, 1: 0.7, 2: 1.0 };
+export const VELOCITY_GAIN: Record<Velocity, number> = { 0: 0.4, 1: 0.7, 2: 1.0 };
 
 export type StepListener = (step: number, audioTime: number) => void;
 
@@ -211,9 +211,10 @@ function emptyPattern(): Pattern {
 // ---- TR-808-ish synthesis ----------------------------------------------------
 // Zero-sample fallback so the drum machine works out of the box. Not a faithful
 // 808 clone — just serviceable drum voices built from WebAudio primitives.
+// Exported for the kit-audition preview and offline pattern rendering.
 
-function synthesize(
-  ctx: AudioContext,
+export function synthesize(
+  ctx: BaseAudioContext,
   dest: AudioNode,
   kind: SynthVoiceKind,
   when: number,
@@ -239,7 +240,7 @@ function synthesize(
   }
 }
 
-function synthKick(ctx: AudioContext, dest: AudioNode, when: number, gain: number): void {
+function synthKick(ctx: BaseAudioContext, dest: AudioNode, when: number, gain: number): void {
   const osc = ctx.createOscillator();
   const amp = ctx.createGain();
   osc.type = "sine";
@@ -253,7 +254,7 @@ function synthKick(ctx: AudioContext, dest: AudioNode, when: number, gain: numbe
   osc.stop(when + 0.45);
 }
 
-function synthSnare(ctx: AudioContext, dest: AudioNode, when: number, gain: number): void {
+function synthSnare(ctx: BaseAudioContext, dest: AudioNode, when: number, gain: number): void {
   const noise = ctx.createBufferSource();
   noise.buffer = getNoiseBuffer(ctx);
   const bp = ctx.createBiquadFilter();
@@ -280,7 +281,7 @@ function synthSnare(ctx: AudioContext, dest: AudioNode, when: number, gain: numb
   tone.stop(when + 0.1);
 }
 
-function synthClap(ctx: AudioContext, dest: AudioNode, when: number, gain: number): void {
+function synthClap(ctx: BaseAudioContext, dest: AudioNode, when: number, gain: number): void {
   // Three quick noise bursts + one longer tail, classic clap trick.
   const bursts = [0, 0.01, 0.022];
   for (const offset of bursts) {
@@ -316,7 +317,7 @@ function synthClap(ctx: AudioContext, dest: AudioNode, when: number, gain: numbe
 }
 
 function synthHat(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   when: number,
   gain: number,
@@ -337,7 +338,7 @@ function synthHat(
 }
 
 function synthTom(
-  ctx: AudioContext,
+  ctx: BaseAudioContext,
   dest: AudioNode,
   when: number,
   gain: number,
@@ -358,7 +359,7 @@ function synthTom(
 
 // Shared noise buffer — 1 second of white noise, reused for all noise voices.
 let noiseBuffer: AudioBuffer | null = null;
-function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
+function getNoiseBuffer(ctx: BaseAudioContext): AudioBuffer {
   if (noiseBuffer) return noiseBuffer;
   const sampleRate = ctx.sampleRate;
   const buf = ctx.createBuffer(1, sampleRate, sampleRate);

@@ -1,40 +1,48 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, Drum, Search } from "lucide-react";
+import { Check, ChevronDown, Drum, Search, Volume2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BUILTIN_KITS, type KitManifest } from "@/lib/audio/drum-kit-manifest";
+import { auditionKit } from "@/lib/audio/kit-audition";
 import { cn } from "@/lib/utils";
 
 interface DrumKitPickerProps {
   currentKitId: string;
   onSelect: (kit: KitManifest) => void;
   disabled?: boolean;
+  /** Kit roster (e.g. from /api/kits). Falls back to the builtins. */
+  kits?: KitManifest[];
 }
 
 /**
  * Searchable kit picker. The filter matches name, id, and kind so "synth",
- * "808", or "acoustic" all narrow the list — sized for the day kits come
- * from the DB instead of BUILTIN_KITS.
+ * "808", or "acoustic" all narrow the list — sized for manifest-scanned or
+ * DB-backed rosters, not just the builtins.
  */
-export function DrumKitPicker({ currentKitId, onSelect, disabled }: DrumKitPickerProps) {
+export function DrumKitPicker({
+  currentKitId,
+  onSelect,
+  disabled,
+  kits = BUILTIN_KITS,
+}: DrumKitPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const current = BUILTIN_KITS.find((k) => k.id === currentKitId) ?? BUILTIN_KITS[0];
+  const current = kits.find((k) => k.id === currentKitId) ?? kits[0];
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return BUILTIN_KITS;
-    return BUILTIN_KITS.filter(
+    if (!q) return kits;
+    return kits.filter(
       (k) =>
         k.name.toLowerCase().includes(q) ||
         k.id.toLowerCase().includes(q) ||
         k.kind.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [query, kits]);
 
   return (
     <Popover
@@ -78,32 +86,45 @@ export function DrumKitPicker({ currentKitId, onSelect, disabled }: DrumKitPicke
             </p>
           ) : (
             filtered.map((kit) => (
-              <button
+              <div
                 key={kit.id}
-                type="button"
                 role="option"
                 aria-selected={kit.id === currentKitId}
-                onClick={() => {
-                  onSelect(kit);
-                  setOpen(false);
-                  setQuery("");
-                }}
                 className={cn(
-                  "flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent",
+                  "flex items-center gap-1 rounded-sm pr-1 hover:bg-accent",
                   kit.id === currentKitId && "bg-accent",
                 )}
               >
-                <Check
-                  className={cn(
-                    "size-3.5 shrink-0",
-                    kit.id === currentKitId ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                <span className="flex-1 truncate">{kit.name}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {kit.kind}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(kit);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm"
+                >
+                  <Check
+                    className={cn(
+                      "size-3.5 shrink-0",
+                      kit.id === currentKitId ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span className="flex-1 truncate">{kit.name}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {kit.kind}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`preview kit ${kit.name}`}
+                  title="preview this kit"
+                  onClick={() => void auditionKit(kit).catch(() => {})}
+                  className="rounded-sm p-1.5 text-muted-foreground hover:text-foreground"
+                >
+                  <Volume2 className="size-3.5" />
+                </button>
+              </div>
             ))
           )}
         </div>

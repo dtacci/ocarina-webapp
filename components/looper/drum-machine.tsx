@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DrumEngine } from "@/lib/audio/drum-engine";
 import {
+  BUILTIN_KITS,
   SYNTH_808_MANIFEST,
   type KitManifest,
 } from "@/lib/audio/drum-kit-manifest";
@@ -30,6 +31,7 @@ import { useHardwareInput, type HardwareEvent } from "@/hooks/use-hardware-input
 import { useDrumKeyboard } from "@/hooks/use-drum-keyboard";
 import { DrumStepGrid } from "./drum-step-grid";
 import { DrumKitPicker } from "./drum-kit-picker";
+import { SaveLoopButton } from "./save-loop-button";
 
 type HardwareMode = "edit" | "mute" | "pattern";
 
@@ -50,6 +52,23 @@ export function DrumMachine({ deviceId, compact }: DrumMachineProps) {
   const button1HeldRef = useRef(false);
 
   const [kit, setKit] = useState<KitManifest>(SYNTH_808_MANIFEST);
+  // Kit roster: synth built-ins immediately, manifest-scanned sample kits
+  // (public/kits/*/manifest.json via /api/kits) once fetched.
+  const [kits, setKits] = useState<KitManifest[]>(BUILTIN_KITS);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/kits")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { kits?: KitManifest[] } | null) => {
+        if (!cancelled && body?.kits && body.kits.length > 0) setKits(body.kits);
+      })
+      .catch(() => {
+        /* offline / route missing — builtins stay */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState<number | null>(null);
   const [localBpm, setLocalBpm] = useState(120);
@@ -265,7 +284,13 @@ export function DrumMachine({ deviceId, compact }: DrumMachineProps) {
         </div>
 
         <div className="flex items-center gap-2 ml-auto flex-wrap">
-          <DrumKitPicker currentKitId={kit.id} onSelect={setKit} />
+          <DrumKitPicker currentKitId={kit.id} onSelect={setKit} kits={kits} />
+          <SaveLoopButton
+            pattern={pattern.activePattern}
+            mutes={pattern.effectiveMutes}
+            kit={kit}
+            bpm={effectiveBpm}
+          />
 
           {/* Device / tempo status */}
           {deviceId ? (

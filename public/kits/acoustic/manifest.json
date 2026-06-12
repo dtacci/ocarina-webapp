@@ -1,0 +1,16 @@
+{
+  "id": "acoustic",
+  "name": "Acoustic Kit",
+  "kind": "sample",
+  "license": "VCSL 'bigrusty' acoustic kit from the digital-ocarina sample library (see samples/ATTRIBUTION.md there); sidestick rides the clap slot",
+  "voices": [
+    { "name": "kick", "file": "/kits/acoustic/kick.wav" },
+    { "name": "snare", "file": "/kits/acoustic/snare.wav" },
+    { "name": "clap", "file": "/kits/acoustic/clap.wav" },
+    { "name": "c-hat", "file": "/kits/acoustic/c-hat.wav" },
+    { "name": "o-hat", "file": "/kits/acoustic/o-hat.wav" },
+    { "name": "low-tom", "file": "/kits/acoustic/low-tom.wav" },
+    { "name": "mid-tom", "file": "/kits/acoustic/mid-tom.wav" },
+    { "name": "hi-tom", "file": "/kits/acoustic/hi-tom.wav" }
+  ]
+}
