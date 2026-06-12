@@ -10,8 +10,10 @@
  * a running estimate is printed as it goes.
  *
  * Usage:
- *   npx tsx scripts/generate-descriptions.ts            # full run
- *   npx tsx scripts/generate-descriptions.ts --limit 20 # smoke test
+ *   npx tsx scripts/generate-descriptions.ts                  # full run
+ *   npx tsx scripts/generate-descriptions.ts --limit 20       # smoke test
+ *   npx tsx scripts/generate-descriptions.ts --fetchable-only # only samples
+ *       with real (http) blob_urls — the audible starter pack
  */
 import { config } from "dotenv";
 config({ path: [".env.local", ".env"] });
@@ -40,6 +42,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const limitArg = process.argv.indexOf("--limit");
 const LIMIT = limitArg > -1 ? Number(process.argv[limitArg + 1]) : Infinity;
+const FETCHABLE_ONLY = process.argv.includes("--fetchable-only");
 
 const descriptionSchema = z.object({
   descriptions: z.array(
@@ -89,13 +92,15 @@ async function fetchPendingSamples(): Promise<SampleRow[]> {
 
   const pending: SampleRow[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase
+    let q = supabase
       .from("samples")
       .select(
         "id, title, family, category, root_note, duration_sec, brightness, warmth, attack, sustain, texture",
       )
       .order("id")
       .range(from, from + 999);
+    if (FETCHABLE_ONLY) q = q.like("blob_url", "http%");
+    const { data, error } = await q;
     if (error) throw new Error(error.message);
     for (const row of data ?? []) {
       if (!done.has(row.id)) pending.push(row as SampleRow);
