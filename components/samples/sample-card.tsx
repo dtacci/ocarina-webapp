@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Play, Pause, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Play, Pause, Loader2, Headphones, SlidersHorizontal } from "lucide-react";
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import { Badge } from "@/components/ui/badge";
 import { FavoriteButton } from "./favorite-button";
@@ -63,6 +64,7 @@ export function SampleCard({
     ? list.samples.findIndex((s) => s.id === sample.id)
     : undefined;
 
+  const router = useRouter();
   const { isPlaying, isLoading, isCurrent, play } = usePlayback({
     track: sampleToTrack(sample),
     listTracks,
@@ -139,6 +141,33 @@ export function SampleCard({
           <span className="text-xs text-muted-foreground">
             {sample.duration_sec.toFixed(1)}s
           </span>
+          {/* Send-to actions — the card is a Link, so stop the navigation. */}
+          <button
+            type="button"
+            aria-label={`Open ${sample.id} in the sample editor`}
+            title="open in sample editor"
+            className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              router.push(`/sample-editor/${encodeURIComponent(sample.id)}`);
+            }}
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Load ${sample.id} into a DJ deck`}
+            title="load into DJ deck A"
+            className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              router.push(`/dj?load=${encodeURIComponent(sample.id)}&kind=sample&deck=a`);
+            }}
+          >
+            <Headphones className="size-3.5" />
+          </button>
           <FavoriteButton
             sampleId={sample.id}
             initialFavorite={initialFavorite}

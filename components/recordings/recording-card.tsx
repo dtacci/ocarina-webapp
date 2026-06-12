@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import NextLink from "next/link";
 import {
   Play, Pause, Download, Loader2, Music, Clock,
-  Trash2, Pencil, Globe, Link, Share2, Check, X,
+  Trash2, Pencil, Globe, Link, Share2, Check, X, Headphones,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -278,6 +279,16 @@ export function RecordingCard({ recording, onDelete }: Props) {
 
         {/* Action buttons */}
         <div className="flex items-center gap-1 shrink-0">
+          {/* Load into DJ deck */}
+          <NextLink
+            href={`/dj?load=${encodeURIComponent(recording.id)}&kind=recording&deck=a`}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
+            title="Load into DJ deck A"
+            aria-label={`Load ${recording.title ?? "recording"} into DJ deck A`}
+          >
+            <Headphones className="size-3.5" />
+          </NextLink>
+
           {/* Download */}
           <a
             href={recording.blob_url}

@@ -35,7 +35,19 @@ interface DeckTrackMeta {
 
 const EMPTY_META: DeckTrackMeta = { title: null, bpm: null, loading: false };
 
-export function DjSurface({ sources }: { sources: DjSource[] }) {
+/** Resolved `?load=` handoff (see app/(dashboard)/dj/page.tsx). */
+export interface DjAutoload {
+  source: DjSource;
+  deck: DeckId;
+}
+
+export function DjSurface({
+  sources,
+  autoload = null,
+}: {
+  sources: DjSource[];
+  autoload?: DjAutoload | null;
+}) {
   useAudioTakeover();
 
   const [engine, setEngine] = useState<DjEngine | null>(null);
@@ -137,7 +149,11 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
       setLoadError(null);
       setMeta((m) => ({ ...m, [deckId]: { title: null, bpm: null, loading: true } }));
       try {
-        await Tone.start(); // load is always a user gesture — unlock here too
+        // Unlock opportunistically but never block on it: ?load= autoloads
+        // run before any user gesture, where Tone.start() stays pending.
+        // Decoding works on a suspended context; the pointerdown listener
+        // below resumes audio before anything needs to sound.
+        void Tone.start().catch(() => {});
         const buffer = await Tone.getContext().rawContext.decodeAudioData(bytes);
         eng.decks[deckId].load(buffer, { title, bpm });
         setPeaks((p) => ({ ...p, [deckId]: computePeaksFromBuffer(buffer, 600) }));
@@ -179,6 +195,19 @@ export function DjSurface({ sources }: { sources: DjSource[] }) {
     },
     [decodeAndLoad],
   );
+
+  // ?load= handoff: pull the resolved source into its deck once the engine
+  // exists. Runs pre-gesture, so make sure the first interaction anywhere
+  // resumes the audio context (play/pads would otherwise stay silent).
+  const autoloadedRef = useRef(false);
+  useEffect(() => {
+    if (!engine || !autoload || autoloadedRef.current) return;
+    autoloadedRef.current = true;
+    const unlock = () => void Tone.start().catch(() => {});
+    window.addEventListener("pointerdown", unlock, { once: true });
+    void loadSource(autoload.deck, autoload.source);
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, [engine, autoload, loadSource]);
 
   return (
     <div className="workbench dj-rig -m-6 min-h-[calc(100vh-3.5rem)] space-y-5 p-8">

@@ -1,0 +1,16 @@
+{
+  "id": "cassette-808",
+  "name": "Cassette 808",
+  "kind": "sample",
+  "license": "Cassette808 one-shots from the digital-ocarina sample library (see samples/ATTRIBUTION.md there)",
+  "voices": [
+    { "name": "kick", "file": "/kits/cassette-808/kick.wav" },
+    { "name": "snare", "file": "/kits/cassette-808/snare.wav" },
+    { "name": "clap", "file": "/kits/cassette-808/clap.wav" },
+    { "name": "c-hat", "file": "/kits/cassette-808/c-hat.wav" },
+    { "name": "o-hat", "file": "/kits/cassette-808/o-hat.wav" },
+    { "name": "low-tom", "file": "/kits/cassette-808/low-tom.wav" },
+    { "name": "mid-tom", "file": "/kits/cassette-808/mid-tom.wav" },
+    { "name": "hi-tom", "file": "/kits/cassette-808/hi-tom.wav" }
+  ]
+}

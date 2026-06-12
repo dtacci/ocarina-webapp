@@ -3,7 +3,9 @@ import { Disc3 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { isOcarinaApiConfigured } from "@/lib/ocarina-api";
+import { getDevices } from "@/lib/db/queries/devices";
 import { LooperDashboardSurface } from "@/components/looper/looper-dashboard-surface";
+import { DrumMachine } from "@/components/looper/drum-machine";
 
 export default async function LooperDashboardPage() {
   const supabase = await createClient();
@@ -45,6 +47,11 @@ export default async function LooperDashboardPage() {
     );
   }
 
+  const devices = await getDevices();
+  const piDevice = devices.find(
+    (d) => d.capabilities?.looper && d.device_type !== "web_browser"
+  );
+
   return (
     <div className="space-y-4 max-w-4xl">
       <div>
@@ -55,6 +62,13 @@ export default async function LooperDashboardPage() {
         </p>
       </div>
       <LooperDashboardSurface />
+      {/* Companion sequencer, pre-loaded with starter grooves and the kit
+          roster — tempo-locks to the looper when the Pi broadcasts a BPM. */}
+      <DrumMachine
+        compact
+        deviceId={piDevice?.id ?? null}
+        deviceName={piDevice?.name ?? "This Browser"}
+      />
     </div>
   );
 }

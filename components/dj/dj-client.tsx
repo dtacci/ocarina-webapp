@@ -7,12 +7,19 @@
  */
 import dynamic from "next/dynamic";
 import type { DjSource } from "@/lib/db/queries/dj";
+import type { DjAutoload } from "./dj-surface";
 
 const DjSurface = dynamic(
   () => import("./dj-surface").then((m) => m.DjSurface),
   { ssr: false },
 );
 
-export function DjClient({ sources }: { sources: DjSource[] }) {
-  return <DjSurface sources={sources} />;
+export function DjClient({
+  sources,
+  autoload = null,
+}: {
+  sources: DjSource[];
+  autoload?: DjAutoload | null;
+}) {
+  return <DjSurface sources={sources} autoload={autoload} />;
 }
