@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import NextLink from "next/link";
 import {
   Play, Pause, Download, Loader2, Music, Clock,
-  Trash2, Pencil, Globe, Link, Share2, Check, X, Headphones,
+  Trash2, Pencil, Globe, Link, Share2, Check, X, Headphones, SlidersHorizontal,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -279,6 +279,16 @@ export function RecordingCard({ recording, onDelete }: Props) {
 
         {/* Action buttons */}
         <div className="flex items-center gap-1 shrink-0">
+          {/* Polish in the sample editor (route falls back to recordings) */}
+          <NextLink
+            href={`/sample-editor/${encodeURIComponent(recording.id)}`}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
+            title="Polish in sample editor"
+            aria-label={`Polish ${recording.title ?? "recording"} in the sample editor`}
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </NextLink>
+
           {/* Load into DJ deck */}
           <NextLink
             href={`/dj?load=${encodeURIComponent(recording.id)}&kind=recording&deck=a`}

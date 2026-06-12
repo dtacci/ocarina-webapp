@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { SampleWithVibes } from "@/lib/db/queries/samples";
 
 /** Draft = a user recording that hasn't been polished into a library sample yet. */
 export interface DraftRow {
@@ -15,6 +16,7 @@ export interface DraftRow {
 /** User-owned sample saved to the library. */
 export interface UserSampleRow {
   id: string;
+  title: string | null;
   blob_url: string;
   mp3_blob_url: string | null;
   duration_sec: number;
@@ -65,7 +67,7 @@ export async function getUserOwnedSamples(limit = 24): Promise<UserSampleRow[]> 
   const { data, error } = await supabase
     .from("samples")
     .select(
-      "id, blob_url, mp3_blob_url, duration_sec, sample_rate, root_note, family, waveform_peaks, source_sample_id, created_at"
+      "id, title, blob_url, mp3_blob_url, duration_sec, sample_rate, root_note, family, waveform_peaks, source_sample_id, created_at"
     )
     .eq("user_id", user.id)
     .eq("is_system", false)
@@ -74,6 +76,58 @@ export async function getUserOwnedSamples(limit = 24): Promise<UserSampleRow[]> 
 
   if (error) throw error;
   return data ?? [];
+}
+
+/**
+ * Fetch a recording row and adapt it to the SampleWithVibes shape so the
+ * Editor can load it identically to a saved sample. Recordings lack most
+ * sample metadata (root_note, family, brightness sliders, vibes) — those
+ * default to null so the metadata panel surfaces them as "untagged".
+ *
+ * RLS on `recordings` already restricts to user_id = auth.uid(), so the
+ * caller doesn't need an explicit auth check.
+ */
+export async function getRecordingForEditor(
+  id: string,
+): Promise<SampleWithVibes | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("recordings")
+    .select(
+      "id, user_id, title, bpm, blob_url, duration_sec, sample_rate, waveform_peaks",
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    // Recording titles ("Stem A", "Drum loop — …") pre-fill the save name;
+    // bpm rides through so the baked sample keeps its tempo tag.
+    title: data.title ?? null,
+    blob_url: data.blob_url,
+    mp3_blob_url: null,
+    duration_sec: data.duration_sec,
+    sample_rate: data.sample_rate,
+    root_note: null,
+    root_freq: null,
+    brightness: null,
+    attack: null,
+    sustain: null,
+    texture: null,
+    warmth: null,
+    category: null,
+    family: null,
+    bpm: data.bpm ?? null,
+    loopable: false,
+    is_system: false,
+    waveform_peaks: data.waveform_peaks,
+    source_sample_id: null,
+    edit_spec: null,
+    user_id: data.user_id,
+    vibes: [],
+  };
 }
 
 /** Recent lineage entries — samples that were forked from another sample. */

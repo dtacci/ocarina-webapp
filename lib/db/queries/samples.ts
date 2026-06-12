@@ -25,6 +25,8 @@ export interface SampleFilters {
 
 export interface SampleRow {
   id: string;
+  /** User-entered display name (sample editor metadata panel). Null for unnamed. */
+  title?: string | null;
   blob_url: string;
   mp3_blob_url: string | null;  // Vercel Blob URL for 6s preview — null until batch script runs
   duration_sec: number;
@@ -38,6 +40,8 @@ export interface SampleRow {
   warmth: number | null;
   category: string | null;
   family: string | null;
+  /** Tempo tag carried through the sample editor; enables DJ beat-loops. */
+  bpm?: number | null;
   loopable: boolean;
   is_system: boolean;
   waveform_peaks: number[] | null;
