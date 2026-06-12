@@ -32,7 +32,7 @@ export async function getDjSources(): Promise<DjSource[]> {
       .limit(100),
     supabase
       .from("samples")
-      .select("id,title,blob_url,duration_sec")
+      .select("id,title,blob_url,duration_sec,bpm")
       .eq("user_id", user.id)
       .like("blob_url", "http%")
       .order("created_at", { ascending: false })
@@ -58,7 +58,7 @@ export async function getDjSources(): Promise<DjSource[]> {
       kind: "sample",
       title: s.title ?? "Untitled sample",
       durationSec: s.duration_sec ?? 0,
-      bpm: null,
+      bpm: s.bpm ?? null,
       url: s.blob_url,
       recordingType: null,
     });

@@ -165,6 +165,8 @@ export const samples = pgTable("samples", {
   warmth: smallint("warmth"), // 1-10
   category: sampleCategoryEnum("category"),
   family: sampleFamilyEnum("family"),
+  /** Tempo tag carried through the sample editor; enables DJ beat-loops. */
+  bpm: integer("bpm"),
   loopable: boolean("loopable").notNull().default(false),
   verified: boolean("verified").notNull().default(false),
   isSystem: boolean("is_system").notNull().default(false),

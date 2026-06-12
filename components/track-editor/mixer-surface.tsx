@@ -72,6 +72,8 @@ export function MixerSurface({ sessionId, sessionTitle, sessionBpm, stems, initi
   const [saving, setSaving] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  /** Last saved mixdown — powers the "load into DJ deck" toast action. */
+  const [mixdownId, setMixdownId] = useState<string | null>(null);
   const [fxOpenFor, setFxOpenFor] = useState<string | null>(null);
   const [mode, setMode] = useState<"mixer" | "arrange">("mixer");
   const [arrangement, setArrangement] = useState<Arrangement>(
@@ -96,7 +98,9 @@ export function MixerSurface({ sessionId, sessionTitle, sessionBpm, stems, initi
 
   useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(null), 3500);
+    // The mixdown toast carries a "load into dj deck" action — keep it up
+    // long enough to actually click.
+    const id = setTimeout(() => setToast(null), toast.startsWith("mixdown saved") ? 12000 : 3500);
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -232,6 +236,7 @@ export function MixerSurface({ sessionId, sessionTitle, sessionBpm, stems, initi
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      setMixdownId(typeof body.id === "string" ? body.id : null);
       setToast("mixdown saved to recordings");
     } catch (err) {
       setToast(`mixdown failed — ${err instanceof Error ? err.message : "render error"}`);
@@ -409,9 +414,17 @@ export function MixerSurface({ sessionId, sessionTitle, sessionBpm, stems, initi
         <div
           role="status"
           aria-live="polite"
-          className="fixed right-6 top-6 z-50 border border-[color:var(--wb-amber)] bg-[color:var(--ink-800)] px-4 py-3 workbench-readout text-xs text-[color:var(--wb-amber)] lowercase"
+          className="fixed right-6 top-6 z-50 flex items-center gap-3 border border-[color:var(--wb-amber)] bg-[color:var(--ink-800)] px-4 py-3 workbench-readout text-xs text-[color:var(--wb-amber)] lowercase"
         >
           {toast}
+          {mixdownId && toast.startsWith("mixdown saved") ? (
+            <Link
+              href={`/dj?load=${encodeURIComponent(mixdownId)}&kind=recording&deck=a`}
+              className="underline underline-offset-2 hover:text-[color:var(--ink-100)] transition-colors"
+            >
+              load into dj deck a →
+            </Link>
+          ) : null}
         </div>
       ) : null}
     </div>

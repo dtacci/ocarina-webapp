@@ -14,7 +14,7 @@ export const maxDuration = 120;
  *   - wav:            Blob         (audio/wav)
  *   - metadata:       JSON string  (see MetadataPayload below)
  *   - editSpec:       JSON string  (the EffectNode[] chain)
- *   - sourceSampleId: string       (lineage — the sample this was edited from)
+ *   - sourceSampleId: string?      (lineage — omitted/empty for transient browser-recorded takes)
  *
  * Returns: { id: string }
  */
@@ -33,6 +33,9 @@ interface MetadataPayload {
   waveformPeaks: number[];
   durationSec: number;
   sampleRate: number;
+  /** Tempo tag carried from a bpm-tagged source recording (DJ beat-loops). */
+  bpm?: number | null;
+  loopable?: boolean;
 }
 
 function slugify(input: string, fallback = "sample"): string {
@@ -76,8 +79,21 @@ export async function POST(request: Request) {
   if (typeof editSpecStr !== "string") {
     return Response.json({ error: "Missing editSpec" }, { status: 400 });
   }
-  if (typeof sourceSampleId !== "string" || !sourceSampleId) {
-    return Response.json({ error: "Missing sourceSampleId" }, { status: 400 });
+  let sourceSampleIdValue =
+    typeof sourceSampleId === "string" && sourceSampleId.length > 0
+      ? sourceSampleId
+      : null;
+  // The editor also opens `recordings` rows (drafts, looper stems, drum
+  // loops) and passes their id as lineage — but source_sample_id has an FK
+  // to samples, so anything that isn't a real sample must store null or the
+  // insert 500s.
+  if (sourceSampleIdValue) {
+    const { data: src } = await supabase
+      .from("samples")
+      .select("id")
+      .eq("id", sourceSampleIdValue)
+      .maybeSingle();
+    if (!src) sourceSampleIdValue = null;
   }
 
   let metadata: MetadataPayload;
@@ -122,11 +138,17 @@ export async function POST(request: Request) {
     console.error("[samples/create] MP3 transcoding failed:", e);
   }
 
+  const titleValue =
+    typeof metadata.name === "string" && metadata.name.trim().length > 0
+      ? metadata.name.trim()
+      : null;
+
   const { error } = await supabase.from("samples").insert({
     id: sampleId,
     user_id: user.id,
     is_system: false,
     verified: false,
+    title: titleValue,
     blob_url: blob.url,
     mp3_blob_url: mp3BlobUrl,
     duration_sec: metadata.durationSec,
@@ -141,8 +163,12 @@ export async function POST(request: Request) {
     warmth: metadata.warmth ?? null,
     category: metadata.category ?? null,
     family: metadata.family ?? null,
-    loopable: false,
-    source_sample_id: sourceSampleId,
+    bpm:
+      typeof metadata.bpm === "number" && Number.isFinite(metadata.bpm) && metadata.bpm > 0
+        ? Math.round(metadata.bpm)
+        : null,
+    loopable: metadata.loopable === true,
+    source_sample_id: sourceSampleIdValue,
     edit_spec: editSpec,
   });
 

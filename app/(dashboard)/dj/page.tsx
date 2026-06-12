@@ -28,7 +28,7 @@ async function resolveAutoload(
   if (kind === "sample") {
     const { data: s } = await supabase
       .from("samples")
-      .select("id,title,blob_url,duration_sec,user_id,is_system")
+      .select("id,title,blob_url,duration_sec,bpm,user_id,is_system")
       .eq("id", load)
       .maybeSingle();
     if (!s?.blob_url?.startsWith("http")) return null;
@@ -39,7 +39,7 @@ async function resolveAutoload(
         kind: "sample",
         title: s.title ?? s.id,
         durationSec: s.duration_sec ?? 0,
-        bpm: null,
+        bpm: s.bpm ?? null,
         url: s.blob_url,
         recordingType: null,
       },
