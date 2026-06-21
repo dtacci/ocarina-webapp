@@ -33,6 +33,8 @@ import { cn } from "@/lib/utils";
 import { useLoopState } from "@/hooks/use-loop-state";
 import { useAudioTakeover } from "@/hooks/use-audio-takeover";
 import { DrumMachine } from "@/components/looper/drum-machine";
+import { EnsembleWorkshop } from "@/components/looper/ensemble-workshop";
+import type { IncomingGroove } from "@/lib/ensemble/types";
 import {
   TRACK_COLORS,
   TRACK_BG_TINTS,
@@ -935,6 +937,7 @@ export default function LooperDAPage() {
   // ── Pi integration ──────────────────────────────────────────────────────
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [drumsOpen, setDrumsOpen] = useState(false);
+  const [incomingGroove, setIncomingGroove] = useState<IncomingGroove | null>(null);
 
   // Fetch the user's first looper-capable Pi device on mount
   useEffect(() => {
@@ -1570,8 +1573,19 @@ const handleAddTrack = useCallback(() => {
         </Button>
       </div>
 
+      {/* Sounds-Like ensemble workshop — recreate a song with the library */}
+      <EnsembleWorkshop
+        onBpm={handleBpmChange}
+        onSendDrums={(groove) => {
+          setIncomingGroove(groove);
+          setDrumsOpen(true);
+        }}
+      />
+
       {/* Drum Machine Panel (inline, after track actions) */}
-      {drumsOpen && <DrumMachine compact deviceId={deviceId} />}
+      {drumsOpen && (
+        <DrumMachine compact deviceId={deviceId} incomingGroove={incomingGroove} />
+      )}
 
       {/* Status Bar */}
       <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">

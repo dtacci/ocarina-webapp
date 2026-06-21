@@ -5,6 +5,7 @@ import {
   boolean,
   smallint,
   integer,
+  bigint,
   bigserial,
   real,
   timestamp,
@@ -700,3 +701,56 @@ export const aiInvocations = pgTable(
   },
   (t) => [index("ai_invocations_feature_created_idx").on(t.feature, t.createdAt.desc())],
 );
+
+// ============================================================================
+// SONG / ENSEMBLE MATCHER DOMAIN
+// ============================================================================
+
+/**
+ * External track catalog cache (Deezer; `source` seams in Spotify later).
+ * `isrc` is carried so a future Spotify full-track phase can match the same
+ * recording. The partial unique index on (source, deezer_id) + the isrc index
+ * live in raw SQL (drizzle can't express the partial predicate). Preview URLs
+ * expire after a few hours — always re-fetch via getDeezerTrack before serving
+ * a preview for analysis.
+ */
+export const songs = pgTable("songs", {
+  id: text("id").primaryKey(), // 'deezer:<deezer_id>'
+  source: text("source").notNull().default("deezer"),
+  deezerId: bigint("deezer_id", { mode: "number" }),
+  isrc: text("isrc"),
+  title: text("title").notNull(),
+  artist: text("artist").notNull(),
+  album: text("album"),
+  albumArtUrl: text("album_art_url"),
+  previewUrl: text("preview_url"), // Deezer 30s mp3
+  durationSec: integer("duration_sec"),
+  deezerBpm: integer("deezer_bpm"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Cached "sounds-like" analysis: the LLM song profile, the matched library
+ * samples per instrument role (+ alternatives), and an optional drum groove.
+ * Keyed by (song_id, analysis_version) via a unique index (raw SQL) so an
+ * algorithm-version bump invalidates the cache. `user_id` is reserved for
+ * future per-user overrides (currently always NULL for the shared cache).
+ */
+export const songEnsembles = pgTable("song_ensembles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  songId: text("song_id")
+    .notNull()
+    .references(() => songs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // null = shared
+  analysisVersion: smallint("analysis_version").notNull().default(1),
+  bpm: integer("bpm"),
+  profileJsonb: jsonb("profile_jsonb"), // LLM song profile
+  ensembleJsonb: jsonb("ensemble_jsonb").notNull(), // roles -> sampleIds + alternatives
+  drumJsonb: jsonb("drum_jsonb"), // { kitId, pattern }
+  deepAnalyzed: boolean("deep_analyzed").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
