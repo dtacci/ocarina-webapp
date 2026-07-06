@@ -25,9 +25,69 @@ import { revalidateSampleEditor } from "@/app/(dashboard)/sample-editor/actions"
 import type { SampleWithVibes } from "@/lib/db/queries/samples";
 import { useAudioTakeover } from "@/hooks/use-audio-takeover";
 
-interface Props {
-  sample: SampleWithVibes;
-  currentUserId: string;
+export interface EditorTake {
+  wavBlob: Blob;
+  audioBuffer: AudioBuffer;
+  durationSec: number;
+  sampleRate: number;
+  peaks: number[];
+}
+
+interface EditorCommonProps {
+  /**
+   * Drop the page-takeover wrapper styling (`-m-6 min-h-[…] p-8`) when the
+   * Editor is mounted inside a parent that already provides the workbench
+   * scope and padding (e.g. <EditorSurface> on /sample-editor). Default false
+   * preserves the standalone /sample-editor/[id] route layout.
+   */
+  embedded?: boolean;
+}
+
+export type EditorProps = EditorCommonProps &
+  (
+    | {
+        mode: "persistent";
+        sample: SampleWithVibes;
+        currentUserId: string;
+        /** When provided, called with the new sample id instead of router.push to /library. */
+        onSaved?: (newSampleId: string) => void;
+      }
+    | {
+        mode: "transient";
+        currentUserId: string;
+        take: EditorTake;
+        /** When provided, called with the new sample id after the take is saved. */
+        onSaved?: (newSampleId: string) => void;
+        /** Discard the take and return to the empty state. */
+        onDiscard?: () => void;
+      }
+  );
+
+function transientToSample(take: EditorTake): SampleWithVibes {
+  return {
+    id: "",
+    title: null,
+    blob_url: "",
+    mp3_blob_url: null,
+    duration_sec: take.durationSec,
+    sample_rate: take.sampleRate,
+    root_note: null,
+    root_freq: null,
+    brightness: null,
+    attack: null,
+    sustain: null,
+    texture: null,
+    warmth: null,
+    category: null,
+    family: null,
+    loopable: false,
+    is_system: false,
+    waveform_peaks: take.peaks,
+    source_sample_id: null,
+    edit_spec: null,
+    user_id: null,
+    vibes: [],
+  };
 }
 
 // ─── reducer ──────────────────────────────────────────────────────────────
@@ -133,7 +193,7 @@ function initialMetadata(sample: SampleWithVibes): SampleMetadata {
       : "";
 
   return {
-    name: "",
+    name: sample.title?.trim() ?? "",
     family,
     category,
     rootNote: sample.root_note ?? "",
@@ -143,15 +203,25 @@ function initialMetadata(sample: SampleWithVibes): SampleMetadata {
     texture: sample.texture ?? 5,
     warmth: sample.warmth ?? 5,
     vibes: sample.vibes ?? [],
+    loopable: sample.loopable ?? false,
   };
 }
 
 // ─── component ────────────────────────────────────────────────────────────
 
-export function Editor({ sample, currentUserId }: Props) {
+export function Editor(props: EditorProps) {
   useAudioTakeover();
 
   const router = useRouter();
+  const isTransient = props.mode === "transient";
+  const embedded = props.embedded ?? false;
+  const sample =
+    props.mode === "persistent" ? props.sample : transientToSample(props.take);
+  const onSaved = props.onSaved;
+  const onDiscard = props.mode === "transient" ? props.onDiscard : undefined;
+  const transientTake = props.mode === "transient" ? props.take : null;
+  const currentUserId = props.currentUserId;
+
   const duration = sample.duration_sec;
   const [state, dispatch] = useReducer(reducer, undefined, () => ({
     chain: defaultChain(duration),
@@ -159,7 +229,9 @@ export function Editor({ sample, currentUserId }: Props) {
     future: [],
   }));
 
-  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(
+    transientTake?.audioBuffer ?? null,
+  );
   const [bufferError, setBufferError] = useState<string | null>(null);
   const [shiftHeld, setShiftHeld] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -201,11 +273,21 @@ export function Editor({ sample, currentUserId }: Props) {
   }, [toast]);
 
   // ─── decode WAV once ────────────────────────────────────────────────────
+  // In transient mode the AudioBuffer was provided by the caller (a
+  // freshly-recorded take) — no fetch needed.
 
   useEffect(() => {
+    if (isTransient) return;
     let cancelled = false;
 
     async function decode() {
+      // System samples store device-relative paths ("samples/organized/…") —
+      // their audio lives on the Pi, not on web storage. Fetching that path
+      // would just 404 against the page origin; say so instead.
+      if (!/^https?:\/\//.test(sample.blob_url)) {
+        setBufferError("audio lives on the ocarina device, not editable on the web");
+        return;
+      }
       try {
         const res = await fetch(sample.blob_url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -233,7 +315,7 @@ export function Editor({ sample, currentUserId }: Props) {
         // best-effort cleanup
       });
     };
-  }, [sample.blob_url]);
+  }, [isTransient, sample.blob_url]);
 
   // ─── shift-held tracking ────────────────────────────────────────────────
 
@@ -479,16 +561,24 @@ export function Editor({ sample, currentUserId }: Props) {
         waveformPeaks: peaks,
         durationSec: rendered.duration,
         sampleRate: rendered.sampleRate,
+        // Tempo rides through from bpm-tagged sources (looper stems, drum
+        // loops, DJ mixes) so the baked sample stays beat-loopable on deck.
+        bpm: sample.bpm ?? null,
+        loopable: metadata.loopable,
       };
+
+      // Transient takes (browser-recorded, no source sample row) save with an
+      // empty sourceSampleId — the API now accepts this and stores null.
+      const sourceSampleId = isTransient ? "" : sample.id;
 
       const form = new FormData();
       form.append("wav", new Blob([wavBytes], { type: "audio/wav" }));
       form.append("metadata", JSON.stringify(payload));
       form.append("editSpec", JSON.stringify({
         chain: state.chain,
-        sourceSampleId: sample.id,
+        sourceSampleId: sourceSampleId || null,
       }));
-      form.append("sourceSampleId", sample.id);
+      form.append("sourceSampleId", sourceSampleId);
 
       const res = await fetch("/api/samples/create", {
         method: "POST",
@@ -507,9 +597,14 @@ export function Editor({ sample, currentUserId }: Props) {
 
       setToast({ kind: "success", text: `saved · ${formatSampleId(id, "SE")}` });
 
-      // Give the toast a beat, then navigate to the new sample's library page
+      // Give the toast a beat, then either hand control back to the parent
+      // surface (workshop flow) or navigate to the library page (legacy).
       setTimeout(() => {
-        router.push(`/library/${encodeURIComponent(id)}`);
+        if (onSaved) {
+          onSaved(id);
+        } else {
+          router.push(`/library/${encodeURIComponent(id)}`);
+        }
       }, 800);
     } catch (err) {
       bakeRef.current?.cancel();
@@ -517,7 +612,19 @@ export function Editor({ sample, currentUserId }: Props) {
       setToast({ kind: "error", text: msg });
       setSaving(false);
     }
-  }, [audioBuffer, saving, handleStop, trimmedDuration, state.chain, metadata, sample.id, sample.root_freq, router]);
+  }, [audioBuffer, saving, handleStop, trimmedDuration, state.chain, metadata, sample.id, sample.root_freq, sample.bpm, isTransient, onSaved, router]);
+
+  // ─── live chain updates during playback ─────────────────────────────────
+  // When the user tweaks a knob or toggles an effect's LED while audio is
+  // playing, push the new chain into the active controller so we hear the
+  // change immediately. Param-only updates patch nodes in place; structural
+  // changes (enabled flip, kind/length change) trigger a graph rebuild.
+
+  useEffect(() => {
+    const ctrl = controllerRef.current;
+    if (!ctrl) return;
+    void ctrl.updateChain(state.chain);
+  }, [state.chain]);
 
   // ─── unmount cleanup ────────────────────────────────────────────────────
 
@@ -620,30 +727,67 @@ export function Editor({ sample, currentUserId }: Props) {
       ? sample.source_sample_id
       : null;
 
+  // "Dirty" = take is in-memory unsaved (transient) OR user has touched the
+  // chain or renamed since the editor mounted (persistent). Drives the small
+  // "unsaved" hint under the save button.
+  const isDirty = isTransient || state.past.length > 0 || metadata.name.trim().length > 0;
+
   return (
-    <div className="workbench -m-6 min-h-[calc(100vh-3.5rem)] p-8 relative" aria-busy={saving}>
-      <div className="mx-auto max-w-6xl space-y-6">
+    <div
+      className={
+        embedded
+          ? "relative"
+          : "workbench -m-6 min-h-[calc(100vh-3.5rem)] p-8 relative"
+      }
+      aria-busy={saving}
+    >
+      <div className={embedded ? "space-y-6" : "mx-auto max-w-6xl space-y-6"}>
         {/* Header */}
         <header className="flex items-start justify-between gap-6">
           <div className="min-w-0 space-y-2">
-            <Link
-              href="/sample-editor"
-              className="inline-flex items-center gap-1.5 text-xs text-[color:var(--ink-500)] hover:text-[color:var(--ink-300)] transition-colors lowercase"
-            >
-              <ArrowLeft className="size-3.5" />
-              sample editor
-            </Link>
-            <div className="flex items-baseline gap-3">
-              <span className="workbench-readout text-sm text-[color:var(--ink-300)]">
-                {formatSampleId(sample.id, sourceLineageId ? "SE" : "SMP")}
-              </span>
-              {sample.family && <span className="workbench-label">{sample.family}</span>}
-            </div>
-            <h1 className="workbench-heading text-3xl">
-              {sample.root_note
-                ? `${sample.family ?? "sample"} · ${sample.root_note.toLowerCase()}`
-                : sample.family ?? "untitled"}
-            </h1>
+            {!isTransient && (
+              <Link
+                href="/sample-editor"
+                className="inline-flex items-center gap-1.5 text-xs text-[color:var(--ink-500)] hover:text-[color:var(--ink-300)] transition-colors lowercase"
+              >
+                <ArrowLeft className="size-3.5" />
+                sample editor
+              </Link>
+            )}
+            {isTransient ? (
+              <div className="flex items-baseline gap-3">
+                <span className="workbench-label text-[color:var(--wb-amber)]">
+                  • new take
+                </span>
+                <span className="workbench-readout text-xs text-[color:var(--ink-500)] lowercase">
+                  unsaved
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-3">
+                <span className="workbench-readout text-sm text-[color:var(--ink-300)]">
+                  {formatSampleId(sample.id, sourceLineageId ? "SE" : "SMP")}
+                </span>
+                {sample.family && <span className="workbench-label">{sample.family}</span>}
+              </div>
+            )}
+            {isTransient ? (
+              <InlineEditableTitle
+                value={metadata.name}
+                placeholder="untitled take"
+                onCommit={(name) => handleMetadataChange({ name })}
+              />
+            ) : (
+              <InlineEditableTitle
+                value={metadata.name || sample.title?.trim() || ""}
+                placeholder={
+                  sample.root_note
+                    ? `${sample.family ?? "sample"} · ${sample.root_note.toLowerCase()}`
+                    : sample.family ?? "untitled"
+                }
+                onCommit={(name) => handleMetadataChange({ name })}
+              />
+            )}
             {sourceLineageId && (
               <Link
                 href={`/library/${encodeURIComponent(sourceLineageId)}`}
@@ -655,23 +799,40 @@ export function Editor({ sample, currentUserId }: Props) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => dispatch({ type: "RESET", chain: defaultChain(duration) })}
-              disabled={saving}
-              className="workbench-label px-3 py-2 border border-[color:var(--wb-line)] hover:border-[color:var(--ink-500)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              revert
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAsNew}
-              disabled={saving || !audioBuffer}
-              className="workbench-label px-3 py-2 border border-[color:var(--wb-amber-dim)] text-[color:var(--wb-amber)] hover:bg-[color:var(--wb-amber-glow)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {saving ? "saving…" : "save as new"}
-            </button>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <div className="flex items-center gap-2">
+              {isTransient && onDiscard && (
+                <button
+                  type="button"
+                  onClick={onDiscard}
+                  disabled={saving}
+                  className="workbench-label px-3 py-2 border border-[color:var(--wb-line)] hover:border-[color:var(--wb-oxide)] hover:text-[color:var(--wb-oxide)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  discard take
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => dispatch({ type: "RESET", chain: defaultChain(duration) })}
+                disabled={saving}
+                className="workbench-label px-3 py-2 border border-[color:var(--wb-line)] hover:border-[color:var(--ink-500)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                revert
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAsNew}
+                disabled={saving || !audioBuffer}
+                className="workbench-label px-3 py-2 border border-[color:var(--wb-amber-dim)] text-[color:var(--wb-amber)] hover:bg-[color:var(--wb-amber-glow)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {saving ? "saving…" : isTransient ? "save take" : "save as new"}
+              </button>
+            </div>
+            {isDirty && !saving && (
+              <span className="workbench-readout text-[10px] text-[color:var(--wb-amber-dim)] lowercase pr-1">
+                • unsaved changes
+              </span>
+            )}
           </div>
         </header>
 
@@ -706,6 +867,13 @@ export function Editor({ sample, currentUserId }: Props) {
             trimStart={trimStart}
             trimEnd={trimEnd}
             onTrimChange={handleTrimChange}
+            onSeek={(t) => {
+              if (!audioBuffer || saving) return;
+              // Clamp to the kept region so clicks outside the trim handles
+              // snap to the nearest boundary instead of trying to play silence.
+              const clamped = Math.max(trimStart, Math.min(t, trimEnd));
+              void handlePlay(clamped);
+            }}
           />
           <BakeOverlay ref={bakeRef} />
         </div>
@@ -771,6 +939,95 @@ export function Editor({ sample, currentUserId }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+function InlineEditableTitle({
+  value,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  onCommit: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [lastSyncedValue, setLastSyncedValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync draft when the external value changes (e.g. metadata panel edit)
+  // and we're not actively editing — render-phase pattern recommended over
+  // useEffect-based prop→state mirroring.
+  if (!editing && value !== lastSyncedValue) {
+    setLastSyncedValue(value);
+    setDraft(value);
+  }
+
+  // Autofocus + select-all when entering edit mode.
+  useEffect(() => {
+    if (!editing) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editing]);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (next !== value) onCommit(next);
+    setEditing(false);
+  };
+  const cancel = () => {
+    setDraft(value);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            cancel();
+          }
+        }}
+        placeholder={placeholder}
+        maxLength={120}
+        className="workbench-heading text-3xl bg-transparent border-b border-[color:var(--wb-amber-dim)] focus:border-[color:var(--wb-amber)] focus:outline-none w-full text-[color:var(--ink-200)] placeholder:text-[color:var(--ink-600)] lowercase"
+      />
+    );
+  }
+
+  const displayed = value.trim() || placeholder;
+  const isPlaceholder = !value.trim();
+
+  return (
+    <h1
+      role="button"
+      tabIndex={0}
+      onClick={() => setEditing(true)}
+      onDoubleClick={() => setEditing(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setEditing(true);
+        }
+      }}
+      title="click to rename"
+      className="workbench-heading text-3xl cursor-text border-b border-transparent hover:border-[color:var(--wb-line)] transition-colors w-fit max-w-full truncate"
+      style={{ color: isPlaceholder ? "var(--ink-500)" : undefined }}
+    >
+      {displayed}
+    </h1>
   );
 }
 

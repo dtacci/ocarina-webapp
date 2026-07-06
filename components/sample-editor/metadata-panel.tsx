@@ -9,7 +9,7 @@
  */
 
 import { useState, type KeyboardEvent } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Dropdown } from "./primitives/dropdown";
 import { LinearSlider } from "./primitives/linear-slider";
 
@@ -38,6 +38,8 @@ export interface SampleMetadata {
   texture: number;
   warmth: number;
   vibes: string[];
+  /** Marks the save as a seamless loop (DJ/looper-ready). */
+  loopable: boolean;
 }
 
 interface Props {
@@ -75,7 +77,6 @@ const ROOT_NOTE_OPTIONS = [
 ];
 
 export function MetadataPanel({ metadata, onChange }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [vibeInput, setVibeInput] = useState("");
 
   const handleVibeKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -98,26 +99,16 @@ export function MetadataPanel({ metadata, onChange }: Props) {
 
   return (
     <section className="border border-[color:var(--wb-line)] bg-[color:var(--ink-800)]">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-[color:var(--ink-700)]/40 transition-colors"
-      >
+      <header className="flex items-center gap-2 px-4 py-2.5">
         <h2 className="workbench-label">metadata</h2>
         <span className="workbench-readout text-[10px] text-[color:var(--ink-500)] lowercase ml-auto">
           {metadata.name || "untitled"}
           {metadata.rootNote && ` · ${metadata.rootNote.toLowerCase()}`}
           {metadata.family && ` · ${metadata.family}`}
         </span>
-        <ChevronDown
-          className="size-3.5 text-[color:var(--ink-500)] transition-transform"
-          style={{ transform: expanded ? "rotate(180deg)" : undefined }}
-        />
-      </button>
+      </header>
 
-      {expanded && (
-        <div className="border-t border-[color:var(--wb-line-soft)] p-5 space-y-5">
+      <div className="border-t border-[color:var(--wb-line-soft)] p-5 space-y-5">
           {/* Name */}
           <div className="flex flex-col gap-1">
             <label className="workbench-label" htmlFor="sample-name">
@@ -154,6 +145,23 @@ export function MetadataPanel({ metadata, onChange }: Props) {
               options={CATEGORY_OPTIONS}
               onChange={(v) => onChange({ category: v as SampleCategory | "" })}
             />
+            {/* Loop flag — marks the save as DJ/looper-ready */}
+            <div className="flex flex-col gap-1">
+              <span className="workbench-label">loop</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={metadata.loopable}
+                aria-label="loopable"
+                title="mark this sample as a seamless loop"
+                onClick={() => onChange({ loopable: !metadata.loopable })}
+                className="workbench-label flex items-center gap-1.5 border border-[color:var(--wb-line)] px-2.5 py-2 transition-colors hover:border-[color:var(--wb-amber-dim)]"
+                style={{ color: metadata.loopable ? "var(--wb-amber)" : "var(--ink-500)" }}
+              >
+                <span className="workbench-led" data-on={metadata.loopable} />
+                loopable
+              </button>
+            </div>
           </div>
 
           {/* Attribute bars */}
@@ -243,8 +251,7 @@ export function MetadataPanel({ metadata, onChange }: Props) {
               />
             </div>
           </div>
-        </div>
-      )}
+      </div>
     </section>
   );
 }

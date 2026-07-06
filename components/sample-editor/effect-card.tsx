@@ -14,8 +14,7 @@
  * The chevron is optional — shown only when `advanced` is provided.
  */
 
-import { useState } from "react";
-import { ChevronDown, GripVertical, X } from "lucide-react";
+import { GripVertical, X } from "lucide-react";
 
 /**
  * Drag + keyboard-reorder affordance. When provided, the card grows a
@@ -61,8 +60,6 @@ export function EffectCard({
   onRemove,
   reorder,
 }: EffectCardProps) {
-  const [expanded, setExpanded] = useState(false);
-
   const handleGripKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!reorder || !e.altKey) return;
     if (e.key === "ArrowLeft" && reorder.canMoveLeft) {
@@ -118,20 +115,6 @@ export function EffectCard({
           <span className="workbench-readout text-[10px] text-[color:var(--wb-amber-dim)]">…</span>
         )}
         <div className="ml-auto flex items-center gap-1">
-          {advanced && (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              aria-label={expanded ? "collapse advanced" : "expand advanced"}
-              aria-expanded={expanded}
-              className="text-[color:var(--ink-500)] hover:text-[color:var(--ink-300)] transition-colors"
-            >
-              <ChevronDown
-                className="size-3.5 transition-transform"
-                style={{ transform: expanded ? "rotate(180deg)" : undefined }}
-              />
-            </button>
-          )}
           {onRemove && (
             <button
               type="button"
@@ -145,7 +128,7 @@ export function EffectCard({
         </div>
       </header>
       <div className="p-3">{children}</div>
-      {advanced && expanded && (
+      {advanced && (
         <div className="border-t border-[color:var(--wb-line-soft)] p-3">{advanced}</div>
       )}
     </div>

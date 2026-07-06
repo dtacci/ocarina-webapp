@@ -1,12 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { formatSampleId, timeAgo } from "@/lib/sample-editor/format";
 import type { EditLogRow } from "@/lib/db/queries/sample-editor";
 
 interface Props {
   edits: EditLogRow[];
+  /** When provided, clicking the edit id loads it inline instead of navigating. */
+  onSelect?: (edit: EditLogRow) => void;
 }
 
-export function RecentEditsLog({ edits }: Props) {
+export function RecentEditsLog({ edits, onSelect }: Props) {
   if (edits.length === 0) {
     return (
       <div className="border border-[color:var(--wb-line-soft)] px-5 py-6 workbench-readout text-xs text-[color:var(--ink-500)] lowercase">
@@ -22,12 +26,22 @@ export function RecentEditsLog({ edits }: Props) {
           key={row.id}
           className="flex items-center gap-4 px-4 py-2 workbench-readout text-xs"
         >
-          <Link
-            href={`/sample-editor/${row.id}`}
-            className="text-[color:var(--ink-300)] hover:text-[color:var(--wb-amber)] transition-colors"
-          >
-            {formatSampleId(row.id, "SE")}
-          </Link>
+          {onSelect ? (
+            <button
+              type="button"
+              onClick={() => onSelect(row)}
+              className="text-[color:var(--ink-300)] hover:text-[color:var(--wb-amber)] transition-colors"
+            >
+              {formatSampleId(row.id, "SE")}
+            </button>
+          ) : (
+            <Link
+              href={`/sample-editor/${row.id}`}
+              className="text-[color:var(--ink-300)] hover:text-[color:var(--wb-amber)] transition-colors"
+            >
+              {formatSampleId(row.id, "SE")}
+            </Link>
+          )}
           <span className="text-[color:var(--ink-500)] lowercase">
             ← edited from
           </span>
