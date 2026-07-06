@@ -19,7 +19,14 @@ export async function getProvider(): Promise<AIProvider> {
   return (process.env.AI_PROVIDER as AIProvider) || "anthropic";
 }
 
-export async function getModel(task: "search" | "kit-builder" | "config-assist") {
+export type AITask =
+  | "search"
+  | "kit-builder"
+  | "config-assist"
+  | "describe"
+  | "transcribe-cleanup";
+
+export async function getModel(task: AITask) {
   const provider = await getProvider();
 
   // Model selection per task — tuned for cost/quality balance
@@ -27,12 +34,16 @@ export async function getModel(task: "search" | "kit-builder" | "config-assist")
     anthropic: {
       search: anthropic("claude-sonnet-4-6"),
       "kit-builder": anthropic("claude-sonnet-4-6"),
-      "config-assist": anthropic("claude-haiku-4-5-20251001"),
+      "config-assist": anthropic("claude-haiku-4-5"),
+      describe: anthropic("claude-haiku-4-5"),
+      "transcribe-cleanup": anthropic("claude-sonnet-4-6"),
     },
     openai: {
       search: openai("gpt-4o-mini"),
       "kit-builder": openai("gpt-4o"),
       "config-assist": openai("gpt-4o-mini"),
+      describe: openai("gpt-4o-mini"),
+      "transcribe-cleanup": openai("gpt-4o"),
     },
   };
 

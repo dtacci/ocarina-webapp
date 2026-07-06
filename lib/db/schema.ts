@@ -5,6 +5,8 @@ import {
   boolean,
   smallint,
   integer,
+  bigint,
+  bigserial,
   real,
   timestamp,
   jsonb,
@@ -12,6 +14,7 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  vector,
 } from "drizzle-orm/pg-core";
 
 // ============================================================================
@@ -95,6 +98,9 @@ export const users = pgTable("users", {
   displayName: text("display_name"),
   avatarUrl: text("avatar_url"),
   tier: tierEnum("tier").notNull().default("free"),
+  /** Opt-in to interaction logging for ML improvement. Off = events are never created. */
+  mlConsent: boolean("ml_consent").notNull().default(false),
+  mlConsentAt: timestamp("ml_consent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -572,4 +578,179 @@ export const deviceCommands = pgTable("device_commands", {
     .notNull()
     .defaultNow(),
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
+});
+
+// ============================================================================
+// ML / DATA FLYWHEEL DOMAIN
+// ============================================================================
+// Append-only capture layer for the ML data flywheel (see docs/EVENTS.md).
+// Converges with the device repo's Tonality Intelligence schema (interactions,
+// descriptions, embeddings) so the two designs never fork.
+
+/**
+ * Unified append-only interaction event log. One row per event; `payload`
+ * carries the event-type-specific fields. Never updated, never hard-deleted.
+ * Consent is enforced at write time (events for non-consenting users are
+ * never created), not by retro-deletion.
+ */
+export const interactionEvents = pgTable(
+  "interaction_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    /** Bump on renames/semantic changes to payload shapes; additive changes keep it. */
+    schemaVersion: smallint("schema_version").notNull().default(1),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    deviceId: uuid("device_id").references(() => devices.id), // null = web-originated
+    sessionId: uuid("session_id"), // sessions.id when known; deliberately no FK
+    /** Groups search_executed → search_result_played/skipped/rated for reranker labels. */
+    queryId: uuid("query_id"),
+    eventType: text("event_type").notNull(), // permissive text — log first, decide later
+    /** No FK: Pi-local sample ids may not exist in the webapp library. */
+    sampleId: text("sample_id"),
+    source: text("source").notNull(), // 'pi' | 'web'
+    /** Device clock at event time; created_at is server truth. */
+    clientTs: timestamp("client_ts", { withTimezone: true }),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("interaction_events_user_created_idx").on(t.userId, t.createdAt.desc()),
+    index("interaction_events_type_created_idx").on(t.eventType, t.createdAt.desc()),
+    index("interaction_events_query_idx").on(t.queryId),
+    index("interaction_events_sample_idx").on(t.sampleId),
+  ],
+);
+
+/**
+ * Natural-language sample descriptions with provenance. LLM-proposed rows are
+ * the parents of human-edited rows (`parent_description_id` chains are future
+ * fine-tune pairs). Exactly one canonical, non-deleted description per sample
+ * (partial unique index, added in raw SQL — drizzle can't express it).
+ */
+export const sampleDescriptions = pgTable("sample_descriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sampleId: text("sample_id")
+    .notNull()
+    .references(() => samples.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  source: text("source").notNull(), // 'llm:<model>' | 'human'
+  parentDescriptionId: uuid("parent_description_id"),
+  isCanonical: boolean("is_canonical").notNull().default(false),
+  createdBy: uuid("created_by"), // user who edited; null for LLM/scripts
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
+/**
+ * Derived, model-versioned embeddings. Adding a new model or kind ('audio'
+ * for CLAP later) is an insert, never a migration; superseded vectors are
+ * archived, not deleted. `content_hash` makes re-embedding idempotent.
+ */
+export const sampleEmbeddings = pgTable(
+  "sample_embeddings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sampleId: text("sample_id")
+      .notNull()
+      .references(() => samples.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // 'description' | 'audio' (CLAP, later)
+    model: text("model").notNull(), // e.g. 'text-embedding-3-small'
+    contentHash: text("content_hash").notNull(), // sha256 of the embedded text
+    embedding: vector("embedding", { dimensions: 1536 }),
+    archived: boolean("archived").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sample_embeddings_sample_kind_model_idx").on(
+      t.sampleId,
+      t.kind,
+      t.model,
+    ),
+  ],
+);
+
+/**
+ * Raw model I/O log for every AI feature — prompts + completions become
+ * eval suites, regression tests, and fine-tune corpora for free.
+ */
+export const aiInvocations = pgTable(
+  "ai_invocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id"), // null for backfill scripts
+    feature: text("feature").notNull(), // 'search' | 'describe' | 'kit-builder' | 'transcribe-cleanup'
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    requestJsonb: jsonb("request_jsonb").notNull(),
+    responseJsonb: jsonb("response_jsonb"),
+    latencyMs: integer("latency_ms"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("ai_invocations_feature_created_idx").on(t.feature, t.createdAt.desc())],
+);
+
+// ============================================================================
+// SONG / ENSEMBLE MATCHER DOMAIN
+// ============================================================================
+
+/**
+ * External track catalog cache (Deezer; `source` seams in Spotify later).
+ * `isrc` is carried so a future Spotify full-track phase can match the same
+ * recording. The partial unique index on (source, deezer_id) + the isrc index
+ * live in raw SQL (drizzle can't express the partial predicate). Preview URLs
+ * expire after a few hours — always re-fetch via getDeezerTrack before serving
+ * a preview for analysis.
+ */
+export const songs = pgTable("songs", {
+  id: text("id").primaryKey(), // 'deezer:<deezer_id>'
+  source: text("source").notNull().default("deezer"),
+  deezerId: bigint("deezer_id", { mode: "number" }),
+  isrc: text("isrc"),
+  title: text("title").notNull(),
+  artist: text("artist").notNull(),
+  album: text("album"),
+  albumArtUrl: text("album_art_url"),
+  previewUrl: text("preview_url"), // Deezer 30s mp3
+  durationSec: integer("duration_sec"),
+  deezerBpm: integer("deezer_bpm"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Cached "sounds-like" analysis: the LLM song profile, the matched library
+ * samples per instrument role (+ alternatives), and an optional drum groove.
+ * Keyed by (song_id, analysis_version) via a unique index (raw SQL) so an
+ * algorithm-version bump invalidates the cache. `user_id` is reserved for
+ * future per-user overrides (currently always NULL for the shared cache).
+ */
+export const songEnsembles = pgTable("song_ensembles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  songId: text("song_id")
+    .notNull()
+    .references(() => songs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // null = shared
+  analysisVersion: smallint("analysis_version").notNull().default(1),
+  bpm: integer("bpm"),
+  profileJsonb: jsonb("profile_jsonb"), // LLM song profile
+  ensembleJsonb: jsonb("ensemble_jsonb").notNull(), // roles -> sampleIds + alternatives
+  drumJsonb: jsonb("drum_jsonb"), // { kitId, pattern }
+  deepAnalyzed: boolean("deep_analyzed").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

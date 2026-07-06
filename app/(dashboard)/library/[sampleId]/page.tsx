@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { getSample } from "@/lib/db/queries/samples";
 import { getUserSampleState } from "@/lib/db/queries/sample-user-data";
+import { getCanonicalDescription } from "@/lib/db/queries/sample-descriptions";
+import { DescriptionEditor } from "@/components/samples/description-editor";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,9 +52,10 @@ export default async function SampleDetailPage({ params }: Props) {
   const decodedId = decodeURIComponent(sampleId);
 
   const supabase = await createClient();
-  const [sample, userResp] = await Promise.all([
+  const [sample, userResp, description] = await Promise.all([
     getSample(decodedId),
     supabase.auth.getUser(),
+    getCanonicalDescription(decodedId),
   ]);
   if (!sample) notFound();
 
@@ -135,6 +138,13 @@ export default async function SampleDetailPage({ params }: Props) {
           </div>
         </div>
       )}
+
+      {/* Description (AI-generated, human-editable — edits feed the ML flywheel) */}
+      <DescriptionEditor
+        sampleId={sample.id}
+        initialText={description?.text ?? null}
+        initialSource={description?.source ?? null}
+      />
 
       {/* Metadata grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

@@ -28,3 +28,23 @@ When interpreting queries:
 - "jazz club at midnight" → jazzy, warm, smooth, intimate, soulful; warmth 7-10
 - Only set attribute ranges when the query strongly implies them
 - Prefer vibes over attribute ranges (vibes are richer and more specific)`;
+
+export const SONG_PROFILE_SYSTEM = `You are the Digital Ocarina's "sounds-like" engine. Given a song (title, artist, and any genre/tempo hints), you profile it so the app can recreate its sound from an ORCHESTRAL sample library — matching each part to the closest sample we own.
+
+The library has these instrument families (with rough counts):
+- strings (1,071): violins, violas, cellos, basses, ensembles
+- woodwind (2,644): flutes, clarinets, oboes, bassoons, saxophones
+- keys (741): pianos, organs, harpsichords, synths
+- drums (115) / other_perc (48): percussion
+- brass (105): trumpets, trombones, tubas, horns
+- guitar (106): acoustic, classical, electric
+- mallet (48): vibraphone, marimba, xylophone, glockenspiel
+
+How to profile:
+- Identify the 3-6 instruments/roles that most define the song's sound. Order by prominence.
+- For each, name the REAL instrument, then map it to the closest library 'family' we'd approximate it with (e.g. Hammond organ → keys; reggae skank guitar → guitar; synth bass → strings or keys; horn section → brass).
+- 'character' is a short timbre phrase we embed to search the library — make it concrete and sensory (e.g. "warm sustained organ pad", "bright plucky clean guitar", "deep round bass").
+- Represent the lead vocal melody as a single 'lead' role mapped to an expressive melodic instrument (flute, violin, etc.) — the user plays/sings that line. Never profile vocals as a vocal timbre.
+- Use the library's vibe vocabulary for 'vibes' (warm, gentle, mellow, bright, punchy, lyrical, cinematic, ...).
+- Approximation is the goal: an orchestral library will not have an 808 or a Hammond — pick the nearest expressive equivalent. Be decisive.
+- If preview measurements (brightness/energy on a 1-10 scale, detected BPM) are provided, let them ground your read of the song's character.`;

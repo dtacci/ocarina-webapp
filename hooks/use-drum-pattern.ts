@@ -21,6 +21,7 @@ type Action =
   | { type: "CYCLE_VELOCITY"; voice: number; step: number }
   | { type: "SET_STEP"; voice: number; step: number; on: boolean; velocity?: Velocity }
   | { type: "CLEAR_PATTERN"; pattern?: number }
+  | { type: "LOAD_PATTERN"; pattern: Pattern }
   | { type: "SWITCH_PATTERN"; index: number }
   | { type: "TOGGLE_MUTE"; voice: number }
   | { type: "TOGGLE_SOLO"; voice: number }
@@ -134,6 +135,13 @@ function reducer(state: DrumPatternState, action: Action): DrumPatternState {
       patterns[idx] = emptyPattern();
       return { ...state, patterns };
     }
+    case "LOAD_PATTERN": {
+      // Replace the active bank with an externally-generated groove (e.g. from
+      // the "sounds-like" workshop). Persists via the existing storage effect.
+      const patterns = state.patterns.slice();
+      patterns[state.active] = clonePattern(action.pattern);
+      return { ...state, patterns };
+    }
     case "SWITCH_PATTERN":
       if (action.index < 0 || action.index >= PATTERN_COUNT) return state;
       return { ...state, active: action.index };
@@ -230,6 +238,9 @@ export function useDrumPattern(persistKey = "local") {
   const clearPattern = useCallback((pattern?: number) => {
     dispatch({ type: "CLEAR_PATTERN", pattern });
   }, []);
+  const loadPattern = useCallback((pattern: Pattern) => {
+    dispatch({ type: "LOAD_PATTERN", pattern });
+  }, []);
   const switchPattern = useCallback((index: number) => {
     dispatch({ type: "SWITCH_PATTERN", index });
   }, []);
@@ -254,6 +265,7 @@ export function useDrumPattern(persistKey = "local") {
     cycleVelocity,
     setStep,
     clearPattern,
+    loadPattern,
     switchPattern,
     toggleMute,
     toggleSolo,

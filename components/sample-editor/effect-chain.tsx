@@ -18,6 +18,11 @@ import { FadeCard } from "./effect-cards/fade-card";
 import { FilterCard } from "./effect-cards/filter-card";
 import { PitchCard } from "./effect-cards/pitch-card";
 import { ReverbCard } from "./effect-cards/reverb-card";
+import { DelayCard } from "./effect-cards/delay-card";
+import { HarmonyCard } from "./effect-cards/harmony-card";
+import { Eq3Card } from "./effect-cards/eq3-card";
+import { DistortionCard } from "./effect-cards/distortion-card";
+import { ChorusCard } from "./effect-cards/chorus-card";
 import { GainCard } from "./effect-cards/gain-card";
 import { CompressorCard } from "./effect-cards/compressor-card";
 import { AddEffectCard } from "./add-effect-card";
@@ -241,6 +246,16 @@ function CardFor({
           busy={reverbBusy}
         />
       );
+    case "delay":
+      return <DelayCard node={node} onChange={onChange} onRemove={onRemove} reorder={reorder} />;
+    case "harmony":
+      return <HarmonyCard node={node} onChange={onChange} onRemove={onRemove} reorder={reorder} />;
+    case "eq3":
+      return <Eq3Card node={node} onChange={onChange} onRemove={onRemove} reorder={reorder} />;
+    case "distortion":
+      return <DistortionCard node={node} onChange={onChange} onRemove={onRemove} reorder={reorder} />;
+    case "chorus":
+      return <ChorusCard node={node} onChange={onChange} onRemove={onRemove} reorder={reorder} />;
     case "gain":
       return <GainCard node={node} onChange={onChange} onRemove={onRemove} reorder={reorder} />;
     case "compressor":

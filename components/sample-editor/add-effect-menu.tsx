@@ -33,15 +33,31 @@ const GROUPS: Group[] = [
   },
   {
     title: "EQ",
-    rows: [{ kind: "filter", label: "filter", hint: "hp / lp / bp with q" }],
+    rows: [
+      { kind: "filter", label: "filter", hint: "hp / lp / bp with q" },
+      { kind: "eq3", label: "eq", hint: "low / mid / high kill bands" },
+    ],
+  },
+  {
+    title: "COLOR",
+    rows: [
+      { kind: "distortion", label: "distort", hint: "waveshaper drive + mix" },
+      { kind: "chorus", label: "chorus", hint: "lfo rate · depth · mix" },
+    ],
   },
   {
     title: "PITCH",
-    rows: [{ kind: "pitch", label: "pitch", hint: "± 24 semitones" }],
+    rows: [
+      { kind: "pitch", label: "pitch", hint: "± 24 semitones" },
+      { kind: "harmony", label: "harmony", hint: "two pitch-shifted voices · best on sustained notes" },
+    ],
   },
   {
     title: "TIME",
-    rows: [{ kind: "reverb", label: "reverb", hint: "decay + wet (async ir)" }],
+    rows: [
+      { kind: "reverb", label: "reverb", hint: "decay + wet (async ir)" },
+      { kind: "delay", label: "delay", hint: "echo · time + feedback + mix" },
+    ],
   },
   {
     title: "LEVEL",
