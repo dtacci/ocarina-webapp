@@ -25,8 +25,8 @@ export async function getModel(task: "search" | "kit-builder" | "config-assist")
   // Model selection per task — tuned for cost/quality balance
   const models = {
     anthropic: {
-      search: anthropic("claude-sonnet-4-20250514"),
-      "kit-builder": anthropic("claude-sonnet-4-20250514"),
+      search: anthropic("claude-sonnet-4-6"),
+      "kit-builder": anthropic("claude-sonnet-4-6"),
       "config-assist": anthropic("claude-haiku-4-5-20251001"),
     },
     openai: {
