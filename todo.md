@@ -15,12 +15,36 @@ For what's already shipped: see [`progress.md`](./progress.md).
 
 ## Next up
 
-- **Looper Dashboard** — visual representation of Teensy's 4–6 track loop state with waveform rendering
-- **Pi Sync Agent (samples-only)** — Python daemon: FileWatcher + SQLite queue + presigned Blob uploads. The original "telemetry relay" purpose was overtaken by the Pi FastAPI + Tailscale Funnel approach; sample sync is still useful for the curate-then-transcode pipeline
-- **Flip `globalAudioPlayer: true`** — the global audio player is merged and feature-flagged; manual-test both modes in a preview deploy, then decide whether to enable by default
-- **Configurator follow-ups** — ask Pi team for a `map_changed` WS event (multi-tab consistency); confirm `/map/reapply` semantics so the button copy is honest; retire `lib/config/{apply-configuration,button-actions}.ts` + `defaultButtonsConfig` from `lib/config/default-config.ts` once nothing references them
+*Sequenced by the canonical roadmap — `digital-ocarina/docs/STRATEGY_THREE_LOOPS.md` §3
+(pointer: [`docs/STRATEGY.md`](./docs/STRATEGY.md)). Every item names its loop.*
 
-Feature flags already declared (disabled) for these: `looperDashboard`, `mp3Transcoding`, `piSyncAgent`, `globalAudioPlayer`. `realtimeBridge` is now obsolete (superseded by Pi REST).
+- **Stage A "Play it, keep it" (SESSION loop)** — session gallery: sessions +
+  stems auto-appear when the Pi's SyncAgent comes alive (engine Phase 1 on the
+  device side); revive `/api/sync/upload-url` + `/confirm`; open a stem
+  straight into the sample editor
+- **Stage B "Hum it, hear the band" (INTELLIGENCE loop)** — wire transcription
+  → ensemble matcher → browser-side Tone.js arrangement over the user's stem;
+  derive key/tempo from the hum
+- **J1 Jam page (jam lane)** — play a source (local upload / Suno bed /
+  SoundCloud; Spotify SDK behind a flag) with the live device monitor
+  overlaid; then DJ-as-controller (map `gpio_press`/pots to deck controls)
+- **Enable embeddings** — add `OPENAI_API_KEY` to Vercel env, run
+  `npx tsx scripts/embed-samples.ts`, then `eval-search.ts` (semantic search
+  currently falls back to filter-only without it)
+- **Flip `globalAudioPlayer: true`** — merged and flagged; manual-test both
+  modes in a preview deploy, then decide
+- **Feature-flag audit** — 13 flags sit disabled with no re-test dates; for
+  each: enable in a preview, record last-verified date next to the flag in
+  `lib/features.ts`, or delete the dead path (`realtimeBridge` is obsolete —
+  superseded by Pi REST)
+- **Configurator follow-ups** — ask for a `map_changed` WS event (multi-tab
+  consistency); confirm `/map/reapply` semantics; retire
+  `lib/config/{apply-configuration,button-actions}.ts` +
+  `defaultButtonsConfig` once nothing references them
+
+Shipped since the last prune (moved to `progress.md`): Looper Dashboard,
+MP3 transcoding forward path, ML flywheel + semantic search + ensemble
+matcher (PR #14).
 
 ---
 

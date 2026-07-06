@@ -1,6 +1,7 @@
 # Progress — ocarina-webapp
 
 Running log of what's shipped. See [`todo.md`](./todo.md) for upcoming work and future ideas.
+Strategy + roadmap: [`docs/STRATEGY.md`](./docs/STRATEGY.md) → canonical doc in the device repo.
 
 ## What This Is
 
@@ -16,12 +17,28 @@ Web companion for the Digital Ocarina (voice-to-instrument synthesizer). Dual pu
 |-------|-----------|
 | Framework | Next.js 16.2 App Router (React 19) |
 | Auth | Supabase Auth + @supabase/ssr |
-| Database | Supabase Postgres (16 tables, RLS on all) |
+| Database | Supabase Postgres (25 tables, RLS on all) |
 | File Storage | Vercel Blob |
 | AI | Vercel AI SDK 6.x (Anthropic default, OpenAI switchable) |
 | UI | Tailwind CSS + shadcn/ui (site chrome); bespoke primitives for sample editor |
 | Audio | WaveSurfer.js 7.12 (waveform + regions + timeline), Tone.js 15.1 (realtime effect chain + `Tone.Offline` render), native Web Audio (`decodeAudioData` + `OfflineAudioContext` for peaks) |
 | Theme | Dark mode, warm amber/gold (oklch), DM Serif Display + DM Sans + JetBrains Mono |
+
+## v0.3 (June–July 2026)
+
+### Jul 5 — Convergence pass: flywheel lands on main, prod AI restored, strategy adopted
+
+- **Incident:** prod AI search + kit-builder were down **Jun 15 → Jul 5** — `lib/ai/provider.ts` pinned `claude-sonnet-4-20250514`, retired Jun 15; the fix sat on an unmerged branch. Hotfixed on main (`claude-sonnet-4-6`), then superseded by the PR #14 merge. **Countermeasure:** model ids live in one file; retirement check joins the todo cadence; don't let prod fixes ride feature branches.
+- **PR #14 merged** (`feat/ml-flywheel` → main): ML data-flywheel scaffolding (`interaction_events`, `sample_descriptions`, `sample_embeddings` pgvector, `ai_invocations`; consent-gated), hybrid semantic sample search (Haiku descriptions → OpenAI embeddings → `search_samples_semantic()`, filter-only fallback until `OPENAI_API_KEY` lands), **ensemble matcher** (song search → LLM instrumentation profile → per-instrument semantic match + drum-groove detect), transcription AI cleanup, sample-editor consolidation checkpoint (EditorWorkshop, delay/harmony cards, inline record panel — WIP).
+- **Strategy adopted:** three loops + "Hum it, get a band" north star + jam lane — see `docs/STRATEGY.md`. Webapp identity: the instrument's **creative context engine**.
+- Branch hygiene: `feat/ml-flywheel` + `feat/live-console` deleted after merge; stale live-console worktree removed; single `main` checkout.
+
+### June — DJ rig, looper kits, pipeline handoffs, live console
+
+- **Live Console / diagnostics** (feat/live-console, merged): telemetry viewer + virtual keyboard driving the Pi via `/api/sync/commands`.
+- **DJ rig**: Pioneer-style battle layout, two decks, hot cues, jog platters with waveform overview, crossfader, hardware-pot mapping, master-bus recording, beat-loop samples tagged with BPM.
+- **Looper**: starter kits/grooves, searchable kit picker, playable sample library; drum machine syncs to looper BPM.
+- **Pipeline handoffs**: loop→library→DJ, manifest kits, dashboard drums; bpm/loopable round-trip + editor & mixdown handoffs (session mixes: persisted channels, per-channel effects, master + stem mixdown).
 
 ## v0.2 Late (May 2026)
 
